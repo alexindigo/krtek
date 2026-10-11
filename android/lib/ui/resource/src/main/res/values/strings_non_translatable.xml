@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">Mullvad VPN</string>
+    <string name="app_name" translatable="false">Krtek</string>
     <string name="voucher_hint" translatable="false">XXXX-XXXX-XXXX-XXXX</string>
     <string name="account_url" translatable="false">https://mullvad.net/account</string>
     <string name="download_url" translatable="false">https://mullvad.net/download/vpn/android</string>
