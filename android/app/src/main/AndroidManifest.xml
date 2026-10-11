@@ -95,13 +95,13 @@
                 <action android:name="android.net.VpnService" />
             </intent-filter>
             <intent-filter>
-                <action android:name="net.mullvad.mullvadvpn.connect_action" />
+                <action android:name="${applicationId}.connect_action" />
             </intent-filter>
             <intent-filter>
-                <action android:name="net.mullvad.mullvadvpn.reconnect_action" />
+                <action android:name="${applicationId}.reconnect_action" />
             </intent-filter>
             <intent-filter>
-                <action android:name="net.mullvad.mullvadvpn.disconnect_action" />
+                <action android:name="${applicationId}.disconnect_action" />
             </intent-filter>
             <intent-filter>
                 <action android:name="net.mullvad.mullvadvpn.quit_action" />

@@ -1,7 +1,17 @@
 package net.mullvad.mullvadvpn.lib.common.constant
 
-// Actions
-const val KEY_CONNECT_ACTION = "$MULLVAD_PACKAGE_NAME.connect_action"
-const val KEY_RECONNECT_ACTION = "$MULLVAD_PACKAGE_NAME.reconnect_action"
-const val KEY_DISCONNECT_ACTION = "$MULLVAD_PACKAGE_NAME.disconnect_action"
-const val KEY_REQUEST_VPN_PROFILE = "$MULLVAD_PACKAGE_NAME.request_vpn_profile"
+private const val CONNECT_ACTION_SUFFIX = "connect_action"
+private const val RECONNECT_ACTION_SUFFIX = "reconnect_action"
+private const val DISCONNECT_ACTION_SUFFIX = "disconnect_action"
+private const val REQUEST_VPN_PROFILE_SUFFIX = "request_vpn_profile"
+
+fun connectAction(packageName: String) = clientAction(packageName, CONNECT_ACTION_SUFFIX)
+
+fun reconnectAction(packageName: String) = clientAction(packageName, RECONNECT_ACTION_SUFFIX)
+
+fun disconnectAction(packageName: String) = clientAction(packageName, DISCONNECT_ACTION_SUFFIX)
+
+fun requestVpnProfileAction(packageName: String) =
+    clientAction(packageName, REQUEST_VPN_PROFILE_SUFFIX)
+
+private fun clientAction(packageName: String, suffix: String) = "$packageName.$suffix"

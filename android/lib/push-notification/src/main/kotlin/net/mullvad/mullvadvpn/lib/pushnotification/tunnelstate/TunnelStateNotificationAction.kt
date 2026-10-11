@@ -4,11 +4,11 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
-import net.mullvad.mullvadvpn.lib.common.constant.KEY_CONNECT_ACTION
-import net.mullvad.mullvadvpn.lib.common.constant.KEY_DISCONNECT_ACTION
-import net.mullvad.mullvadvpn.lib.common.constant.KEY_RECONNECT_ACTION
-import net.mullvad.mullvadvpn.lib.common.constant.KEY_REQUEST_VPN_PROFILE
 import net.mullvad.mullvadvpn.lib.common.constant.MAIN_ACTIVITY_CLASS
+import net.mullvad.mullvadvpn.lib.common.constant.connectAction
+import net.mullvad.mullvadvpn.lib.common.constant.disconnectAction
+import net.mullvad.mullvadvpn.lib.common.constant.reconnectAction
+import net.mullvad.mullvadvpn.lib.common.constant.requestVpnProfileAction
 import net.mullvad.mullvadvpn.lib.common.util.getSupportedPendingIntentFlags
 import net.mullvad.mullvadvpn.lib.model.Notification
 import net.mullvad.mullvadvpn.lib.model.NotificationAction
@@ -89,12 +89,12 @@ internal fun NotificationAction.Tunnel.toCompatAction(context: Context): Notific
                     setClassName(context.packageName, MAIN_ACTIVITY_CLASS)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    setAction(KEY_REQUEST_VPN_PROFILE)
+                    setAction(requestVpnProfileAction(context.packageName))
                 }
 
             PendingIntent.getActivity(context, 1, intent, getSupportedPendingIntentFlags())
         } else {
-            val intent = Intent(toKey()).setPackage(context.packageName)
+            val intent = Intent(toKey(context.packageName)).setPackage(context.packageName)
             PendingIntent.getService(context, 1, intent, getSupportedPendingIntentFlags())
         }
 
@@ -115,14 +115,14 @@ fun NotificationAction.Tunnel.titleResource() =
         NotificationAction.Tunnel.Dismiss -> R.string.dismiss
     }
 
-fun NotificationAction.Tunnel.toKey() =
+fun NotificationAction.Tunnel.toKey(packageName: String) =
     when (this) {
-        NotificationAction.Tunnel.Connect -> KEY_CONNECT_ACTION
-        NotificationAction.Tunnel.Reconnect -> KEY_RECONNECT_ACTION
-        is NotificationAction.Tunnel.RequestVpnProfile -> KEY_REQUEST_VPN_PROFILE
+        NotificationAction.Tunnel.Connect -> connectAction(packageName)
+        NotificationAction.Tunnel.Reconnect -> reconnectAction(packageName)
+        is NotificationAction.Tunnel.RequestVpnProfile -> requestVpnProfileAction(packageName)
         NotificationAction.Tunnel.Cancel,
         NotificationAction.Tunnel.Disconnect,
-        NotificationAction.Tunnel.Dismiss -> KEY_DISCONNECT_ACTION
+        NotificationAction.Tunnel.Dismiss -> disconnectAction(packageName)
     }
 
 fun NotificationAction.Tunnel.toIconResource() =
