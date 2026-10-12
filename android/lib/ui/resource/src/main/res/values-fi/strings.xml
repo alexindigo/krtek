@@ -95,7 +95,6 @@
     <string name="collapse">Näytä vähemmän</string>
     <string name="confirm_ipv6_dns">IPv6-DNS-palvelin ei toimi, ellet ota IPv6:ta käyttöön VPN-asetuksista.</string>
     <string name="confirm_local_dns">Paikallinen DNS-palvelin ei toimi, ellet ota paikallisen verkon jakamista käyttöön VPN-asetuksista.</string>
-    <string name="confirm_no_email">Olet aikeissa lähettää ongelmaraportin ilman yhteystietojasi. Mikäli haluat vastauksen raporttiisi, anna sähköpostosoite.</string>
     <string name="confirm_removal">Kyllä, kirjaa laite ulos</string>
     <string name="congrats">Onnittelut!</string>
     <string name="connect">Yhdistä</string>
@@ -214,7 +213,6 @@
     <string name="edit_list">Muokkaa luetteloa</string>
     <string name="edit_lists">Muokkaa luetteloita</string>
     <string name="edit_locations">Muokkaa sijainteja</string>
-    <string name="edit_message">Muokkaa viestiä</string>
     <string name="edit_method">Muokkaa menetelmää</string>
     <string name="edit_name">Muokkaa nimeä</string>
     <string name="enable">Ota käyttöön</string>
@@ -247,8 +245,6 @@
     <string name="failed_to_fetch_devices">Laiteluettelon nouto epäonnistui</string>
     <string name="failed_to_load_products">Tuotteiden lataaminen epäonnistui, yritä uudelleen</string>
     <string name="failed_to_remove_device">Laitteen poistaminen epäonnistui</string>
-    <string name="failed_to_send">Lähetys epäonnistui</string>
-    <string name="failed_to_send_details">Jos poistut lomakkeelta ja yrität myöhemmin uudelleen, jo syöttämäsi tiedot säilyvät lomakkeella.</string>
     <string name="failed_to_set_current_test_error">Nykyisen asetus epäonnistui – APIa ei tavoiteta</string>
     <string name="failed_to_set_current_unknown_error">Nykyisen asetus epäonnistui – Tuntematon syy</string>
     <string name="faqs_and_guides">Usein kysytyt kysymykset ja oppaat</string>
@@ -274,10 +270,6 @@
     <string name="import_overrides_import">Tuo</string>
     <string name="import_overrides_text_title">Tuo tekstinä</string>
     <string name="in_app_products_unavailable">Sovelluksen sisäiset tuotteet eivät ole käytettävissä. Varmista, että sinulla on Google Playn uusin versio.</string>
-    <string name="include_account_token_checkbox_text">Lisää tilitunnukseni, jotta saan nopeampaa apua maksuihin tai tiliin liittyvissä ongelmissa</string>
-    <string name="include_account_token_warning_message_first">Tilin tunnisteen liittäminen yhdistää tämän raportin tiliisi, mikä auttaa meitä ratkaisemaan ongelmasi nopeammin. Kaikki raportit poistetaan automaattisesti tietyn ajan kuluttua.</string>
-    <string name="include_account_token_warning_message_second">Lisätietoja antaa %1$s.</string>
-    <string name="include_account_token_warning_title">Tämä vaikuttaa anonymiteettiisi</string>
     <string name="info">Tietoa</string>
     <string name="internet">Internet</string>
     <string name="invalid_address_blank_warning">Syötä IP-osoite</string>
@@ -409,8 +401,6 @@
     <string name="port">Portti</string>
     <string name="port_x">Portti: %1$s</string>
     <string name="privacy_policy_label">Tietosuojakäytäntö</string>
-    <string name="privacy_policy_lower_case">tietosuojakäytäntö</string>
-    <string name="problem_report_description">Jotta voimme olla avuksi parhaamme mukaan, sovelluksesi lokitiedosto liitetään tähän viestiin. Tietosi pysyvät suojattuina ja yksityisinä, ja ne anonymisoidaan salatun kanavan kautta ennen lähetystä.</string>
     <string name="providers">Tarjoajat</string>
     <string name="quantum_resistant_info_first_paragraph">Tämä ominaisuus tekee WireGuard-tunnelista kestävän kvanttitietokoneiden mahdollisia hyökkäyksiä vastaan.</string>
     <string name="quantum_resistant_info_second_paragraph">Tunneli torjuu hyökkäykset suorittamalla ylimääräisen avaimenvaihdon käyttämällä ensin kvanttiturvallista algoritmia, jonka tuloksen se sekoittaa WireGuardin tavalliseen salaukseen. Tämä ylimääräinen vaihe käyttää noin 500 kiB liikennettä joka kerta, kun uusi tunneli luodaan.</string>
@@ -433,7 +423,6 @@
     <string name="rented">Vuokrattu</string>
     <string name="rented_only">Vain vuokratut</string>
     <string name="report_a_problem">Ilmoita ongelmasta</string>
-    <string name="report_problem_message_is_empty">Syötä viesti</string>
     <string name="reset_to_default_button">Palauta oletusarvo</string>
     <string name="retry">Yritä uudelleen</string>
     <string name="save">Tallenna</string>
@@ -441,12 +430,6 @@
     <string name="search_no_matches_for_text">Haulle \"%1$s\" ei löytynyt tuloksia. Kokeile toista hakua.</string>
     <string name="search_placeholder">Hae...</string>
     <string name="select_location">Valitse sijainti</string>
-    <string name="send">Lähetä</string>
-    <string name="send_anyway">Lähetä silti</string>
-    <string name="sending">Lähetetään...</string>
-    <string name="sent">Lähetetty</string>
-    <string name="sent_contact">Tarvittaessa otamme sinuun yhteyttä osoitteeseen %1$s</string>
-    <string name="sent_thanks">Kiitos!</string>
     <string name="separate_filters_title">Erilliset suodattimet</string>
     <string name="separate_filters_title_first_paragraph">Suodattimia voi asettaa nyt erikseen tulo- ja poistumissijainneille.</string>
     <string name="separate_filters_title_second_paragraph">Nykyiset suodattimet otettiin käyttöön sekä tulo- että poistumissijainneille.</string>
@@ -534,8 +517,6 @@
     <string name="uri_browser_app_not_found">Selainsovellusta ei ole asennettu, joten linkin avaaminen ei onnistu</string>
     <string name="uri_market_app_not_found">Androidin sovelluskauppaa ei ole asennettu, joten linkin avaaminen ei onnistu</string>
     <string name="use_method">Käytä menetelmä</string>
-    <string name="user_email_hint">Sähköpostisi (valinnainen)</string>
-    <string name="user_message_hint">Jotta voisimme avustaa sinua paremmin, kirjoita englanniksi tai ruotsiksi ja mainitse, mistä maasta muodostat yhteyden.</string>
     <string name="username">Käyttäjätunnus</string>
     <string name="verification_failed_dialog_message">Viimeisimmän ostosi vahvistaminen ei onnistunut. Tarkista internetyhteytesi ja yritä uudelleen. Jos ongelma jatkuu, ota yhteyttä tukeen.</string>
     <string name="verifying_api_method">Vahvistetaan API-menetelmää...</string>
@@ -558,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">VPN-lupavirhe</string>
     <string name="vpn_settings_not_available">VPN-asetukset eivät olet käytettävissä laitteella</string>
     <string name="warning">Varoitus</string>
-    <string name="we_will_look_into_this">Tutkimme asiaa.</string>
     <string name="when_needed">Tarvittaessa</string>
     <string name="wireguard_custom_port_title">Mukautettu</string>
     <string name="wireguard_mtu_footer">Aseta WireGuardin MTU-arvo väliltä %1$d–%2$d.</string>

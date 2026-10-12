@@ -95,7 +95,6 @@
     <string name="collapse">Свернуть</string>
     <string name="confirm_ipv6_dns">DNS-сервер IPv6 не будет работать, если не включить IPv6 в разделе «Настройки VPN».</string>
     <string name="confirm_local_dns">Локальный DNS-сервер не будет работать, если не включить «Обмен данными в локальной сети» в разделе «Настройки VPN».</string>
-    <string name="confirm_no_email">Вы собираетесь отправить отчет о проблеме, не оставив контакты. Если вы хотите получить ответ, введите свой адрес электронной почты.</string>
     <string name="confirm_removal">Выйти из профиля на устройстве</string>
     <string name="congrats">Поздравляем!</string>
     <string name="connect">Подключить</string>
@@ -214,7 +213,6 @@
     <string name="edit_list">Изменение списка</string>
     <string name="edit_lists">Изменить списки</string>
     <string name="edit_locations">Изменить местоположения</string>
-    <string name="edit_message">Изменить сообщение</string>
     <string name="edit_method">Изменение метода</string>
     <string name="edit_name">Изменить имя</string>
     <string name="enable">Включить</string>
@@ -247,8 +245,6 @@
     <string name="failed_to_fetch_devices">Не удалось получить список устройств</string>
     <string name="failed_to_load_products">Не удалось загрузить продукты — повторите попытку</string>
     <string name="failed_to_remove_device">Не удалось удалить устройство</string>
-    <string name="failed_to_send">Ошибка отправки</string>
-    <string name="failed_to_send_details">Если вы выйдете из формы и повторите попытку позже, информация, которую вы уже ввели, сохранится.</string>
     <string name="failed_to_set_current_test_error">Не удалось установить текущий метод: API недоступен</string>
     <string name="failed_to_set_current_unknown_error">Не удалось установить текущий метод: причина неизвестна</string>
     <string name="faqs_and_guides">Ответы на вопросы и руководства</string>
@@ -274,10 +270,6 @@
     <string name="import_overrides_import">Импортировать</string>
     <string name="import_overrides_text_title">Импортировать через текст</string>
     <string name="in_app_products_unavailable">Встроенные покупки недоступны — убедитесь, что у вас установлена последняя версия Google Play.</string>
-    <string name="include_account_token_checkbox_text">Прикрепить токен моей учетной записи для ускоренной помощи по вопросам, связанным с оплатой или учетной записью</string>
-    <string name="include_account_token_warning_message_first">Прикрепляя токен своей учетной записи, вы привяжете это сообщение к своей учетной записи, что поможет нам быстрее решить вашу проблему. Все сообщения автоматически удаляются через определенный период времени.</string>
-    <string name="include_account_token_warning_message_second">Подробнее смотрите здесь: %1$s.</string>
-    <string name="include_account_token_warning_title">Это влияет на вашу анонимность</string>
     <string name="info">Информация</string>
     <string name="internet">Интернет</string>
     <string name="invalid_address_blank_warning">Введите IP-адрес</string>
@@ -409,8 +401,6 @@
     <string name="port">Порт</string>
     <string name="port_x">Порт: %1$s</string>
     <string name="privacy_policy_label">Политика конфиденциальности</string>
-    <string name="privacy_policy_lower_case">политика конфиденциальности</string>
-    <string name="problem_report_description">Чтобы помощь была эффективнее, к этому сообщению будет прикреплен файл журнала из приложения. Ваши данные останутся защищенными и конфиденциальными: они обезличиваются и отправляются по зашифрованному каналу.</string>
     <string name="providers">Провайдеры</string>
     <string name="quantum_resistant_info_first_paragraph">Эта функция делает туннель WireGuard устойчивым к потенциальным атакам с использованием квантовых компьютеров.</string>
     <string name="quantum_resistant_info_second_paragraph">Для этого функция выполняет дополнительный обмен ключами с использованием квантово-устойчивого алгоритма и добавляет результат к обычному шифрованию WireGuard. Эта дополнительная мера использует примерно 500 КиБ трафика при каждом создании нового туннеля.</string>
@@ -433,7 +423,6 @@
     <string name="rented">Арендованные</string>
     <string name="rented_only">Только арендованные</string>
     <string name="report_a_problem">Сообщить о проблеме</string>
-    <string name="report_problem_message_is_empty">Введите сообщение</string>
     <string name="reset_to_default_button">Восстановить значение по умолчанию</string>
     <string name="retry">Повторить</string>
     <string name="save">Сохранить</string>
@@ -441,12 +430,6 @@
     <string name="search_no_matches_for_text">По запросу «%1$s» ничего не найдено — попробуйте другой запрос</string>
     <string name="search_placeholder">Поиск...</string>
     <string name="select_location">Выбор местоположения</string>
-    <string name="send">Отправить</string>
-    <string name="send_anyway">Все равно отправить</string>
-    <string name="sending">Идет отправка...</string>
-    <string name="sent">Отправлено</string>
-    <string name="sent_contact">При необходимости мы свяжемся с вами по адресу %1$s</string>
-    <string name="sent_thanks">Спасибо!</string>
     <string name="separate_filters_title">Раздельные фильтры</string>
     <string name="separate_filters_title_first_paragraph">Теперь фильтры можно настраивать отдельно для местоположений входа и выхода.</string>
     <string name="separate_filters_title_second_paragraph">Ваши текущие фильтры применены к входному и выходному местоположениям.</string>
@@ -534,8 +517,6 @@
     <string name="uri_browser_app_not_found">Не удалось открыть ссылку: браузер не установлен</string>
     <string name="uri_market_app_not_found">Не удалось открыть ссылку: магазин приложений Android не установлен</string>
     <string name="use_method">Использовать метод</string>
-    <string name="user_email_hint">Ваша электронная почта (необязательно)</string>
-    <string name="user_message_hint">Чтобы мы могли быстрее решить проблему, напишите нам на английском или шведском и укажите, из какой страны вы подключаетесь.</string>
     <string name="username">Имя пользователя</string>
     <string name="verification_failed_dialog_message">Не удалось подтвердить вашу последнюю покупку. Проверьте подключение к Интернету и повторите попытку. Если проблема не исчезнет, обратитесь в службу поддержки.</string>
     <string name="verifying_api_method">Проверяем метод доступа к API...</string>
@@ -558,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">Ошибка разрешения для VPN</string>
     <string name="vpn_settings_not_available">Настройки VPN недоступны на устройстве</string>
     <string name="warning">Предупреждение</string>
-    <string name="we_will_look_into_this">Мы рассмотрим эту проблему.</string>
     <string name="when_needed">При необходимости</string>
     <string name="wireguard_custom_port_title">Пользовательский</string>
     <string name="wireguard_mtu_footer">Установите значение MTU для WireGuard. Диапазон значений: %1$d–%2$d.</string>

@@ -95,7 +95,6 @@
     <string name="collapse">折疊</string>
     <string name="confirm_ipv6_dns">若要執行 IPv6 DNS 伺服器，需先在 VPN 設定下啟用「IPv6」。</string>
     <string name="confirm_local_dns">若要使本機 DNS 伺服器運作，需先在 VPN 設定下啟用「本機網路共享」。</string>
-    <string name="confirm_no_email">您即將傳送的問題報告未包含回覆方式資訊。如果想收到您這份報告的回覆，請輸入您的電子郵件位址。</string>
     <string name="confirm_removal">是，將裝置登出</string>
     <string name="congrats">恭喜！</string>
     <string name="connect">連線</string>
@@ -214,7 +213,6 @@
     <string name="edit_list">編輯清單</string>
     <string name="edit_lists">編輯清單</string>
     <string name="edit_locations">編輯位置</string>
-    <string name="edit_message">編輯訊息</string>
     <string name="edit_method">編輯方式</string>
     <string name="edit_name">編輯名稱</string>
     <string name="enable">啟用</string>
@@ -247,8 +245,6 @@
     <string name="failed_to_fetch_devices">無法取得裝置清單</string>
     <string name="failed_to_load_products">載入產品失敗，請再試一次</string>
     <string name="failed_to_remove_device">無法移除裝置</string>
-    <string name="failed_to_send">無法傳送</string>
-    <string name="failed_to_send_details">如果您關閉表格後再重新嘗試，所輸入的資訊仍會出現在這裡。</string>
     <string name="failed_to_set_current_test_error">無法設定為目前方式 - 無法透過 API 存取</string>
     <string name="failed_to_set_current_unknown_error">無法設定為目前方式 - 不明原因</string>
     <string name="faqs_and_guides">常見問題集與指南</string>
@@ -274,10 +270,6 @@
     <string name="import_overrides_import">匯入</string>
     <string name="import_overrides_text_title">透過文字匯入</string>
     <string name="in_app_products_unavailable">無法取得應用程式內產品，請確認您是否擁有最新版本的 Google Play。</string>
-    <string name="include_account_token_checkbox_text">加入我的帳戶權杖，就能更快取得付款或帳戶相關問題的協助</string>
-    <string name="include_account_token_warning_message_first">附加您的帳戶權杖後，此回報就會和您的帳戶相連，這能讓我們更快為您解決問題。所有回報都會在一段時間後自動刪除。</string>
-    <string name="include_account_token_warning_message_second">如需詳細資訊，請參閱我們的 %1$s。</string>
-    <string name="include_account_token_warning_title">這會影響您的匿名性</string>
     <string name="info">資訊</string>
     <string name="internet">網際網路</string>
     <string name="invalid_address_blank_warning">請輸入 IP 位址</string>
@@ -409,8 +401,6 @@
     <string name="port">連接埠</string>
     <string name="port_x">連接埠：%1$s</string>
     <string name="privacy_policy_label">隱私權政策</string>
-    <string name="privacy_policy_lower_case">隱私權政策</string>
-    <string name="problem_report_description">為了更有效協助您，會將應用程式的日誌檔將附加到此郵件。您的資料會保持安全和私密性，因為這些資料會先經過匿名處理，再透過加密通道傳送。</string>
     <string name="providers">供應商</string>
     <string name="quantum_resistant_info_first_paragraph">借助此功能，WireGuard 通道便能夠抵抗可能從量子電腦發起的攻擊。</string>
     <string name="quantum_resistant_info_second_paragraph">實現方法是使用量子安全演算法執行額外的金鑰交換，並將結果混合至 WireGuard 的常規加密。每次建立新通道時，這一額外步驟都會使用約 500 kiB 流量。</string>
@@ -433,7 +423,6 @@
     <string name="rented">租用</string>
     <string name="rented_only">僅租用</string>
     <string name="report_a_problem">回報問題</string>
-    <string name="report_problem_message_is_empty">請輸入訊息</string>
     <string name="reset_to_default_button">重設為預設值</string>
     <string name="retry">重試</string>
     <string name="save">儲存</string>
@@ -441,12 +430,6 @@
     <string name="search_no_matches_for_text">找不到「%1$s」的結果，請使改用其他搜尋條件。</string>
     <string name="search_placeholder">搜尋…</string>
     <string name="select_location">選擇位置</string>
-    <string name="send">傳送</string>
-    <string name="send_anyway">仍要傳送</string>
-    <string name="sending">傳送中…</string>
-    <string name="sent">已傳送</string>
-    <string name="sent_contact">如有需要，我們將透過 %1$s 與您聯絡</string>
-    <string name="sent_thanks">謝謝！</string>
     <string name="separate_filters_title">個別篩選器</string>
     <string name="separate_filters_title_first_paragraph">現在可以分別設定入口及出口位置的篩選器。</string>
     <string name="separate_filters_title_second_paragraph">您目前的篩選器已套用於入口和出口位置。</string>
@@ -534,8 +517,6 @@
     <string name="uri_browser_app_not_found">未安裝瀏覽器應用程式，無法開啟連結</string>
     <string name="uri_market_app_not_found">未安裝 Android 應用程式商店，無法開啟連結</string>
     <string name="use_method">使用方式</string>
-    <string name="user_email_hint">您的電子郵件 (選填)</string>
-    <string name="user_message_hint">為了給您提供更完善的協助，請您使用英語或瑞典語書寫，並註明您是從哪個國家/地區進行連線。</string>
     <string name="username">使用者名稱</string>
     <string name="verification_failed_dialog_message">我們無法驗證您最近一次的購買。請檢查您的網際網路連線並再試一次。如果問題持續發生，請聯絡支援團隊。</string>
     <string name="verifying_api_method">正在驗證 API 方式…</string>
@@ -558,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">VPN 權限錯誤</string>
     <string name="vpn_settings_not_available">裝置上的 VPN 設定無法使用</string>
     <string name="warning">警告</string>
-    <string name="we_will_look_into_this">我們會對此進行調查。</string>
     <string name="when_needed">必要時</string>
     <string name="wireguard_custom_port_title">自訂</string>
     <string name="wireguard_mtu_footer">設定 WireGuard MTU 值。有效範圍：%1$d - %2$d。</string>

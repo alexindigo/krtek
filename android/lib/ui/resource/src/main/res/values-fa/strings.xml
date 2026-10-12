@@ -93,7 +93,6 @@
     <string name="collapse">پنهان کردن</string>
     <string name="confirm_ipv6_dns">سرور DNS مربوط به IPv6 تنها زمانی کار می‌کند که «IPv6» را در تنظیمات VPN فعال کنید.</string>
     <string name="confirm_local_dns">سرور DNS محلی تنها زمانی کار می‌کند که «اشتراک‌گذاری شبکهٔ محلی» را در تنظیمات VPN فعال کنید.</string>
-    <string name="confirm_no_email">در حال ارسال گزارش مشکل هستید، اما راهی برای تماس با شما وجود ندارد. اگر مایل به دریافت پاسخ هستید، لطفاً یک آدرس ایمیل وارد کنید.</string>
     <string name="confirm_removal">بله، خروج از دستگاه</string>
     <string name="congrats">تبریک!</string>
     <string name="connect">اتصال</string>
@@ -209,7 +208,6 @@
     <string name="edit_list">ویرایش فهرست</string>
     <string name="edit_lists">ویرایش فهرست‌ها</string>
     <string name="edit_locations">ویرایش مکان‌ها</string>
-    <string name="edit_message">ویرایش پیام</string>
     <string name="edit_method">ویرایش روش</string>
     <string name="edit_name">ویرایش نام</string>
     <string name="enable">فعال کردن</string>
@@ -237,8 +235,6 @@
     <string name="failed_to_fetch_devices">بازیابی فهرست دستگاه‌ها انجام نشد</string>
     <string name="failed_to_load_products">بارگذاری محصولات ناموفق بود، لطفاً دوباره تلاش کنید</string>
     <string name="failed_to_remove_device">حذف دستگاه ناموفق بود</string>
-    <string name="failed_to_send">ارسال ناموفق بود</string>
-    <string name="failed_to_send_details">اگر از فرم خارج شوید و بعداً دوباره تلاش کنید، اطلاعاتی که قبلاً وارد کرده‌اید همچنان اینجا خواهد بود.</string>
     <string name="failed_to_set_current_test_error">تنظیم به وضعیت فعلی ناموفق بود – دسترسی به API ممکن نیست</string>
     <string name="failed_to_set_current_unknown_error">تنظیم به وضعیت فعلی ناموفق بود – دلیل نامشخص</string>
     <string name="faqs_and_guides">پرسش‌های متداول و راهنماها</string>
@@ -264,10 +260,6 @@
     <string name="import_overrides_import">وارد کردن</string>
     <string name="import_overrides_text_title">وارد کردن از طریق متن</string>
     <string name="in_app_products_unavailable">محصولات درون‌اپلیکیشنی در دسترس نیستند، لطفاً مطمئن شوید آخرین نسخهٔ Google Play را نصب کرده‌اید.</string>
-    <string name="include_account_token_checkbox_text">توکن حساب خود را ضمیمه کنید تا برای مشکلات مربوط به پرداخت یا حساب، کمک سریع‌تری دریافت کنید</string>
-    <string name="include_account_token_warning_message_first">با پیوست کردن توکن حساب‌تان، این گزارش به حساب شما متصل می‌شود و به ما کمک می‌کند مشکل‌تان را سریع‌تر حل کنیم. همهٔ گزارش‌ها پس از مدتی به‌صورت خودکار حذف می‌شوند.</string>
-    <string name="include_account_token_warning_message_second">برای بررسی جزئیات، لطفاً %1$s ما را ببینید.</string>
-    <string name="include_account_token_warning_title">این مورد بر ناشناس‌ماندن شما تأثیر می‌گذارد</string>
     <string name="info">اطلاعات</string>
     <string name="internet">اینترنت</string>
     <string name="invalid_address_blank_warning">لطفاً یک آدرس IP معتبر را وارد کنید</string>
@@ -390,8 +382,6 @@
     <string name="port">پورت</string>
     <string name="port_x">پورت: %1$s</string>
     <string name="privacy_policy_label">سیاست حفظ حریم خصوصی</string>
-    <string name="privacy_policy_lower_case">سیاست حفظ حریم خصوصی</string>
-    <string name="problem_report_description">برای کمک مؤثرتر، فایل لاگ اپلیکیشن شما به این پیام پیوست خواهد شد. داده‌های شما امن و خصوصی می‌مانند، زیرا پیش از ارسال از طریق یک کانال رمزگذاری‌شده، ناشناس‌ می‌شوند.</string>
     <string name="providers">ارائه‌دهندگان</string>
     <string name="quantum_resistant_info_first_paragraph">ویژگی زیر، تونل WireGuard را در برابر حملات احتمالی رایانه‌های کوانتومی مقاوم می‌کند.</string>
     <string name="quantum_resistant_info_second_paragraph">این کار را با انجام یک تبادل کلیدِ اضافه با استفاده از یک الگوریتم امنِ کوانتومی انجام می‌دهد و نتیجه را در رمزگذاری معمولی WireGuard ترکیب می‌کند. این مرحلهٔ اضافی، هر بار که یک تونل جدید برقرار می‌شود، حدود 500 کیلوبایت ترافیک مصرف می‌کند.</string>
@@ -414,7 +404,6 @@
     <string name="rented">اجاره‌ای</string>
     <string name="rented_only">فقط اجاره‌ای</string>
     <string name="report_a_problem">گزارش مشکل</string>
-    <string name="report_problem_message_is_empty">لطفاً یک پیغام را وارد کنید</string>
     <string name="reset_to_default_button">بازنشانی به حالت پیش‌فرض</string>
     <string name="retry">تلاش دوباره</string>
     <string name="save">ذخیره</string>
@@ -422,12 +411,6 @@
     <string name="search_no_matches_for_text">هیچ نتیجه‌ای برای «%1$s» یافت نشد، لطفاً جستجوی دیگری انجام دهید</string>
     <string name="search_placeholder">جست‌وجو برای...</string>
     <string name="select_location">انتخاب مکان</string>
-    <string name="send">ارسال</string>
-    <string name="send_anyway">با این حال ارسال کنید</string>
-    <string name="sending">در حال ارسال...</string>
-    <string name="sent">ارسال شد</string>
-    <string name="sent_contact">در صورت نیاز با شما از طریق %1$s تماس خواهیم گرفت</string>
-    <string name="sent_thanks">تشکر!</string>
     <string name="server">سرور</string>
     <string name="server_ip_override">جایگزینی‌ IP سرور</string>
     <string name="server_ip_overrides_active">جایگزینی‌ها فعال هستند</string>
@@ -508,8 +491,6 @@
     <string name="uri_browser_app_not_found">هیچ مرورگر وبی نصب نشده است، امکان باز کردن لینک وجود ندارد</string>
     <string name="uri_market_app_not_found">هیچ فروشگاه اپلیکیشن اندروید نصب نشده است، امکان باز کردن لینک وجود ندارد</string>
     <string name="use_method">استفاده از روش</string>
-    <string name="user_email_hint">ایمیل شما (اختیاری)</string>
-    <string name="user_message_hint">برای اینکه بتوانیم بهتر کمک کنیم، لطفاً به انگلیسی یا سوئدی بنویسید و کشوری را که از آن وصل می‌شوید ذکر کنید.</string>
     <string name="username">نام کاربری</string>
     <string name="verification_failed_dialog_message">نتوانستیم آخرین خرید شما را تأیید کنیم. لطفاً اتصال اینترنت خود را بررسی کرده و دوباره تلاش کنید. اگر مشکل همچنان ادامه داشت، لطفاً با پشتیبانی تماس بگیرید.</string>
     <string name="verifying_api_method">در حال بررسی روش API...</string>
@@ -532,7 +513,6 @@
     <string name="vpn_permission_error_notification_title">خطای اجازهٔ VPN</string>
     <string name="vpn_settings_not_available">تنظیمات VPN روی این دستگاه در دسترس نیست</string>
     <string name="warning">هشدار</string>
-    <string name="we_will_look_into_this">ما این موضوع را بررسی خواهیم کرد.</string>
     <string name="wireguard_custom_port_title">سفارشی</string>
     <string name="wireguard_mtu_footer">مقدار MTU مربوط به WireGuard را تنظیم کنید. دامنهٔ معتبر: %1$d تا %2$d.</string>
     <string name="wireguard_port_is_not_supported">پورتِ %1$s انتخاب‌شده پشتیبانی نمی‌شود؛ لطفاً آن را در بخش مربوطه تغییر دهید</string>

@@ -95,7 +95,6 @@
     <string name="collapse">折りたたむ</string>
     <string name="confirm_ipv6_dns">VPN設定で [IPv6] を有効にしない限り、IPv6 DNSサーバーは機能しません。</string>
     <string name="confirm_local_dns">VPN設定で [ローカルネットワーク共有] を有効にしない限り、ローカルDNSサーバーは機能しません。</string>
-    <string name="confirm_no_email">お客様への返信先を入力せずに問題の報告を送信しようとしています。ご報告に対する返信が必要な場合は、返信先のメールアドレスを入力する必要があります。</string>
     <string name="confirm_removal">はい。デバイスをログアウトします</string>
     <string name="congrats">おめでとうございます！</string>
     <string name="connect">接続</string>
@@ -214,7 +213,6 @@
     <string name="edit_list">リストの編集</string>
     <string name="edit_lists">リストを編集</string>
     <string name="edit_locations">場所の編集</string>
-    <string name="edit_message">メッセージを編集する</string>
     <string name="edit_method">方法の編集</string>
     <string name="edit_name">名前を編集</string>
     <string name="enable">有効にする</string>
@@ -247,8 +245,6 @@
     <string name="failed_to_fetch_devices">デバイスのリストを取得できませんでした</string>
     <string name="failed_to_load_products">製品を読み込めませんでした。再試行してください</string>
     <string name="failed_to_remove_device">デバイスを削除できませんでした</string>
-    <string name="failed_to_send">送信に失敗しました</string>
-    <string name="failed_to_send_details">フォームを終了して後で再試行しても、入力済みの情報は引き続きここに表示されます。</string>
     <string name="failed_to_set_current_test_error">現在の設定に設定できませんでした。API に到達できません</string>
     <string name="failed_to_set_current_unknown_error">現在の設定に設定できません。原因は不明です</string>
     <string name="faqs_and_guides">よくある質問とガイド</string>
@@ -274,10 +270,6 @@
     <string name="import_overrides_import">インポート</string>
     <string name="import_overrides_text_title">テキストでインポート</string>
     <string name="in_app_products_unavailable">アプリ内アイテムを利用できません。最新バージョンのGoogle Playを使用していることを確認してください。</string>
-    <string name="include_account_token_checkbox_text">お支払いやアカウント関連の問題を迅速に解決するために、私のアカウントトークンを含めます</string>
-    <string name="include_account_token_warning_message_first">アカウントトークンを添付するとこのレポートがアカウントに関連付けられ、より迅速に問題を解決することができます。すべてのレポートは一定期間が経過した後に自動で削除されます。</string>
-    <string name="include_account_token_warning_message_second">詳細については、当社の%1$sをご覧ください。</string>
-    <string name="include_account_token_warning_title">これはあなたの匿名性に影響を与えます</string>
     <string name="info">情報</string>
     <string name="internet">インターネット</string>
     <string name="invalid_address_blank_warning">IPアドレスを入力してください</string>
@@ -409,8 +401,6 @@
     <string name="port">ポート</string>
     <string name="port_x">ポート: %1$s</string>
     <string name="privacy_policy_label">プライバシーポリシー</string>
-    <string name="privacy_policy_lower_case">プライバシーポリシー</string>
-    <string name="problem_report_description">さらに効率よく問題解決できるよう、お使いのアプリのログファイルがこのメッセージに添付されます。個人データは匿名化された後に暗号化されたチャネルで送信されるため、その安全は確保され、公開されることはありません。</string>
     <string name="providers">プロバイダ</string>
     <string name="quantum_resistant_info_first_paragraph">この機能は、WireGuardトンネルに量子コンピューターからの潜在的な攻撃に対する耐性を与えます。</string>
     <string name="quantum_resistant_info_second_paragraph">耐量子アルゴリズムで追加の鍵の交換を実行し、結果をWireGuardの通常の暗号化に混合させることで行われます。この追加ステップでは、新しいトンネルが確立されるたびに約500kiBのトラフィックが使用されます。</string>
@@ -433,7 +423,6 @@
     <string name="rented">レンタルサーバー</string>
     <string name="rented_only">レンタルサーバーのみ</string>
     <string name="report_a_problem">問題を報告</string>
-    <string name="report_problem_message_is_empty">メッセージを入力してください</string>
     <string name="reset_to_default_button">デフォルトにリセット</string>
     <string name="retry">再試行</string>
     <string name="save">保存</string>
@@ -441,12 +430,6 @@
     <string name="search_no_matches_for_text">「%1$s」の結果はありません。別の検索をお試しください。</string>
     <string name="search_placeholder">検索...</string>
     <string name="select_location">場所を選択する</string>
-    <string name="send">送信</string>
-    <string name="send_anyway">とにかく送信する</string>
-    <string name="sending">送信中...</string>
-    <string name="sent">送信済み</string>
-    <string name="sent_contact">必要に応じて %1$s 宛にご連絡します　</string>
-    <string name="sent_thanks">ありがとうございます！</string>
     <string name="separate_filters_title">個別フィルター</string>
     <string name="separate_filters_title_first_paragraph">今後は入口と出口のロケーションでフィルターを個別に設定できます。</string>
     <string name="separate_filters_title_second_paragraph">現在のフィルター設定は、入口と出口の両方に適用されています。</string>
@@ -534,8 +517,6 @@
     <string name="uri_browser_app_not_found">ブラウザアプリがインストールされていないため、リンクを開けませんでした</string>
     <string name="uri_market_app_not_found">Androidアプリストアがインストールされていないため、リンクを開けませんでした</string>
     <string name="use_method">この方法を使用する</string>
-    <string name="user_email_hint">あなたのメールアドレス (任意)</string>
-    <string name="user_message_hint">最適なサポートを提供するため、英語またはスウェーデン語でご入力ください。また、接続元の国をお知らせください。</string>
     <string name="username">ユーザー名</string>
     <string name="verification_failed_dialog_message">最新の購入内容を確認できませんでした。インターネット接続を確認してから、もう一度お試しください。問題が解決しない場合は、サポートまでお問い合わせください。</string>
     <string name="verifying_api_method">API 接続方法を検証しています...</string>
@@ -558,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">VPN許可エラー</string>
     <string name="vpn_settings_not_available">デバイスのVPN設定を利用できません</string>
     <string name="warning">警告</string>
-    <string name="we_will_look_into_this">この問題を調査いたします。</string>
     <string name="when_needed">必要時</string>
     <string name="wireguard_custom_port_title">カスタム</string>
     <string name="wireguard_mtu_footer">WireGuardのMTU値を設定します。有効範囲: %1$d ～ %2$d</string>

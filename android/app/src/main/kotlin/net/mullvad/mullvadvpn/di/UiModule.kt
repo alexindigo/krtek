@@ -162,10 +162,7 @@ val uiModule = module {
     single {
         ProblemReportRepository(
             context = androidContext(),
-            apiEndpointOverride = getOrNull(),
-            apiEndpointFromIntentHolder = get(),
             kermitFileLogDirName = KERMIT_FILE_LOG_DIR_NAME,
-            accountRepository = get(),
             paymentLogic = get(),
         )
     }
@@ -414,10 +411,8 @@ val uiModule = module {
     }
     viewModel {
         ReportProblemViewModel(
-            mullvadProblemReporter = get(),
             problemReportRepository = get(),
-            accountRepository = get(),
-            isPlayBuild = IS_PLAY_BUILD,
+            supportIssueUseCase = get(),
         )
     }
     viewModel { ViewLogsViewModel(get()) }

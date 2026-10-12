@@ -95,7 +95,6 @@
     <string name="collapse">Comprimir</string>
     <string name="confirm_ipv6_dns">O servidor DNS IPv6 não funcionará a menos que ative a \"IPv6\" nas definições de VPN.</string>
     <string name="confirm_local_dns">O servidor DNS local não funcionará a menos que ative a \"Partilha de rede local\" nas definições de VPN.</string>
-    <string name="confirm_no_email">Está prestes a enviar o relatório de problema sem que tenhamos uma forma de lhe responder. Se pretender uma resposta ao seu relatório, tem de introduzir um endereço de email.</string>
     <string name="confirm_removal">Sim, terminar sessão do dispositivo</string>
     <string name="congrats">Parabéns!</string>
     <string name="connect">Ligar</string>
@@ -214,7 +213,6 @@
     <string name="edit_list">Editar lista</string>
     <string name="edit_lists">Editar listas</string>
     <string name="edit_locations">Editar localizações</string>
-    <string name="edit_message">Editar mensagem</string>
     <string name="edit_method">Editar método</string>
     <string name="edit_name">Editar nome</string>
     <string name="enable">Ativar</string>
@@ -247,8 +245,6 @@
     <string name="failed_to_fetch_devices">Erro ao obter a lista de dispositivos</string>
     <string name="failed_to_load_products">Erro ao carregar os produtos. Tente novamente</string>
     <string name="failed_to_remove_device">Erro ao remover dispositivo</string>
-    <string name="failed_to_send">Erro no envio</string>
-    <string name="failed_to_send_details">Se sair do formulário e tentar novamente mais tarde, a informação que já tiver introduzido continuará aqui.</string>
     <string name="failed_to_set_current_test_error">Erro ao definir como atual — API não alcançável</string>
     <string name="failed_to_set_current_unknown_error">Erro ao definir como atual — motivo desconhecido</string>
     <string name="faqs_and_guides">Perguntas frequentes e guias</string>
@@ -274,10 +270,6 @@
     <string name="import_overrides_import">Importar</string>
     <string name="import_overrides_text_title">Importar através de texto</string>
     <string name="in_app_products_unavailable">Produtos na app indisponíveis. Confirme se tem a versão mais recente do Google Play.</string>
-    <string name="include_account_token_checkbox_text">Incluir o token da minha conta para obter ajuda mais rápida com questões relacionadas com pagamentos ou contas</string>
-    <string name="include_account_token_warning_message_first">Ao anexar o token da sua conta, este relatório é associado à sua conta, o que nos ajuda a resolver o problema mais rapidamente. Todos os relatórios são automaticamente eliminados após um determinado período.</string>
-    <string name="include_account_token_warning_message_second">Para mais detalhes, consulte a nossa %1$s.</string>
-    <string name="include_account_token_warning_title">Esta ação afeta o seu anonimato</string>
     <string name="info">Informação</string>
     <string name="internet">Internet</string>
     <string name="invalid_address_blank_warning">Introduza um endereço IP</string>
@@ -409,8 +401,6 @@
     <string name="port">Porta</string>
     <string name="port_x">Porta: %1$s</string>
     <string name="privacy_policy_label">Política de privacidade</string>
-    <string name="privacy_policy_lower_case">política de privacidade</string>
-    <string name="problem_report_description">Para ajudarmos de forma mais eficaz, o ficheiro de registo da sua aplicação será anexado a esta mensagem. Os seus dados permanecerão seguros e privados, pois são tornados anónimos antes de serem enviados através de um canal encriptado.</string>
     <string name="providers">Fornecedores</string>
     <string name="quantum_resistant_info_first_paragraph">Esta funcionalidade torna o túnel do WireGuard resistente a potenciais ataques de computadores quânticos.</string>
     <string name="quantum_resistant_info_second_paragraph">Para isso, realiza uma troca de chaves adicional utilizando um algoritmo resistente à computação quântica, e misturando o resultado na encriptação regular do WireGuard. Este passo adicional utiliza aproximadamente 500 kiB de tráfego sempre que um novo túnel é estabelecido.</string>
@@ -433,7 +423,6 @@
     <string name="rented">Alugado</string>
     <string name="rented_only">Apenas alugado</string>
     <string name="report_a_problem">Reportar um problema</string>
-    <string name="report_problem_message_is_empty">Introduza uma mensagem</string>
     <string name="reset_to_default_button">Repor para as predefinições</string>
     <string name="retry">Tentar novamente</string>
     <string name="save">Guardar</string>
@@ -441,12 +430,6 @@
     <string name="search_no_matches_for_text">Sem resultados para \"%1$s\". Experimente uma pesquisa diferente</string>
     <string name="search_placeholder">Pesquisar por...</string>
     <string name="select_location">Selecionar localização</string>
-    <string name="send">Enviar</string>
-    <string name="send_anyway">Enviar mesmo assim</string>
-    <string name="sending">A enviar...</string>
-    <string name="sent">Enviado</string>
-    <string name="sent_contact">Se necessário, iremos contactá-lo através de %1$s</string>
-    <string name="sent_thanks">Obrigado!</string>
     <string name="separate_filters_title">Filtros separados</string>
     <string name="separate_filters_title_first_paragraph">Agora é possível definir filtros separadamente para as localizações de entrada e de saída.</string>
     <string name="separate_filters_title_second_paragraph">Os seus filtros atuais foram aplicados às localizações de entrada e de saída.</string>
@@ -534,8 +517,6 @@
     <string name="uri_browser_app_not_found">Nenhuma aplicação de navegador Android instalada. Não foi possível abrir a ligação</string>
     <string name="uri_market_app_not_found">Nenhuma loja de aplicações Android instalada. Não foi possível abrir a ligação</string>
     <string name="use_method">Utilizar método</string>
-    <string name="user_email_hint">O seu email (opcional)</string>
-    <string name="user_message_hint">Para o ajudar melhor, escreva em inglês ou sueco e indique o país de onde está a efetuar a ligação.</string>
     <string name="username">Nome de utilizador</string>
     <string name="verification_failed_dialog_message">Não foi possível verificar a sua última compra. Verifique a sua ligação à Internet e tente novamente. Se o problema persistir, contacte o suporte.</string>
     <string name="verifying_api_method">A verificar método de API...</string>
@@ -558,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">Erro de permissão de VPN</string>
     <string name="vpn_settings_not_available">Definições de VPN não disponíveis no dispositivo</string>
     <string name="warning">Aviso</string>
-    <string name="we_will_look_into_this">Vamos analisar esta situação.</string>
     <string name="when_needed">Quando necessário</string>
     <string name="wireguard_custom_port_title">Personalizado</string>
     <string name="wireguard_mtu_footer">Definir o valor MTU do WireGuard. Intervalo válido: %1$d — %2$d.</string>

@@ -10,6 +10,7 @@ android { namespace = "net.mullvad.mullvadvpn.feature.problemreport.impl" }
 
 dependencies {
     implementation(projects.lib.repository)
+    implementation(projects.lib.usecase)
 
     implementation(libs.koin.compose)
     implementation(libs.arrow)
