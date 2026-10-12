@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">ไม่สามารถเริ่มการเชื่อมต่ออุโมงค์ได้ โปรดปิดใช้งาน Always-on VPN เป็นเวลา <b>%1$s</b> ก่อนที่จะใช้งาน Krtek</string>
     <string name="always_on_vpn_error_notification_title">VPN เปิดอยู่เสมอ ได้รับการมอบหมายไปยัง %1$s แล้ว</string>
     <string name="android_16_upgrade_warning_dialog_first_message">หลังจากอัปเดตแอป VPN บน Android 16 อุปกรณ์อาจอยู่ในสถานะที่แอป VPN ไม่สามารถเข้าถึงอินเทอร์เน็ตได้อีกต่อไป</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">โปรดรีสตาร์ทอุปกรณ์ของคุณและลองเชื่อมต่ออีกครั้ง หากวิธีนี้ไม่ได้ผล โปรดเขียนอีเมลถึง %1$s เป็นภาษาสวีเดนหรืออังกฤษ</string>
     <string name="android_16_upgrade_warning_message">Android 16 มีปัญหาที่ทราบแล้ว โปรดรีสตาร์ทอุปกรณ์ของคุณแล้วลองอีกครั้ง หากต้องการเรียนรู้เพิ่มเติม</string>
     <string name="android_16_upgrade_warning_title">เชื่อมต่อไม่ได้ใช่ไหม</string>
     <string name="anti_censorship">การป้องกันการเซ็นเซอร์</string>
@@ -371,7 +370,6 @@
     <string name="next">ถัดไป</string>
     <string name="next_with_icon">ถัดไป %1$s</string>
     <string name="no_custom_lists_available">ไม่มีรายการแบบกำหนดเองที่พร้อมใช้งาน</string>
-    <string name="no_email_app_available">ไม่มีแอปอีเมลบนอุปกรณ์</string>
     <string name="no_internet_connection">ไม่มีการเชื่อมต่ออินเทอร์เน็ต</string>
     <string name="no_matching_relay">ไม่มีเซิร์ฟเวอร์ที่ตรงกับการตั้งค่าของคุณ โปรดลองเปลี่ยนเซิร์ฟเวอร์ หรือการตั้งค่าอื่นๆ</string>
     <string name="no_matching_relay_entry">ไม่มีเซิร์ฟเวอร์รายการที่ตรงกับการตั้งค่าของคุณ ลองเปลี่ยนเซิร์ฟเวอร์หรือการตั้งค่าอื่น</string>
@@ -445,7 +443,6 @@
     <string name="select_location">เลือกตำแหน่งที่ตั้ง</string>
     <string name="send">ส่ง</string>
     <string name="send_anyway">ส่งต่อไป</string>
-    <string name="send_email">ส่งอีเมล</string>
     <string name="sending">กำลังส่ง...</string>
     <string name="sent">ส่ง</string>
     <string name="sent_contact">เราจะติดต่อคุณไปทาง %1$s ในกรณีจำเป็น</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">เชื่อมต่อกับเครือข่ายอื่น</string>
     <string name="unable_to_reach_api_dialog_message_list_third">เปิดใช้งานวิธีการเข้าถึงทั้งหมดในแอป</string>
     <string name="unable_to_reach_api_dialog_message_second">นี่อาจเกิดจากการเซ็นเซอร์หรือปัญหาเครือข่าย โปรดลอง:</string>
-    <string name="unable_to_reach_api_dialog_message_third">หากขั้นตอนเหล่านี้ไม่ได้ผล โปรดส่งอีเมลถึงฝ่ายสนับสนุนโดยใช้ปุ่มด้านล่าง ระบบจะแนบบันทึกที่ถูกทำให้ไม่ระบุตัวตนโดยอัตโนมัติ</string>
     <string name="unavailable">ไม่พร้อมใช้งาน</string>
     <string name="undo">เลิกทำ</string>
     <string name="unsupported_version">เวอร์ชันที่ไม่รองรับ</string>

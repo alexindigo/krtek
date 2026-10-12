@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">トンネル接続を開始できません。Krtekを使用する前に<b>%1$s</b>のAlways-on VPNを無効にしてください。</string>
     <string name="always_on_vpn_error_notification_title">Always-on VPNは%1$sに割り当てられました</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Android 16でVPNアプリを更新すると、デバイス上のVPNアプリがインターネットにアクセス不可能な状態になる可能性があります。</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">デバイスを再起動して再接続してください。それでも問題が解決しない場合は、%1$sにスウェーデン語か英語のメールでお問い合わせください。</string>
     <string name="android_16_upgrade_warning_message">Android 16には既知の問題があります。デバイスを再起動して再試行してください。詳細は、</string>
     <string name="android_16_upgrade_warning_title">接続できませんか？</string>
     <string name="anti_censorship">検閲回避</string>
@@ -371,7 +370,6 @@
     <string name="next">次へ</string>
     <string name="next_with_icon">次へ %1$s</string>
     <string name="no_custom_lists_available">利用可能なカスタムリストはありません</string>
-    <string name="no_email_app_available">デバイスに利用可能なメールアプリがありません</string>
     <string name="no_internet_connection">インターネット接続がありません</string>
     <string name="no_matching_relay">設定に一致するサーバーはありません。サーバーまたは他の設定を変更してみてください。</string>
     <string name="no_matching_relay_entry">設定に一致する入口サーバーが見つかりません。サーバーやその他の設定の変更をお試しください。</string>
@@ -445,7 +443,6 @@
     <string name="select_location">場所を選択する</string>
     <string name="send">送信</string>
     <string name="send_anyway">とにかく送信する</string>
-    <string name="send_email">メールを送信する</string>
     <string name="sending">送信中...</string>
     <string name="sent">送信済み</string>
     <string name="sent_contact">必要に応じて %1$s 宛にご連絡します　</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">別のネットワークに接続する</string>
     <string name="unable_to_reach_api_dialog_message_list_third">アプリですべてのアクセス方法を有効にする</string>
     <string name="unable_to_reach_api_dialog_message_second">検閲やネットワークの問題が原因である可能性があります。次の操作をお試しください。</string>
-    <string name="unable_to_reach_api_dialog_message_third">これらの手順で問題が解決しない場合には、以下のボタンを使ってサポートまでメールをお送りください。匿名化されたログが自動で添付されます。</string>
     <string name="unavailable">使用不可</string>
     <string name="undo">元に戻す</string>
     <string name="unsupported_version">未対応のバージョン</string>

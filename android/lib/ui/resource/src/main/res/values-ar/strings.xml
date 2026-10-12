@@ -26,7 +26,6 @@
     <string name="always_on_vpn_error_notification_content">يتعذَّر بدء اتصال النفق. يُرجى إيقاف \"تشغيل VPN دائمًا\" لـ <b>%1$s</b> قبل استخدام Krtek.</string>
     <string name="always_on_vpn_error_notification_title">تم تعيين \"تشغيل VPN دائمًا\" إلى %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">بعد تحديث تطبيق VPN على نظام التشغيل Android 16، قد تصل الأجهزة إلى حالة تفقد فيها تطبيقات VPN قدرتها على الوصول إلى الإنترنت.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">يُرجى إعادة تشغيل جهازك ومحاولة الاتصال مرة أخرى. إذا لم ينجح ذلك، يُرجى إرسال رسالة بريد إلكتروني إلى %1$s باللغة السويدية أو الإنجليزية.</string>
     <string name="android_16_upgrade_warning_message">هناك مشكلة معروفة في نظام Android 16. يُرجى إعادة تشغيل جهازك وإعادة المحاولة. لمعرفة المزيد،</string>
     <string name="android_16_upgrade_warning_title">هل يتعذَّر الاتصال؟</string>
     <string name="anti_censorship">مكافحة الرقابة</string>
@@ -352,7 +351,6 @@
     <string name="next">التالي</string>
     <string name="next_with_icon">التالي %1$s</string>
     <string name="no_custom_lists_available">لا توجد قوائم مُخصَّصة متاحة</string>
-    <string name="no_email_app_available">لا يتوفَّر تطبيق بريد إلكتروني على الجهاز</string>
     <string name="no_internet_connection">لا يتوفَّر اتصال بالإنترنت</string>
     <string name="no_matching_relay">لا توجد خوادم تتطابق مع إعداداتك، حاول تغيير الخادم أو الإعدادات الأخرى.</string>
     <string name="no_matching_relay_entry">لا يوجد خادم دخول متطابق مع إعداداتك، جرِّب تغيير الخادم أو أي إعدادات أخرى.</string>
@@ -426,7 +424,6 @@
     <string name="select_location">حدِّد الموقع</string>
     <string name="send">إرسال</string>
     <string name="send_anyway">الإرسال على أي حال</string>
-    <string name="send_email">إرسال رسالة بريد إلكتروني</string>
     <string name="sending">جارٍ الإرسال...</string>
     <string name="sent">تم الإرسال</string>
     <string name="sent_contact">إذا لزم الأمر، سنتواصل معك على %1$s</string>
@@ -501,7 +498,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">الاتصال بشبكة مختلفة</string>
     <string name="unable_to_reach_api_dialog_message_list_third">تفعيل جميع طرق الوصول في التطبيق</string>
     <string name="unable_to_reach_api_dialog_message_second">قد يكون هذا بسبب الرقابة أو مشكلات في الشبكة. يُرجى تجربة ما يلي:</string>
-    <string name="unable_to_reach_api_dialog_message_third">إذا لم تنجح هذه الخطوات في حال المشكلة، يُرجى مراسلة فريق الدعم عبر البريد الإلكتروني باستخدام الزر أدناه. سيتم تلقائيًا إرفاق السجلات التي تم إخفاء هويتها.</string>
     <string name="unavailable">غير متوفر</string>
     <string name="undo">تراجع</string>
     <string name="unsupported_version">إصدار غير مدعوم</string>

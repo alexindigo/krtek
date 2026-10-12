@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">Impossibile avviare la connessione tunnel. Disabilita VPN sempre attiva per <b>%1$s</b> prima di utilizzare Krtek.</string>
     <string name="always_on_vpn_error_notification_title">VPN sempre attiva assegnata a %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Dopo aver aggiornato un\'app VPN su Android 16, i dispositivi potrebbero trovarsi in uno stato in cui le app VPN non sono più in grado di accedere a Internet.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Riavvia il dispositivo e riprova a connetterti. Se non funziona, scrivi un\'e-mail a %1$s in svedese o in inglese.</string>
     <string name="android_16_upgrade_warning_message">Android 16 presenta un problema noto. Riavvia il dispositivo e riprova. Per saperne di più,</string>
     <string name="android_16_upgrade_warning_title">Non riesci a connetterti?</string>
     <string name="anti_censorship">Anticensura</string>
@@ -371,7 +370,6 @@
     <string name="next">Avanti</string>
     <string name="next_with_icon">Avanti %1$s</string>
     <string name="no_custom_lists_available">Nessun elenco personalizzato disponibile</string>
-    <string name="no_email_app_available">Nessuna app di posta elettronica disponibile sul dispositivo</string>
     <string name="no_internet_connection">Nessuna connessione Internet</string>
     <string name="no_matching_relay">Nessun server corrispondente alle tue impostazioni, prova a cambiare server o impostazioni.</string>
     <string name="no_matching_relay_entry">Nessun server di entrata corrispondente alle tue impostazioni, prova a cambiare server o impostazioni.</string>
@@ -445,7 +443,6 @@
     <string name="select_location">Seleziona posizione</string>
     <string name="send">Invia</string>
     <string name="send_anyway">Invia comunque</string>
-    <string name="send_email">Invia un\'e-mail</string>
     <string name="sending">Invio...</string>
     <string name="sent">Inviato</string>
     <string name="sent_contact">Se necessario, ti contatteremo all\'indirizzo %1$s</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Connettiti a un\'altra rete</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Abilita tutti i metodi di accesso nell\'app</string>
     <string name="unable_to_reach_api_dialog_message_second">Ciò potrebbe essere dovuto a problemi di censura o di rete. Prova quanto segue:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Se questi passaggi non funzionano, invia un\'e-mail al supporto utilizzando il pulsante qui sotto. Verranno allegati automaticamente i log precedentemente anonimizzati.</string>
     <string name="unavailable">Non disponibile</string>
     <string name="undo">Annulla</string>
     <string name="unsupported_version">VERSIONE NON SUPPORTATA</string>

@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">Tunnelverbindung kann nicht gestartet werden. Bitte deaktivieren Sie Always-on VPN für <b>%1$s</b>, bevor Sie Krtek verwenden.</string>
     <string name="always_on_vpn_error_notification_title">Always-on VPN ist %1$s zugeordnet</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Nach dem Update einer VPN-App auf Android 16 kann es vorkommen, dass die VPN-Apps auf diesen Geräten nicht länger auf das Internet zugreifen können.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Bitte starten Sie Ihr Gerät neu und versuchen Sie erneut, sich zu verbinden. Wenn dies nicht funktioniert, schreiben Sie bitte eine E-Mail an %1$s auf Schwedisch oder Englisch.</string>
     <string name="android_16_upgrade_warning_message">Android 16 hat einen bekannten Fehler. Bitte starten Sie Ihr Gerät neu und versuchen Sie es erneut. Um mehr darüber zu erfahren,</string>
     <string name="android_16_upgrade_warning_title">Keine Verbindung möglich?</string>
     <string name="anti_censorship">Anti-Zensur</string>
@@ -371,7 +370,6 @@
     <string name="next">Weiter</string>
     <string name="next_with_icon">Weiter %1$s</string>
     <string name="no_custom_lists_available">Keine eigenen Listen verfügbar</string>
-    <string name="no_email_app_available">Keine E-Mail-App auf dem Gerät verfügbar</string>
     <string name="no_internet_connection">Keine Internetverbindung</string>
     <string name="no_matching_relay">Kein Server entspricht Ihren Einstellungen. Versuchen Sie, den Server oder andere Einstellungen zu ändern.</string>
     <string name="no_matching_relay_entry">Kein Eingangsserver entspricht Ihren Einstellungen. Versuchen Sie, den Server oder andere Einstellungen zu ändern.</string>
@@ -445,7 +443,6 @@
     <string name="select_location">Ort auswählen</string>
     <string name="send">Senden</string>
     <string name="send_anyway">Trotzdem senden</string>
-    <string name="send_email">E-Mail senden</string>
     <string name="sending">Wird gesendet...</string>
     <string name="sent">Gesendet</string>
     <string name="sent_contact">Bei Bedarf werden wir Sie über %1$s kontaktieren</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Mit einem anderen Netzwerk verbinden</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Alle Zugriffsmethoden in der App aktivieren</string>
     <string name="unable_to_reach_api_dialog_message_second">Das kann an Zensur oder Netzwerkproblemen liegen. Versuchen Sie Folgendes:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Sollten die oben genannten Schritte nicht zum Erfolg führen, senden Sie bitte über die Schaltfläche unten eine E-Mail an unseren Support. Es werden automatisch anonymisierte Protokolle als Anhang beigefügt.</string>
     <string name="unavailable">Nicht verfügbar</string>
     <string name="undo">Rückgängig</string>
     <string name="unsupported_version">NICHT UNTERSTÜTZTE VERSION</string>

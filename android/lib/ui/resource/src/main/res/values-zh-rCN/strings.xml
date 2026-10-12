@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">无法启动隧道连接。在使用 Krtek 之前，请为 <b>%1$s</b> 停用“始终开启 VPN”。</string>
     <string name="always_on_vpn_error_notification_title">“始终开启 VPN”已分配给 %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">在 Android 16 上更新 VPN 应用后，设备可能会出现 VPN 应用无法连接互联网的情况。</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">请重新启动您的设备，然后再次尝试连接。如果仍然无法连接，请用瑞典语或英语发送电子邮件至 %1$s。</string>
     <string name="android_16_upgrade_warning_message">Android 16 存在已知问题。请重启您的设备并重试。如需了解详情，</string>
     <string name="android_16_upgrade_warning_title">无法连接？</string>
     <string name="anti_censorship">反审查</string>
@@ -371,7 +370,6 @@
     <string name="next">下一步</string>
     <string name="next_with_icon">下一步 %1$s</string>
     <string name="no_custom_lists_available">有可用的自定义列表</string>
-    <string name="no_email_app_available">设备上没有可用的电子邮件应用</string>
     <string name="no_internet_connection">没有互联网连接</string>
     <string name="no_matching_relay">没有与您的设置匹配的服务器，请尝试更改服务器或其他设置。</string>
     <string name="no_matching_relay_entry">没有与您的设置匹配的入口服务器，请尝试更改服务器或其他设置。</string>
@@ -445,7 +443,6 @@
     <string name="select_location">选择位置</string>
     <string name="send">发送</string>
     <string name="send_anyway">仍然发送</string>
-    <string name="send_email">发送电子邮件</string>
     <string name="sending">正在发送…</string>
     <string name="sent">已发送</string>
     <string name="sent_contact">如果需要，我们将通过 %1$s 与您联系</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">连接到其他网络</string>
     <string name="unable_to_reach_api_dialog_message_list_third">启用应用中的所有访问方法</string>
     <string name="unable_to_reach_api_dialog_message_second">这可能由审查或网络问题造成。请尝试：</string>
-    <string name="unable_to_reach_api_dialog_message_third">如果上述步骤无效，请使用下方的按钮发送邮件给支持团队。电子邮件将自动附加经过匿名化处理的日志。</string>
     <string name="unavailable">不可用</string>
     <string name="undo">撤消</string>
     <string name="unsupported_version">不受支持的版本</string>

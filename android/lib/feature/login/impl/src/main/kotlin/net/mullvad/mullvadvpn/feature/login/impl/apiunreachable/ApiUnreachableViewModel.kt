@@ -15,28 +15,27 @@ import kotlinx.coroutines.launch
 import net.mullvad.mullvadvpn.feature.login.api.ApiUnreachableNavKey
 import net.mullvad.mullvadvpn.lib.common.constant.VIEW_MODEL_STOP_TIMEOUT
 import net.mullvad.mullvadvpn.lib.repository.ApiAccessRepository
-import net.mullvad.mullvadvpn.lib.ui.component.NEWLINE_STRING
-import net.mullvad.mullvadvpn.lib.usecase.SupportEmailUseCase
+import net.mullvad.mullvadvpn.lib.usecase.SupportIssueUseCase
 
 class ApiUnreachableViewModel(
     private val navArgs: ApiUnreachableNavKey,
     private val apiAccessRepository: ApiAccessRepository,
-    private val supportEmailUseCase: SupportEmailUseCase,
+    private val supportIssueUseCase: SupportIssueUseCase,
 ) : ViewModel() {
 
-    private val noEmailAppAvailable = MutableStateFlow(false)
+    private val fallbackUrl = MutableStateFlow<String?>(null)
     private val hasEnabledAllApiAccessMethods = MutableStateFlow(false)
 
     private val _uiSideEffect = Channel<ApiUnreachableSideEffect>(Channel.BUFFERED)
     val uiSideEffect = _uiSideEffect.receiveAsFlow()
 
     val uiState =
-        combine(noEmailAppAvailable, hasEnabledAllApiAccessMethods) {
-                noEmailAppAvailable,
+        combine(fallbackUrl, hasEnabledAllApiAccessMethods) {
+                fallbackUrl,
                 hasEnabledAllApiAccessMethods ->
                 ApiUnreachableUiState(
                     showEnableAllAccessMethodsButton = !hasEnabledAllApiAccessMethods,
-                    noEmailAppAvailable = noEmailAppAvailable,
+                    fallbackUrl = fallbackUrl,
                     loginAction = navArgs.action,
                 )
             }
@@ -46,7 +45,6 @@ class ApiUnreachableViewModel(
                 initialValue =
                     ApiUnreachableUiState(
                         showEnableAllAccessMethodsButton = false,
-                        noEmailAppAvailable = false,
                         loginAction = navArgs.action,
                     ),
             )
@@ -76,28 +74,22 @@ class ApiUnreachableViewModel(
         }
     }
 
-    fun sendProblemReportEmail() {
+    fun openSupportIssue() {
         viewModelScope.launch {
-            noEmailAppAvailable.emit(false)
-            val supportEmail = supportEmailUseCase()
+            fallbackUrl.emit(null)
             _uiSideEffect.send(
-                ApiUnreachableSideEffect.SendEmail(
-                    address = supportEmail.address,
-                    subject = supportEmail.subject,
-                    logs = supportEmail.logs.joinToString(NEWLINE_STRING),
-                )
+                ApiUnreachableSideEffect.OpenIssue(supportIssueUseCase(title = "API unreachable"))
             )
         }
     }
 
-    fun noEmailAppAvailable() {
-        viewModelScope.launch { noEmailAppAvailable.emit(true) }
+    fun onBrowserUnavailable(url: String) {
+        fallbackUrl.value = url
     }
 }
 
 sealed interface ApiUnreachableSideEffect {
-    data class SendEmail(val address: String, val subject: String, val logs: String) :
-        ApiUnreachableSideEffect
+    data class OpenIssue(val url: String) : ApiUnreachableSideEffect
 
     sealed interface EnableAllApiAccessMethods : ApiUnreachableSideEffect {
         data class Success(val navArgs: ApiUnreachableNavKey) : EnableAllApiAccessMethods

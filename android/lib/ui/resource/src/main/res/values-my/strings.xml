@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">Tunnel ချိတ်ဆက်မှုကို စတင်၍ မရနိုင်ပါ။ Krtek ကို မသုံးမီ <b>%1$s</b> အတွက် VPN အမြဲဖွင့်ထားမှုကို ပိတ်ပေးပါ။</string>
     <string name="always_on_vpn_error_notification_title">အမြဲဖွင့် VPN ကို %1$s သို့ သတ်မှတ်ထားပါသည်</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Android 16 တွင် VPN အက်ပ်ကို အပ်ဒိတ်လုပ်ပြီးနောက် စက်များတွင် VPN အက်ပ်များက အင်တာနက်ချိတ်မပေးနိုင်တော့သည့် အခြေအနေမျိုး ကြုံရတတ်သည်။</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">စက်ကို ရီစတက်ချပြီး ထပ်မံချိတ်ဆက်ကြည့်ပါ။ ချိတ်၍မရသေးလျှင် %1$s သို့ ဆွီဒင် သို့မဟုတ် အင်္ဂလိပ်ဘာသာစကားဖြင့် အီးမေးလ်ပို့ပါ။</string>
     <string name="android_16_upgrade_warning_message">Android 16 တွင် သိထားပြီးသား ပြဿနာရှိသည်။ သင့်စက်ကို ရီစတက်ချပြီး ထပ်မံကြိုးစားပါ။ ပိုမိုလေ့လာရန်၊ </string>
     <string name="android_16_upgrade_warning_title">ချိတ်မရဘူးလား။</string>
     <string name="anti_censorship">ဆင်ဆာဖြတ်တောက်မှု ကျော်လွှားရေး</string>
@@ -371,7 +370,6 @@
     <string name="next">ရှေ့သို့</string>
     <string name="next_with_icon">ရှေ့သို့ %1$s</string>
     <string name="no_custom_lists_available">စိတ်ကြိုက် စာရင်းများကို မရရှိနိုင်ပါ</string>
-    <string name="no_email_app_available">ဤစက်တွင် မည်သည့်အီးမေးလ်အက်ပ်ကိုမျှ မရရှိနိုင်ပါ</string>
     <string name="no_internet_connection">အင်တာနက် ချိတ်ဆက်မှု မရှိပါ</string>
     <string name="no_matching_relay">သင့်ဆက်တင်နှင့် ကိုက်ညီသော ဆာဗာများ မရှိပါ၊ ဆာဗာ သို့မဟုတ် အခြားဆက်တင်တို့ကို ပြောင်းလဲရန် ကြိုးစားကြည့်ပါ။</string>
     <string name="no_matching_relay_entry">သင့်ဆက်တင်နှင့် ကိုက်ညီသော အဝင်ဆာဗာ မရှိပါ၊ ဆာဗာ သို့မဟုတ် အခြားဆက်တင်တို့ကို ပြောင်းလဲရန် ကြိုးစားကြည့်ပါ။</string>
@@ -445,7 +443,6 @@
     <string name="select_location">တည်နေရာ ရွေးရန်</string>
     <string name="send">ပို့ရန်</string>
     <string name="send_anyway">မည်သို့ပင်ဖြစ်စေ ပို့ရန်</string>
-    <string name="send_email">အီးမေးလ်ပို့ရန်</string>
     <string name="sending">ပို့နေဆဲ...</string>
     <string name="sent">ပို့ပြီး</string>
     <string name="sent_contact">လိုအပ်ပါက %1$s မှတစ်ဆင့် ကျွန်ုပ်တို့ထံ ဆက်သွယ်ပါ</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">အခြားကွန်ရက်တစ်ခုကို ချိတ်ဆက်ကြည့်ပါ</string>
     <string name="unable_to_reach_api_dialog_message_list_third">အက်ပ်တွင် ရယူသုံးစွဲခွင့် နည်းလမ်းအားလုံးကို ဖွင့်ပါ</string>
     <string name="unable_to_reach_api_dialog_message_second">ဆင်ဆာဖြတ်တောက်မှု သို့မဟုတ် ကွန်ရက်ပြဿနာများကြောင့် ဖြစ်နိုင်သည်။ အောက်ပါတို့ကို လုပ်ဆောင်ကြည့်ပါ-</string>
-    <string name="unable_to_reach_api_dialog_message_third">ဤအဆင့်များအတိုင်း လုပ်ဆောင်သော်လည်း မပြေလည်ပါက အောက်ရှိ ခလုတ်ကို သုံး၍ သုံးစွဲသူ အကူအညီပေးရေး အဖွဲ့ထံ အီးမေးလ်တစ်စောင် ပို့ပေးပါ။ အီးမေးလ်တွင် အမည်ဝှက်ထားသော မှတ်တမ်းများကို အော်တို တွဲချိတ်သွားပါမည်။</string>
     <string name="unavailable">မရနိုင်ပါ</string>
     <string name="undo">မလုပ်တော့ပါ</string>
     <string name="unsupported_version">တွဲဖက်မလုပ်ဆောင်နိုင်သည့် ဗားရှင်း</string>

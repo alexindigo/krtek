@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">Kunne ikke starte tunnelforbindelse. Deaktiver Altid-til VPN for <b>%1$s</b>.</string>
     <string name="always_on_vpn_error_notification_title">Altid-til VPN tildelt %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Når en VPN-app er blevet opdateret på Android 16, kan enheder ende i en tilstand, hvor VPN-apps ikke længere kan få kontakt til internettet.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Genstart din enhed, og prøv at oprette forbindelse igen. Hvis det ikke hjælper, kan du skrive en e-mail til %1$s på svensk eller engelsk.</string>
     <string name="android_16_upgrade_warning_message">Android 16 har et kendt problem. Genstart din enhed, og prøv igen. For at få mere at vide</string>
     <string name="android_16_upgrade_warning_title">Kan du ikke oprette forbindelse?</string>
     <string name="anti_censorship">Anti-censur</string>
@@ -371,7 +370,6 @@
     <string name="next">Næste</string>
     <string name="next_with_icon">Næste %1$s</string>
     <string name="no_custom_lists_available">Ingen brugerdefinerede lister tilgængelige</string>
-    <string name="no_email_app_available">Ingen e-mailapp tilgængelig på enheden</string>
     <string name="no_internet_connection">Ingen internetforbindelse</string>
     <string name="no_matching_relay">Ingen servere matcher dine indstillinger. Prøv at ændre server eller andre indstillinger.</string>
     <string name="no_matching_relay_entry">Ingen indgangsserver matcher dine indstillinger. Prøv at ændre server eller andre indstillinger.</string>
@@ -445,7 +443,6 @@
     <string name="select_location">Vælg placering</string>
     <string name="send">Send</string>
     <string name="send_anyway">Send alligevel</string>
-    <string name="send_email">Send e-mail</string>
     <string name="sending">Sender...</string>
     <string name="sent">Sendt</string>
     <string name="sent_contact">Hvis det er nødvendigt, kontakter vi dig på %1$s</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Opret forbindelse til et andet netværk</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Aktiver alle adgangsmetoder i appen</string>
     <string name="unable_to_reach_api_dialog_message_second">Det kan være pga. censur eller netværksproblemer. Prøv at:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Hvis disse trin ikke virker, kan du sende en e-mail til support via knappen nedenfor. Den vil automatisk vedhæfte de logfiler, som er blevet anonymiseret.</string>
     <string name="unavailable">Ikke tilgængelig</string>
     <string name="undo">Fortryd</string>
     <string name="unsupported_version">IKKE-UNDERSTØTTET VERSION</string>

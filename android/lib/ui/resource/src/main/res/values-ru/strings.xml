@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">Не удалось запустить туннельное подключение. Перед использованием приложения Krtek отключите опцию «Постоянная VPN» для приложения <b>%1$s</b>.</string>
     <string name="always_on_vpn_error_notification_title">Опция «Постоянная VPN» назначена приложению «%1$s»</string>
     <string name="android_16_upgrade_warning_dialog_first_message">После обновления VPN-приложения на Android 16 VPN-приложения иногда теряют доступ к Интернету.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Перезагрузите устройство и снова попробуйте подключиться. Если это не поможет, отправьте письмо на %1$s на английском или шведском.</string>
     <string name="android_16_upgrade_warning_message">В Android 16 есть известная проблема. Перезагрузите устройство и попробуйте снова. Чтобы узнать больше,</string>
     <string name="android_16_upgrade_warning_title">Проблемы с подключением?</string>
     <string name="anti_censorship">Обход цензуры</string>
@@ -371,7 +370,6 @@
     <string name="next">Далее</string>
     <string name="next_with_icon">Далее %1$s</string>
     <string name="no_custom_lists_available">Нет своих списков</string>
-    <string name="no_email_app_available">На устройстве нет приложения для работы с электронной почтой</string>
     <string name="no_internet_connection">Нет подключения к Интернету</string>
     <string name="no_matching_relay">Нет серверов, соответствующих вашим настройкам. Попробуйте изменить сервер или задайте другие настройки.</string>
     <string name="no_matching_relay_entry">Нет серверов входа, соответствующих вашим настройкам. Попробуйте изменить сервер или задайте другие настройки.</string>
@@ -445,7 +443,6 @@
     <string name="select_location">Выбор местоположения</string>
     <string name="send">Отправить</string>
     <string name="send_anyway">Все равно отправить</string>
-    <string name="send_email">Отправить письмо</string>
     <string name="sending">Идет отправка...</string>
     <string name="sent">Отправлено</string>
     <string name="sent_contact">При необходимости мы свяжемся с вами по адресу %1$s</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Подключиться к другой сети.</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Включить все методы доступа в приложении</string>
     <string name="unable_to_reach_api_dialog_message_second">Это могло произойти из-за цензуры или проблем с сетью. Попробуйте следующее:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Если описанные выше шаги не помогли, отправьте письмо в службу поддержки, нажав кнопку ниже. К письму будут автоматически прикреплены анонимизированные журналы активности.</string>
     <string name="unavailable">Недоступно</string>
     <string name="undo">Отменить</string>
     <string name="unsupported_version">НЕПОДДЕРЖИВАЕМАЯ ВЕРСИЯ</string>

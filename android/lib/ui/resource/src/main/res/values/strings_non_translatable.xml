@@ -17,8 +17,7 @@
     <string name="local_network_sharing_ip_ranges" translatable="false">10.0.0.0/8\n172.16.0.0/12\n192.168.0.0/16\n169.254.0.0/16\nfe80::/10\nfc00::/7</string>
     <string name="daita" translatable="false">DAITA</string>
     <string name="daita_full" translatable="false">Defence against AI-guided Traffic Analysis</string>
-    <string name="support_email" translatable="false">support@mullvadvpn.net</string>
-    <string name="support_email_subject" translatable="false">Mullvad VPN App %s Android %s (%d) - %s %s</string>
+    <string name="github_issues_url" translatable="false">https://github.com/alexindigo/krtek/issues</string>
     <string name="app_name_game" translatable="false">Whack-a-mole</string>
     <string name="app_name_ninja" translatable="false">Ninja Mole</string>
 </resources>

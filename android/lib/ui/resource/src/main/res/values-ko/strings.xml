@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">터널 연결을 시작할 수 없습니다. Krtek을 사용하기 전에 <b>%1$s</b>에 대한 상시 접속 VPN을 비활성화하세요.</string>
     <string name="always_on_vpn_error_notification_title">상시 접속 VPN이 %1$s에 할당됨</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Android 16에서 VPN 앱을 업데이트하면 VPN 앱이 더 이상 인터넷에 연결되지 않는 상태가 될 수 있습니다.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">장치를 재시작하고 다시 연결해 주세요. 그래도 해결되지 않는다면 %1$s에 스웨덴어 또는 영어로 이메일을 보내주세요.</string>
     <string name="android_16_upgrade_warning_message">Android 16에는 알려진 문제가 있습니다. 장치를 재시작한 후 다시 시도해 주세요. 자세한 내용을 알아보려면</string>
     <string name="android_16_upgrade_warning_title">연결이 되지 않나요?</string>
     <string name="anti_censorship">검열 방지</string>
@@ -371,7 +370,6 @@
     <string name="next">다음</string>
     <string name="next_with_icon">다음 %1$s</string>
     <string name="no_custom_lists_available">이용 가능한 사용자 지정 목록 없음</string>
-    <string name="no_email_app_available">이 장치에서 사용할 수 있는 이메일 앱이 없습니다</string>
     <string name="no_internet_connection">인터넷에 연결되지 않음</string>
     <string name="no_matching_relay">설정과 일치하는 서버가 없습니다. 서버 또는 기타 설정을 변경해 보세요.</string>
     <string name="no_matching_relay_entry">설정과 일치하는 진입 서버가 없습니다. 서버나 다른 설정을 변경해 주세요.</string>
@@ -445,7 +443,6 @@
     <string name="select_location">위치 선택</string>
     <string name="send">전송</string>
     <string name="send_anyway">그래도 전송</string>
-    <string name="send_email">이메일 전송</string>
     <string name="sending">전송 중...</string>
     <string name="sent">전송 완료</string>
     <string name="sent_contact">필요한 경우 %1$s(으)로 연락드리겠습니다.</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">다른 네트워크에 연결</string>
     <string name="unable_to_reach_api_dialog_message_list_third">앱의 모든 액세스 방법을 활성화합니다</string>
     <string name="unable_to_reach_api_dialog_message_second">검열 또는 네트워크 문제가 원인일 수 있습니다. 다음을 시도해 보세요.</string>
-    <string name="unable_to_reach_api_dialog_message_third">이 단계가 통하지 않는 경우 아래 버튼을 사용해 지원팀에 이메일로 문의해 주세요. 익명 처리된 로그가 자동으로 첨부됩니다.</string>
     <string name="unavailable">사용할 수 없음</string>
     <string name="undo">실행 취소</string>
     <string name="unsupported_version">지원되지 않는 버전</string>

@@ -436,7 +436,7 @@
     <string name="android_16_upgrade_warning_title">Can’t connect?</string>
     <string name="android_16_upgrade_warning_message">Android 16 has a known issue. Please restart your device and try again. To learn more, </string>
     <string name="android_16_upgrade_warning_dialog_first_message">After updating a VPN app on Android 16, devices might end up in a state where VPN apps are no longer able to reach the internet.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Please restart your device and try connecting again. If this does not work, please write an email to %s in Swedish or English.</string>
+    <string name="android_16_upgrade_warning_support_message">Please restart your device and try connecting again. If this does not work, report the problem at %s.</string>
     <string name="click_here">click here</string>
     <string name="login_error_api_unreachable">Unable to reach API, %s</string>
     <string name="login_error_too_many_attempts">Too many attempts, please try again later</string>
@@ -449,10 +449,10 @@
     <string name="unable_to_reach_api_dialog_message_list_first">Restart your device</string>
     <string name="unable_to_reach_api_dialog_message_list_second">Connect to a different network</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Enable all access methods in the app</string>
-    <string name="unable_to_reach_api_dialog_message_third">If these steps don’t work, please send an email to support using the button below. It will automatically attach the logs which have been anonymized.</string>
+    <string name="unable_to_reach_api_github_message">If these steps don’t work, report the problem as a public GitHub issue using the button below. No logs are attached automatically.</string>
     <string name="enable_all_methods">Enable all &amp; retry</string>
-    <string name="send_email">Send email</string>
-    <string name="no_email_app_available">No email app available on the device</string>
+    <string name="report_on_github">Report on GitHub</string>
+    <string name="browser_unavailable">No browser is available. Copy this link and open it in a browser.</string>
     <string name="include_account_token_checkbox_text">Include my account token for faster help with payment or account related issues</string>
     <string name="no_matching_relay_entry">No entry server match your settings, try changing server or other settings.</string>
     <string name="no_matching_relay_exit">No exit server match your settings, try changing server or other settings.</string>

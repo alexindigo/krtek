@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">Kan de tunnelverbinding niet starten. Schakel Altijd-aan VPN uit voor <b>%1$s</b> voordat u Krtek gebruikt.</string>
     <string name="always_on_vpn_error_notification_title">Altijd-aan VPN toegewezen aan %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Na het bijwerken van een VPN-app in Android 16 kan het apparaat in een toestand raken waarin de VPN-apps het internet niet meer kunnen bereiken.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Start uw apparaat opnieuw op en probeer het opnieuw. Als dat niet werkt, kun u een e-mail schrijven naar %1$s (in het Zweeds of in het Engels).</string>
     <string name="android_16_upgrade_warning_message">Er is een bekend probleem met Android 16. Start uw apparaat opnieuw op en probeer het opnieuw. Voor meer informatie:</string>
     <string name="android_16_upgrade_warning_title">Krijgt u geen verbinding?</string>
     <string name="anti_censorship">Anti-censuur</string>
@@ -371,7 +370,6 @@
     <string name="next">Volgende</string>
     <string name="next_with_icon">Volgende %1$s</string>
     <string name="no_custom_lists_available">Geen aangepaste lijsten beschikbaar</string>
-    <string name="no_email_app_available">Er staat geen e-mailprogramma op het apparaat</string>
     <string name="no_internet_connection">Geen internetverbinding</string>
     <string name="no_matching_relay">Er zijn geen servers die overeenkomen met uw instellingen. Probeer een andere server of andere instellingen.</string>
     <string name="no_matching_relay_entry">Er zijn geen ingangsservers die overeenkomen met uw instellingen. Probeer een andere server of andere instellingen.</string>
@@ -445,7 +443,6 @@
     <string name="select_location">Locatie selecteren</string>
     <string name="send">Verzenden</string>
     <string name="send_anyway">Toch verzenden</string>
-    <string name="send_email">E-mail versturen</string>
     <string name="sending">Verzenden...</string>
     <string name="sent">Verzonden</string>
     <string name="sent_contact">Indien nodig nemen we u contact op via %1$s</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Verbinding maken met een ander netwerk</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Schakel alle toegangsmethoden in de app in</string>
     <string name="unable_to_reach_api_dialog_message_second">Dit kan komen door censuur of netwerkproblemen. Probeer om:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Als deze stappen niet werken, kunt u het ondersteuningsteam een e-mail sturen via de knop hieronder. De (geanonimiseerde) logboeken worden automatisch bijgevoegd.</string>
     <string name="unavailable">Niet beschikbaar</string>
     <string name="undo">Ongedaan maken</string>
     <string name="unsupported_version">NIET-ONDERSTEUNDE VERSIE</string>

@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">Не вдалося запустити тунельне з’єднання. Вимкніть опцію «Завжди увімкнений VPN» для <b>%1$s</b> перед використанням застосунку Krtek.</string>
     <string name="always_on_vpn_error_notification_title">Опція «Завжди увімкнений VPN» призначена для %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Після оновлення VPN-застосунку на Android 16 на деяких пристроях VPN-застосунки можуть перестати отримувати доступ до Інтернету.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Перезавантажте пристрій і спробуйте підключитися ще раз. Якщо це не допоможе, напишіть листа шведською або англійською на адресу %1$s.</string>
     <string name="android_16_upgrade_warning_message">В Android 16 є відома проблема. Перезапустіть пристрій і спробуйте ще раз. Щоб дізнатися більше,</string>
     <string name="android_16_upgrade_warning_title">Не можете підключитися?</string>
     <string name="anti_censorship">Обхід цензури</string>
@@ -371,7 +370,6 @@
     <string name="next">Далі</string>
     <string name="next_with_icon">Далі %1$s</string>
     <string name="no_custom_lists_available">Немає користувацьких списків</string>
-    <string name="no_email_app_available">На пристрої немає застосунку для роботи з ел. поштою</string>
     <string name="no_internet_connection">Немає підключення до Інтернету</string>
     <string name="no_matching_relay">Жоден сервер не відповідає налаштуванням, спробуйте змінити сервер чи налаштування.</string>
     <string name="no_matching_relay_entry">Жоден сервер входу не відповідає налаштуванням, спробуйте змінити сервер чи інші параметри.</string>
@@ -445,7 +443,6 @@
     <string name="select_location">Вибір розташування</string>
     <string name="send">Надіслати</string>
     <string name="send_anyway">Усе одно надіслати</string>
-    <string name="send_email">Надіслати лист</string>
     <string name="sending">Надсилання…</string>
     <string name="sent">Надіслано</string>
     <string name="sent_contact">За потреби ми зв’яжемося з вами за адресою %1$s</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Підключитися до іншої мережі</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Увімкнути всі методи доступу в застосунку</string>
     <string name="unable_to_reach_api_dialog_message_second">Причиною може бути цензура або проблеми з мережею. Спробуйте зробити таке:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Якщо запропоновані дії не спрацювали, надішліть електронний лист службі підтримки, натиснувши кнопку нижче. Журнали будуть автоматично додані й анонімізовані.</string>
     <string name="unavailable">Недоступно</string>
     <string name="undo">Скасувати</string>
     <string name="unsupported_version">НЕПІДТРИМУВАНА ВЕРСІЯ</string>

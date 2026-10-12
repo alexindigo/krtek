@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">Det går inte att starta tunnelanslutning. Inaktivera Alltid på-VPN för <b>%1$s</b> innan du använder Krtek.</string>
     <string name="always_on_vpn_error_notification_title">Alltid på-VPN har tilldelats %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">När en VPN-app har uppdaterats på Android 16 kan enheterna hamna i ett tillstånd där VPN-apparna inte längre har åtkomst till internet.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Starta om enheten och försök att ansluta igen. Om det inte fungerar kan du skicka ett e-postmeddelande till %1$s på svenska eller engelska.</string>
     <string name="android_16_upgrade_warning_message">Android 16 har ett känt fel. Starta om din enhet och försök igen. Om du vill veta mer</string>
     <string name="android_16_upgrade_warning_title">Kan du inte ansluta?</string>
     <string name="anti_censorship">Anti-censur</string>
@@ -371,7 +370,6 @@
     <string name="next">Nästa</string>
     <string name="next_with_icon">Nästa %1$s</string>
     <string name="no_custom_lists_available">Inga anpassade listor är tillgängliga</string>
-    <string name="no_email_app_available">Ingen e-postapp finns tillgänglig på enheten</string>
     <string name="no_internet_connection">Ingen internetanslutning</string>
     <string name="no_matching_relay">Inga servrar matchar dina inställningar. Försök att byta server eller ändra inställningarna.</string>
     <string name="no_matching_relay_entry">Ingen startserver matchar dina inställningar. Försök att byta server eller med andra inställningar.</string>
@@ -445,7 +443,6 @@
     <string name="select_location">Välj plats</string>
     <string name="send">Skicka</string>
     <string name="send_anyway">Skicka ändå</string>
-    <string name="send_email">Skicka e-post</string>
     <string name="sending">Skicka...</string>
     <string name="sent">Skickat</string>
     <string name="sent_contact">Om det behövs kontaktar vi dig på %1$s</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Anslut till ett annat nätverk</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Aktivera alla åtkomstmetoder i appen</string>
     <string name="unable_to_reach_api_dialog_message_second">Det kan bero på censur- eller nätverksfel. Försök att:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Om dessa steg inte fungerar kan du skicka ett e-postmeddelande till supporten via knappen nedan. Detta bifogar automatisk loggarna som har anonymiserats.</string>
     <string name="unavailable">Inte tillgänglig</string>
     <string name="undo">Ångra</string>
     <string name="unsupported_version">VERSION UTAN STÖD</string>

@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">Tunneliyhteyden käynnistäminen ei onnistu. Poista aina päällä oleva VPN käytöstä sovellukselle <b>%1$s</b> ennen Krtek-sovelluksen käyttämistä.</string>
     <string name="always_on_vpn_error_notification_title">%1$s on määritetty aina päällä olevan VPN:n asetukseksi</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Kun VPN-sovellus päivitetään Android 16:ssa, laitteen saattavat päätyä tilaan, jossa VPN-sovellukset eivät voi enää muodostaa yhteyttä internetiin.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Käynnistä laitteesi uudelleen ja yritä muodostaa yhteys uudelleen. Jos tämä ei toimi, lähetä sähköpostiviesti osoitteeseen %1$s ruotsiksi tai englanniksi.</string>
     <string name="android_16_upgrade_warning_message">Android 16:ssa on tunnettu ongelma. Käynnistä laitteesi uudelleen ja yritä uudelleen. Saat lisätietoja</string>
     <string name="android_16_upgrade_warning_title">Eikö yhteyden muodostaminen onnistu?</string>
     <string name="anti_censorship">Sensuurinesto</string>
@@ -371,7 +370,6 @@
     <string name="next">Seuraava</string>
     <string name="next_with_icon">Seuraava %1$s</string>
     <string name="no_custom_lists_available">Mukautettuja luetteloita ei löytynyt</string>
-    <string name="no_email_app_available">Laitteella ei ole saatavilla sähköpostisovellusta</string>
     <string name="no_internet_connection">Ei verkkoyhteyttä</string>
     <string name="no_matching_relay">Mikään palvelin ei vastaa asetuksiasi. Kokeile vaihtaa palvelinta tai muuttaa muita asetuksia.</string>
     <string name="no_matching_relay_entry">Mikään tulopalvelin ei vastaa asetuksiasi. Kokeile vaihtaa palvelinta tai muuttaa muita asetuksia.</string>
@@ -445,7 +443,6 @@
     <string name="select_location">Valitse sijainti</string>
     <string name="send">Lähetä</string>
     <string name="send_anyway">Lähetä silti</string>
-    <string name="send_email">Lähetä sähköpostia</string>
     <string name="sending">Lähetetään...</string>
     <string name="sent">Lähetetty</string>
     <string name="sent_contact">Tarvittaessa otamme sinuun yhteyttä osoitteeseen %1$s</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Muodosta yhteys toiseen verkkoon</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Ota kaikki käyttötavat käyttöön sovelluksessa</string>
     <string name="unable_to_reach_api_dialog_message_second">Tämä voi johtua sensuurista tai verkko-ongelmista. Kokeile seuraavia:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Jos nämä vaiheet eivät toimi, lähetä sähköpostiviesti tuelle käyttämällä alla olevaa painiketta. Se liittää automaattisesti anonymisoidut lokit.</string>
     <string name="unavailable">Ei saatavilla</string>
     <string name="undo">Kumoa</string>
     <string name="unsupported_version">EI-TUETTU VERSIO</string>

@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">無法啟動通道連線。在使用 Krtek 之前，請先為 <b>%1$s</b> 停用「始終啟用 VPN」。</string>
     <string name="always_on_vpn_error_notification_title">「一律啟用 VPN」已指派給 %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">在 Android 16 更新 VPN 應用程式後，裝置可能會出現 VPN 應用程式無法連線至網際網路的情況。</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">請重新啟動您的裝置並嘗試重新連線。若不成功，請以瑞典語或英語撰寫電子郵件並寄至 %1$s。</string>
     <string name="android_16_upgrade_warning_message">Android 16 存在已知問題。請重新啟動您的裝置並再試一次。如需更多資訊，</string>
     <string name="android_16_upgrade_warning_title">無法連線嗎？</string>
     <string name="anti_censorship">反審查</string>
@@ -371,7 +370,6 @@
     <string name="next">下一步</string>
     <string name="next_with_icon">下一步 %1$s</string>
     <string name="no_custom_lists_available">有可用的自訂清單</string>
-    <string name="no_email_app_available">裝置上沒有可用的電子郵件應用程式</string>
     <string name="no_internet_connection">沒有網際網路連線</string>
     <string name="no_matching_relay">沒有與您的設定相符的伺服器，請嘗試變更伺服器或其他設定。</string>
     <string name="no_matching_relay_entry">沒有與您的設定相符的入口伺服器，請嘗試變更伺服器或其他設定。</string>
@@ -445,7 +443,6 @@
     <string name="select_location">選擇位置</string>
     <string name="send">傳送</string>
     <string name="send_anyway">仍要傳送</string>
-    <string name="send_email">傳送電子郵件</string>
     <string name="sending">傳送中…</string>
     <string name="sent">已傳送</string>
     <string name="sent_contact">如有需要，我們將透過 %1$s 與您聯絡</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">連上其他網路</string>
     <string name="unable_to_reach_api_dialog_message_list_third">啟用應用程式中所有存取方式</string>
     <string name="unable_to_reach_api_dialog_message_second">這可能是由於審查或網路問題所造成。請嘗試：</string>
-    <string name="unable_to_reach_api_dialog_message_third">若以上步驟無效，請使用下方按鈕傳送電子郵件至支援團隊。電子郵件將自動附加已匿名處理的日誌記錄。</string>
     <string name="unavailable">無法使用</string>
     <string name="undo">復原</string>
     <string name="unsupported_version">不支援的版本</string>

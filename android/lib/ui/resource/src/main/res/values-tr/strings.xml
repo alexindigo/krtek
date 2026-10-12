@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">Tünel bağlantısı başlatılamıyor. Krtek uygulamasını kullanmadan önce lütfen Her zaman açık VPN\'i <b>%1$s</b> için devre dışı bırakın.</string>
     <string name="always_on_vpn_error_notification_title">Her zaman açık VPN %1$s uygulamasına atandı</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Android 16\'da bir VPN uygulaması güncellendikten sonra, cihazlar VPN uygulamalarının artık internete erişemediği bir duruma geçebilir.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Lütfen cihazınızı yeniden başlatın ve tekrar bağlanmayı deneyin. Bu işe yaramazsa lütfen %1$s adresine İsveççe veya İngilizce bir e-posta yazın.</string>
     <string name="android_16_upgrade_warning_message">Android 16\'da bilinen bir sorun mevcut. Lütfen cihazınızı yeniden başlatıp tekrar deneyin. Daha fazla bilgi için</string>
     <string name="android_16_upgrade_warning_title">Bağlanamıyor musunuz?</string>
     <string name="anti_censorship">Sansürü önleme</string>
@@ -371,7 +370,6 @@
     <string name="next">Sonraki</string>
     <string name="next_with_icon">İleri %1$s</string>
     <string name="no_custom_lists_available">Özel listeler mevcut değil</string>
-    <string name="no_email_app_available">Cihazda e-posta uygulaması yok</string>
     <string name="no_internet_connection">İnternet bağlantısı yok</string>
     <string name="no_matching_relay">Ayarlarınızla eşleşen sunucu yok. Sunucuyu veya diğer ayarları değiştirmeyi deneyin.</string>
     <string name="no_matching_relay_entry">Ayarlarınızla eşleşen giriş sunucusu yok. Sunucuyu veya diğer ayarları değiştirmeyi deneyin.</string>
@@ -445,7 +443,6 @@
     <string name="select_location">Konum seçin</string>
     <string name="send">Gönder</string>
     <string name="send_anyway">Yine de gönder</string>
-    <string name="send_email">E-posta gönder</string>
     <string name="sending">Gönderiliyor...</string>
     <string name="sent">Gönderildi</string>
     <string name="sent_contact">Gerektiğinde sizinle %1$s adresinden iletişime geçeceğiz</string>
@@ -527,7 +524,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Farklı bir ağa bağlan</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Uygulamadaki tüm erişim yöntemlerini etkinleştir</string>
     <string name="unable_to_reach_api_dialog_message_second">Bu, sansür veya ağ sorunlarından kaynaklanıyor olabilir. Lütfen şunları deneyin:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Bu adımlar işe yaramazsa, lütfen aşağıdaki düğmeyi kullanarak destek ekibine bir e-posta gönderin. Anonimleştirilmiş kayıtlar otomatik olarak eklenerek gönderilir.</string>
     <string name="unavailable">Mevcut değil</string>
     <string name="undo">Geri al</string>
     <string name="unsupported_version">DESTEKLENMEYEN SÜRÜM</string>

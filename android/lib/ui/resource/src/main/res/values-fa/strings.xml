@@ -26,7 +26,6 @@
     <string name="always_on_vpn_error_notification_content">نمی‌توان اتصال تونل را آغاز کرد. لطفاً پیش از استفاده از Krtek، گزینهٔ «VPN همیشه‌فعال» را برای <b>%1$s</b> غیرفعال کنید.</string>
     <string name="always_on_vpn_error_notification_title">VPN همیشه‌فعال به %1$s اختصاص داده شد</string>
     <string name="android_16_upgrade_warning_dialog_first_message">پس از به‌روزرسانی یک اپلیکیشن VPN در اندروید 16، ممکن است دستگاه‌ها به حالتی برسند که اپلیکیشن‌های VPN دیگر نتوانند به اینترنت دسترسی پیدا کنند.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">لطفاً دستگاه‌تان را دوباره راه‌اندازی کنید و دوباره تلاش کنید وصل شوید. اگر مشکل برطرف نشد، لطفاً یک ایمیل به %1$s به زبان سوئدی یا انگلیسی بنویسید.</string>
     <string name="android_16_upgrade_warning_message">‏اندروید 16 یک مشکل شناخته‌شده دارد. لطفاً دستگاه‌تان را مجدد راه‌اندازی کرده و دوباره امتحان کنید. برای کسب اطلاعات بیشتر،</string>
     <string name="android_16_upgrade_warning_title">اتصال برقرار نمی‌شود؟</string>
     <string name="anti_censorship">ضد سانسور</string>
@@ -352,7 +351,6 @@
     <string name="next">بعدی</string>
     <string name="next_with_icon">بعدی %1$s</string>
     <string name="no_custom_lists_available">هیچ فهرست سفارشی موجود نیست</string>
-    <string name="no_email_app_available">هیچ اپلیکیشن ایمیلی روی دستگاه موجود نیست</string>
     <string name="no_internet_connection">اتصال به اینترنت وجود ندارد</string>
     <string name="no_matching_relay">هیچ سروری با تنظیمات شما مطابقت ندارد؛ لطفاً سرور یا سایر تنظیمات را تغییر دهید.</string>
     <string name="no_matching_relay_entry">هیچ سرور ورودی با تنظیمات شما مطابقت ندارد، لطفاً سرور یا سایر تنظیمات را تغییر دهید.</string>
@@ -426,7 +424,6 @@
     <string name="select_location">انتخاب مکان</string>
     <string name="send">ارسال</string>
     <string name="send_anyway">با این حال ارسال کنید</string>
-    <string name="send_email">ارسال ایمیل</string>
     <string name="sending">در حال ارسال...</string>
     <string name="sent">ارسال شد</string>
     <string name="sent_contact">در صورت نیاز با شما از طریق %1$s تماس خواهیم گرفت</string>
@@ -501,7 +498,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">اتصال به یک شبکهٔ دیگر</string>
     <string name="unable_to_reach_api_dialog_message_list_third">فعال کردن همهٔ روش‌های دسترسی در اپلیکیشن</string>
     <string name="unable_to_reach_api_dialog_message_second">این ممکن است به دلیل سانسور یا مشکلات شبکه باشد. لطفاً موارد زیر را امتحان کنید:</string>
-    <string name="unable_to_reach_api_dialog_message_third">اگر این مراحل کار نکرد، لطفاً با استفاده از دکمهٔ زیر به پشتیبانی ایمیل بزنید. این کار به‌طور خودکار گزارش‌ها را که ناشناس‌ شده‌اند، پیوست خواهد کرد.</string>
     <string name="unavailable">ناموجود</string>
     <string name="undo">لغو انجام</string>
     <string name="unsupported_version">نسخهٔ پشتیبانی‌نشده</string>

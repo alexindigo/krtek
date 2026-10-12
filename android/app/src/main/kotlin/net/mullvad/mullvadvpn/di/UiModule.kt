@@ -112,7 +112,7 @@ import net.mullvad.mullvadvpn.lib.usecase.SelectAndEnableMultihopUseCase
 import net.mullvad.mullvadvpn.lib.usecase.SelectSinglehopUseCase
 import net.mullvad.mullvadvpn.lib.usecase.SelectedLocationTitleUseCase
 import net.mullvad.mullvadvpn.lib.usecase.SelectedLocationUseCase
-import net.mullvad.mullvadvpn.lib.usecase.SupportEmailUseCase
+import net.mullvad.mullvadvpn.lib.usecase.SupportIssueUseCase
 import net.mullvad.mullvadvpn.lib.usecase.SystemVpnSettingsAvailableUseCase
 import net.mullvad.mullvadvpn.lib.usecase.customlists.CustomListActionUseCase
 import net.mullvad.mullvadvpn.lib.usecase.customlists.CustomListRelayItemsUseCase
@@ -250,10 +250,15 @@ val uiModule = module {
         )
     }
     single {
-        SupportEmailUseCase(
-            context = androidContext(),
-            problemReportRepository = get(),
+        SupportIssueUseCase(
+            issuesUrl =
+                androidContext()
+                    .getString(net.mullvad.mullvadvpn.lib.ui.resource.R.string.github_issues_url),
             buildVersion = get(),
+            androidRelease = Build.VERSION.RELEASE,
+            androidSdk = Build.VERSION.SDK_INT,
+            manufacturer = Build.MANUFACTURER,
+            model = Build.MODEL,
         )
     }
     single {
@@ -505,7 +510,7 @@ val uiModule = module {
         ApiUnreachableViewModel(
             navArgs = params.get(),
             apiAccessRepository = get(),
-            supportEmailUseCase = get(),
+            supportIssueUseCase = get(),
         )
     }
     viewModel { (locationBottomSheetState: LocationBottomSheetState) ->
