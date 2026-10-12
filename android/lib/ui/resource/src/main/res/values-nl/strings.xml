@@ -24,7 +24,7 @@
     <string name="all_locations">Alle locaties</string>
     <string name="all_providers">Alle aanbieders</string>
     <string name="always">Altijd</string>
-    <string name="always_on_vpn_error_notification_content">Kan de tunnelverbinding niet starten. Schakel Altijd-aan VPN uit voor <b>%1$s</b> voordat u Mullvad VPN gebruikt.</string>
+    <string name="always_on_vpn_error_notification_content">Kan de tunnelverbinding niet starten. Schakel Altijd-aan VPN uit voor <b>%1$s</b> voordat u Krtek gebruikt.</string>
     <string name="always_on_vpn_error_notification_title">Altijd-aan VPN toegewezen aan %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Na het bijwerken van een VPN-app in Android 16 kan het apparaat in een toestand raken waarin de VPN-apps het internet niet meer kunnen bereiken.</string>
     <string name="android_16_upgrade_warning_dialog_second_message">Start uw apparaat opnieuw op en probeer het opnieuw. Als dat niet werkt, kun u een e-mail schrijven naar %1$s (in het Zweeds of in het Engels).</string>
@@ -50,7 +50,7 @@
     <string name="app_name_notes">Opmerkingen</string>
     <string name="app_name_weather">Weer</string>
     <string name="appearance">Uiterlijk</string>
-    <string name="appearance_description">Wijzig de titel en het pictogram van de Mullvad VPN-app op uw Android-apparaat. Dit wijzigt het pictogram voor Mullvad VPN-gerelateerde meldingen niet.</string>
+    <string name="appearance_description">Wijzig de titel en het pictogram van de Krtek-app op uw Android-apparaat. Dit wijzigt het pictogram voor Krtek-gerelateerde meldingen niet.</string>
     <string name="appearance_description_warning"><b>Let op:</b> de app wordt automatisch gesloten en moet handmatig opnieuw worden geopend na het selecteren van een nieuw pictogram en een nieuwe titel. Dit heeft geen invloed op uw VPN-verbinding.</string>
     <string name="appearance_description_warning_restart">Als het pictogram en de titel nog steeds niet zijn veranderd nadat de app is gesloten, probeer dan het apparaat opnieuw op te starten.</string>
     <string name="apply">Toevoegen</string>
@@ -60,7 +60,7 @@
     <string name="authentication">Authenticatie</string>
     <string name="auto_connect_and_lockdown_mode">Automatisch verbinden en lockdownmodus</string>
     <string name="auto_connect_and_lockdown_mode_footer">Zorg dat het apparaat altijd de VPN-tunnel gebruikt.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. Klik, nadat u op de knop \"Naar VPN-instellingen\" hebt geklikt, op het tandwiel naast de naam \"Mullvad VPN\".</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. Klik, nadat u op de knop \"Naar VPN-instellingen\" hebt geklikt, op het tandwiel naast de naam \"Krtek\".</string>
     <string name="auto_connect_carousel_first_slide_top_text">De instellingen Automatisch verbinden en Lockdownmodus zijn te vinden in de Android-systeeminstellingen, volg deze gids om een of beide in te schakelen.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. Klik om Automatisch verbinden in te schakelen op de schakelaar naast \"Altijd-aan VPN\".</string>
     <string name="auto_connect_carousel_second_slide_top_text">Automatisch verbinden heet Altijd-aan VPN in de Android-systeeminstellingen en zorgt ervoor dat u altijd verbonden bent met de VPN-tunnel en automatisch verbinding maakt na een herstart.</string>
@@ -107,7 +107,7 @@
     <string name="connect_panel_connection_details">Verbindingsgegevens</string>
     <string name="connected">Verbonden</string>
     <string name="connecting">Verbinden ...</string>
-    <string name="connecting_to_daemon">Verbinden met Mullvad-systeemdienst...</string>
+    <string name="connecting_to_daemon">Verbinden met Krtek-systeemdienst...</string>
     <string name="connection_details_in">In</string>
     <string name="connection_details_out">Uit</string>
     <string name="cont">Doorgaan</string>
@@ -294,7 +294,7 @@
     <string name="ipv6_unavailable">Kon IPv6 niet configureren. Schakel het uit in de app of schakel het in op uw apparaat.</string>
     <string name="is_offline">Uw apparaat is offline. De tunnel wordt automatisch verbonden wanneer uw apparaat weer online is.</string>
     <string name="language">Taal</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Kan de tunnelverbinding niet starten. Schakel Altijd-aan VPN uit voordat u Mullvad VPN gebruikt.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Kan de tunnelverbinding niet starten. Schakel Altijd-aan VPN uit voordat u Krtek gebruikt.</string>
     <string name="legacy_always_on_vpn_error_notification_title">Altijd-aan VPN toegewezen aan andere VPN</string>
     <string name="less_than_a_day_left">Minder dan een dag resterend op dit account</string>
     <string name="less_than_one_day">minder dan één dag</string>

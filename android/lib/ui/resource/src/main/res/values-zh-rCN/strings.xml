@@ -24,7 +24,7 @@
     <string name="all_locations">所有位置</string>
     <string name="all_providers">所有提供商</string>
     <string name="always">始终</string>
-    <string name="always_on_vpn_error_notification_content">无法启动隧道连接。在使用 Mullvad VPN 之前，请为 <b>%1$s</b> 停用“始终开启 VPN”。</string>
+    <string name="always_on_vpn_error_notification_content">无法启动隧道连接。在使用 Krtek 之前，请为 <b>%1$s</b> 停用“始终开启 VPN”。</string>
     <string name="always_on_vpn_error_notification_title">“始终开启 VPN”已分配给 %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">在 Android 16 上更新 VPN 应用后，设备可能会出现 VPN 应用无法连接互联网的情况。</string>
     <string name="android_16_upgrade_warning_dialog_second_message">请重新启动您的设备，然后再次尝试连接。如果仍然无法连接，请用瑞典语或英语发送电子邮件至 %1$s。</string>
@@ -50,7 +50,7 @@
     <string name="app_name_notes">备注</string>
     <string name="app_name_weather">天气</string>
     <string name="appearance">外观</string>
-    <string name="appearance_description">更改 Android 设备上 Mullvad VPN 应用的标题和图标。这不会更改任何 Mullvad VPN 相关通知的图标。</string>
+    <string name="appearance_description">更改 Android 设备上 Krtek 应用的标题和图标。这不会更改任何 Krtek 相关通知的图标。</string>
     <string name="appearance_description_warning"><b>注意</b>：应用将自动关闭，在选择新的图标和标题后，需要手动再次打开。这不会影响您的 VPN 连接。</string>
     <string name="appearance_description_warning_restart">如果 App 关闭后图标和标题仍未更改，请尝试重新启动设备。</string>
     <string name="apply">应用</string>
@@ -60,7 +60,7 @@
     <string name="authentication">身份验证</string>
     <string name="auto_connect_and_lockdown_mode">自动连接和锁定模式</string>
     <string name="auto_connect_and_lockdown_mode_footer">确保设备始终位于 VPN 隧道上。</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. 点击下方的“前往 VPN 设置”按钮后，点击“Mullvad VPN”名称旁边的齿轮。</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. 点击下方的“前往 VPN 设置”按钮后，点击“Krtek”名称旁边的齿轮。</string>
     <string name="auto_connect_carousel_first_slide_top_text">自动连接和锁定模式设置可以在 Android 系统设置中找到，请按照本指南启用其中一项或两项。</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. 要启用自动连接，请点击“始终开启 VPN”旁边的开关。</string>
     <string name="auto_connect_carousel_second_slide_top_text">自动连接在 Android 系统设置中称为“始终开启 VPN”，此功能可确保您始终连接到 VPN 隧道并在重新启动后自动连接。</string>
@@ -107,7 +107,7 @@
     <string name="connect_panel_connection_details">连接详细信息</string>
     <string name="connected">已连接</string>
     <string name="connecting">正在连接…</string>
-    <string name="connecting_to_daemon">正在连接到 Mullvad 系统服务…</string>
+    <string name="connecting_to_daemon">正在连接到 Krtek 系统服务…</string>
     <string name="connection_details_in">内部</string>
     <string name="connection_details_out">外部</string>
     <string name="cont">继续</string>
@@ -294,7 +294,7 @@
     <string name="ipv6_unavailable">无法配置 IPv6。请在应用中将其停用或在您的设备上将其启用。</string>
     <string name="is_offline">您的设备已离线。在您的设备重新上线后，隧道将自动连接。</string>
     <string name="language">语言</string>
-    <string name="legacy_always_on_vpn_error_notification_content">无法启动隧道连接。在使用 Mullvad VPN 之前，请停用“始终开启 VPN”。</string>
+    <string name="legacy_always_on_vpn_error_notification_content">无法启动隧道连接。在使用 Krtek 之前，请停用“始终开启 VPN”。</string>
     <string name="legacy_always_on_vpn_error_notification_title">“始终开启 VPN”已分配给其他 VPN</string>
     <string name="less_than_a_day_left">此帐户还剩不到 1 天</string>
     <string name="less_than_one_day">不足 1 天</string>

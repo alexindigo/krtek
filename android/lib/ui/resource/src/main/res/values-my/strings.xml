@@ -24,7 +24,7 @@
     <string name="all_locations">တည်နေရာအာလုံး</string>
     <string name="all_providers">ပံ့ပိုးသူအားလုံး</string>
     <string name="always">အမြဲတမ်း</string>
-    <string name="always_on_vpn_error_notification_content">Tunnel ချိတ်ဆက်မှုကို စတင်၍ မရနိုင်ပါ။ Mullvad VPN ကို မသုံးမီ <b>%1$s</b> အတွက် VPN အမြဲဖွင့်ထားမှုကို ပိတ်ပေးပါ။</string>
+    <string name="always_on_vpn_error_notification_content">Tunnel ချိတ်ဆက်မှုကို စတင်၍ မရနိုင်ပါ။ Krtek ကို မသုံးမီ <b>%1$s</b> အတွက် VPN အမြဲဖွင့်ထားမှုကို ပိတ်ပေးပါ။</string>
     <string name="always_on_vpn_error_notification_title">အမြဲဖွင့် VPN ကို %1$s သို့ သတ်မှတ်ထားပါသည်</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Android 16 တွင် VPN အက်ပ်ကို အပ်ဒိတ်လုပ်ပြီးနောက် စက်များတွင် VPN အက်ပ်များက အင်တာနက်ချိတ်မပေးနိုင်တော့သည့် အခြေအနေမျိုး ကြုံရတတ်သည်။</string>
     <string name="android_16_upgrade_warning_dialog_second_message">စက်ကို ရီစတက်ချပြီး ထပ်မံချိတ်ဆက်ကြည့်ပါ။ ချိတ်၍မရသေးလျှင် %1$s သို့ ဆွီဒင် သို့မဟုတ် အင်္ဂလိပ်ဘာသာစကားဖြင့် အီးမေးလ်ပို့ပါ။</string>
@@ -50,7 +50,7 @@
     <string name="app_name_notes">Notes</string>
     <string name="app_name_weather">Weather</string>
     <string name="appearance">ပုံသဏ္ဌာန်</string>
-    <string name="appearance_description">Android စက်ရှိ Mullvad VPN အက်ပ်၏ ခေါင်းစဉ်နှင့် အိုင်ကွန်ကို ပြောင်းပါ။ ဤသို့ ပြောင်းခြင်းသည် Mullvad VPN ဆက်စပ်သော အသိပေးချက်မှန်သမျှအတွက် အိုင်ကွန်ကို မပြောင်းစေပါ။</string>
+    <string name="appearance_description">Android စက်ရှိ Krtek အက်ပ်၏ ခေါင်းစဉ်နှင့် အိုင်ကွန်ကို ပြောင်းပါ။ ဤသို့ ပြောင်းခြင်းသည် Krtek ဆက်စပ်သော အသိပေးချက်မှန်သမျှအတွက် အိုင်ကွန်ကို မပြောင်းစေပါ။</string>
     <string name="appearance_description_warning"><b>သတိပြုရန်-</b> အိုင်ကွန်နှင့် ခေါင်းစဉ်အသစ်ကို ရွေးပြီးသည်နှင့် အက်ပ်က အော်တို ပိတ်သွားမည်ဖြစ်ပြီး ကိုယ်တိုင် ပြန်ဖွင့်ရန် လိုအပ်ပါသည်။ ဤလုပ်ဆောင်မှုသည် VPN ချိတ်ဆက်မှုကို မထိခိုက်ပါ။</string>
     <string name="appearance_description_warning_restart">အက်ပ်ပိတ်ပြီးနောက် အိုင်ကွန်နှင့် ခေါင်းစဉ်သည် မပြောင်းလဲသေးပါက စက်ကို ပြန်လည်စတင်ကြည့်ပါ။</string>
     <string name="apply">သုံးရန်</string>
@@ -60,7 +60,7 @@
     <string name="authentication">စစ်မှန်ကြောင်း အတည်ပြုခြင်း</string>
     <string name="auto_connect_and_lockdown_mode">အော်တို ချိတ်ဆက်မှု နှင့် လော့ခ်ဒေါင်းစနစ်</string>
     <string name="auto_connect_and_lockdown_mode_footer">စက်သည် VPN Tunnel ကို အမြဲဖွင့်ထားကြောင်း သေချာပါစေ။</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. အောက်ရှိ \"VPN ဆက်တင်များသို့ သွားရန်\" ခလုတ်ကိုနှိပ်ပြီးနောက် \"Mullvad VPN\" အမည်ဘေးရှိ ခွေးသွားစိတ်ပုံကို နှိပ်ပါ။</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. အောက်ရှိ \"VPN ဆက်တင်များသို့ သွားရန်\" ခလုတ်ကိုနှိပ်ပြီးနောက် \"Krtek\" အမည်ဘေးရှိ ခွေးသွားစိတ်ပုံကို နှိပ်ပါ။</string>
     <string name="auto_connect_carousel_first_slide_top_text">အော်တို ချိတ်ဆက်မှုနှင့် လော့ခ်ဒေါင်းစနစ် ဆက်တင်များကို Android စနစ် ဆက်တင်များတွင် ရှာတွေ့နိုင်ပြီး တစ်ခု သို့မဟုတ် နှစ်ခုလုံးကို ဖွင့်ရန် ဤလမ်းညွှန်ချက်ကို လိုက်နာပါ။</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. အော်တို ချိတ်ဆက်မှုကို ဖွင့်ရန် \"အမြဲဖွင့် VPN\" ဘေးရှိ ဖွင့်/ပိတ် ခလုတ်ကို နှိပ်ပါ။</string>
     <string name="auto_connect_carousel_second_slide_top_text">Android စနစ် ဆက်တင်တွင် အော်တိုချိတ်ဆက်မှုကို အမြဲဖွင့် VPN ဟုခေါ်ပြီး VPN Tunnel ကို အမြဲချိတ်ဆက်ထားကြောင်း သေချာစေပြီး အစမှ ပြန်ဖွင့်ပြီးနောက် အော်တို ချိတ်ဆက်ပါသည်။</string>
@@ -107,7 +107,7 @@
     <string name="connect_panel_connection_details">ချိတ်ဆက်မှု အသေးစိတ်အချက်များ</string>
     <string name="connected">ချိတ်ဆက်ပြီး</string>
     <string name="connecting">ချိတ်ဆက်နေဆဲ...</string>
-    <string name="connecting_to_daemon">Mullvad စနစ် ဝန်ဆောင်မှုနှင့် ချိတ်ဆက်နေဆဲ...</string>
+    <string name="connecting_to_daemon">Krtek စနစ် ဝန်ဆောင်မှုနှင့် ချိတ်ဆက်နေဆဲ...</string>
     <string name="connection_details_in">အဝင်</string>
     <string name="connection_details_out">အထွက်</string>
     <string name="cont">ဆက်လုပ်မည်</string>
@@ -294,7 +294,7 @@
     <string name="ipv6_unavailable">IPv6 ကို သတ်မှတ်ချိန်ညှိ၍ မရနိုင်ပါ။ အက်ပ်တွင် ၎င်းကို ပိတ်ပါ သို့မဟုတ် သင့်စက်တွင် ၎င်းကို ဖွင့်ပါ။</string>
     <string name="is_offline">သင့်စက်သည် အော့ဖ်လိုင်း ဖြစ်နေပါသည်။ သင့်စက် အွန်လိုင်း ပြန်ဖြစ်သည်နှင့် Tunnel သည် အော်တို ချိတ်ဆက်သွားပါမည်။</string>
     <string name="language">ဘာသာစကား</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Tunnel ချိတ်ဆက်မှုကို စတင်၍ မရနိုင်ပါ။ Mullvad VPN ကို မသုံးမီ အတွက် VPN အမြဲဖွင့်ထားမှုကို ပိတ်ပေးပါ။</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Tunnel ချိတ်ဆက်မှုကို စတင်၍ မရနိုင်ပါ။ Krtek ကို မသုံးမီ အတွက် VPN အမြဲဖွင့်ထားမှုကို ပိတ်ပေးပါ။</string>
     <string name="legacy_always_on_vpn_error_notification_title">အမြဲဖွင့် VPN ကို အခြား VPN တစ်ခုသို့ သတ်မှတ်ထားပါသည်</string>
     <string name="less_than_a_day_left">ဤအကောင့်တွင် ကျန်ချိန် တစ်ရက်မပြည့်တော့ပါ</string>
     <string name="less_than_one_day">တစ်ရက်အောက် နည်းသည်။</string>

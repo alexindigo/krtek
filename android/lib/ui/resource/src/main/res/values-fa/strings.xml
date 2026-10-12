@@ -23,7 +23,7 @@
     <string name="all_applications">تمام اپلیکیشن‌ها</string>
     <string name="all_locations">تمام مکان‌ها</string>
     <string name="all_providers">تمام ارائه‌دهندگان</string>
-    <string name="always_on_vpn_error_notification_content">نمی‌توان اتصال تونل را آغاز کرد. لطفاً پیش از استفاده از Mullvad VPN، گزینهٔ «VPN همیشه‌فعال» را برای <b>%1$s</b> غیرفعال کنید.</string>
+    <string name="always_on_vpn_error_notification_content">نمی‌توان اتصال تونل را آغاز کرد. لطفاً پیش از استفاده از Krtek، گزینهٔ «VPN همیشه‌فعال» را برای <b>%1$s</b> غیرفعال کنید.</string>
     <string name="always_on_vpn_error_notification_title">VPN همیشه‌فعال به %1$s اختصاص داده شد</string>
     <string name="android_16_upgrade_warning_dialog_first_message">پس از به‌روزرسانی یک اپلیکیشن VPN در اندروید 16، ممکن است دستگاه‌ها به حالتی برسند که اپلیکیشن‌های VPN دیگر نتوانند به اینترنت دسترسی پیدا کنند.</string>
     <string name="android_16_upgrade_warning_dialog_second_message">لطفاً دستگاه‌تان را دوباره راه‌اندازی کنید و دوباره تلاش کنید وصل شوید. اگر مشکل برطرف نشد، لطفاً یک ایمیل به %1$s به زبان سوئدی یا انگلیسی بنویسید.</string>
@@ -49,7 +49,7 @@
     <string name="app_name_notes">یادداشت‌ها</string>
     <string name="app_name_weather">آب و هوا</string>
     <string name="appearance">ظاهر</string>
-    <string name="appearance_description">عنوان و آیکون اپلیکیشن Mullvad VPN را روی دستگاه اندرویدی خود تغییر دهید. این کار، آیکون هیچ‌یک از اعلان‌های مرتبط با Mullvad VPN را تغییر نخواهد داد.</string>
+    <string name="appearance_description">عنوان و آیکون اپلیکیشن Krtek را روی دستگاه اندرویدی خود تغییر دهید. این کار، آیکون هیچ‌یک از اعلان‌های مرتبط با Krtek را تغییر نخواهد داد.</string>
     <string name="appearance_description_warning"><b>توجه:</b> اپلیکیشن به‌صورت خودکار بسته می‌شود و پس از انتخاب آیکون و عنوان جدید، باید دوباره به‌صورت دستی باز شود. این موضوع بر اتصال VPN شما تأثیری نخواهد داشت.</string>
     <string name="appearance_description_warning_restart">اگر پس از بستن برنامه، نماد و عنوان همچنان تغییر نکرده‌اند، لطفاً دستگاه خود را مجدد راه‌اندازی کنید.</string>
     <string name="apply">اعمال</string>
@@ -59,7 +59,7 @@
     <string name="authentication">احراز هویت</string>
     <string name="auto_connect_and_lockdown_mode">اتصال خودکار و حالت قفل</string>
     <string name="auto_connect_and_lockdown_mode_footer">اطمینان می‌دهد که دستگاه همیشه به تونل VPN متصل باشد.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. پس از کلیک روی دکمهٔ «رفتن به تنظیمات VPN» در پایین، روی آیکون چرخ‌دندهٔ کنار نام «Mullvad VPN» کلیک کنید.</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. پس از کلیک روی دکمهٔ «رفتن به تنظیمات VPN» در پایین، روی آیکون چرخ‌دندهٔ کنار نام «Krtek» کلیک کنید.</string>
     <string name="auto_connect_carousel_first_slide_top_text">تنظیمات اتصال خودکار و حالت قفل در تنظیمات سیستمی اندروید قرار دارند. برای فعال‌کردن یکی یا هر دو، این راهنما را دنبال کنید.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. برای فعال کردن «اتصال خودکار»، روی دکمهٔ تغییر وضعیت کنار «VPN همیشه‌فعال» کلیک کنید.</string>
     <string name="auto_connect_carousel_second_slide_top_text">در تنظیمات سیستم اندروید، «اتصال خودکار» با نام «VPN همیشه‌فعال» شناخته می‌شود و باعث می‌شود دستگاه شما همیشه به تونل VPN وصل بماند و پس از راه‌اندازی مجدد نیز به‌طور خودکار دوباره متصل شود.</string>
@@ -105,7 +105,7 @@
     <string name="connect_panel_connection_details">جزئیات اتصال</string>
     <string name="connected">متصل شد</string>
     <string name="connecting">در حال اتصال...</string>
-    <string name="connecting_to_daemon">در حال اتصال به سرویس سیستم Mullvad...</string>
+    <string name="connecting_to_daemon">در حال اتصال به سرویس سیستم Krtek...</string>
     <string name="connection_details_in">ورودی</string>
     <string name="connection_details_out">خروجی</string>
     <string name="cont">ادامه</string>
@@ -284,7 +284,7 @@
     <string name="ipv6_unavailable">پیکربندی IPv6 ممکن نشد. آن را در اپلیکیشن غیرفعال کنید یا در دستگاه خود فعال نمایید.</string>
     <string name="is_offline">دستگاه شما آفلاین است. تونل به‌طور خودکار زمانی که دستگاه آنلاین شود، متصل خواهد شد.</string>
     <string name="language">زبان</string>
-    <string name="legacy_always_on_vpn_error_notification_content">نمی‌توان اتصال تونل را آغاز کرد. لطفاً قبل از استفاده از Mullvad VPN، گزینهٔ «VPN همیشه‌فعال» را غیرفعال کنید.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">نمی‌توان اتصال تونل را آغاز کرد. لطفاً قبل از استفاده از Krtek، گزینهٔ «VPN همیشه‌فعال» را غیرفعال کنید.</string>
     <string name="legacy_always_on_vpn_error_notification_title">VPN همیشه‌فعال به یک VPN دیگر اختصاص داده شده است</string>
     <string name="less_than_a_day_left">کمتر از یک روز از اعتبار این حساب باقی مانده است</string>
     <string name="less_than_one_day">کمتر از یک روز</string>

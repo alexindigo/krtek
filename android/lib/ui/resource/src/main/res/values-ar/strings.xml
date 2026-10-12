@@ -23,7 +23,7 @@
     <string name="all_applications">جميع التطبيقات</string>
     <string name="all_locations">جميع المواقع</string>
     <string name="all_providers">جميع موفري الخدمة</string>
-    <string name="always_on_vpn_error_notification_content">يتعذَّر بدء اتصال النفق. يُرجى إيقاف \"تشغيل VPN دائمًا\" لـ <b>%1$s</b> قبل استخدام Mullvad VPN.</string>
+    <string name="always_on_vpn_error_notification_content">يتعذَّر بدء اتصال النفق. يُرجى إيقاف \"تشغيل VPN دائمًا\" لـ <b>%1$s</b> قبل استخدام Krtek.</string>
     <string name="always_on_vpn_error_notification_title">تم تعيين \"تشغيل VPN دائمًا\" إلى %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">بعد تحديث تطبيق VPN على نظام التشغيل Android 16، قد تصل الأجهزة إلى حالة تفقد فيها تطبيقات VPN قدرتها على الوصول إلى الإنترنت.</string>
     <string name="android_16_upgrade_warning_dialog_second_message">يُرجى إعادة تشغيل جهازك ومحاولة الاتصال مرة أخرى. إذا لم ينجح ذلك، يُرجى إرسال رسالة بريد إلكتروني إلى %1$s باللغة السويدية أو الإنجليزية.</string>
@@ -49,7 +49,7 @@
     <string name="app_name_notes">ملاحظات</string>
     <string name="app_name_weather">الطقس</string>
     <string name="appearance">المظهر</string>
-    <string name="appearance_description">تغيير عنوان ورمز تطبيق VPN على جهاز Android لديك. لن يؤدي ذلك إلى تغيير الرمز لأي إشعارات متعلقة بـ Mullvad VPN.</string>
+    <string name="appearance_description">تغيير عنوان ورمز تطبيق VPN على جهاز Android لديك. لن يؤدي ذلك إلى تغيير الرمز لأي إشعارات متعلقة بـ Krtek.</string>
     <string name="appearance_description_warning"><b>تنبيه:</b> سيتم إيقاف التطبيق تلقائيًا ويلزم فتحه يدويًا مرة أخرى بعد اختيار أيقونة وعنوان جديدين. لن يؤثر ذلك على اتصال VPN لديك.</string>
     <string name="appearance_description_warning_restart">إذا لم تتغير الأيقونة والعنوان بعد إغلاق التطبيق، فالرجاء محاولة إعادة تشغيل الجهاز.</string>
     <string name="apply">تطبيق</string>
@@ -59,7 +59,7 @@
     <string name="authentication">المصادقة</string>
     <string name="auto_connect_and_lockdown_mode">الاتصال التلقائي ووضع التأمين</string>
     <string name="auto_connect_and_lockdown_mode_footer">يضمن هذا الخيار بقاء الجهاز متصلًا دائمًا بنفق VPN.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. بعد النقر على الزر \"الانتقال إلى إعدادات VPN\" أدناه، انقر على الترس الموجود بجوار اسم \"Mullvad VPN\".</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. بعد النقر على الزر \"الانتقال إلى إعدادات VPN\" أدناه، انقر على الترس الموجود بجوار اسم \"Krtek\".</string>
     <string name="auto_connect_carousel_first_slide_top_text">يمكن العثور على إعدادات \"الاتصال التلقائي\" و\"وضع التأمين\" في إعدادات نظام Android. اتَّبع هذا الدليل لتفعيل أحدهما أو كليهما.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. لتفعيل الاتصال التلقائي، انقر على زر التبديل بجوار \"تشغيل VPN دائمًا\".</string>
     <string name="auto_connect_carousel_second_slide_top_text">يُطلق على الاتصال التلقائي اسم \"تشغيل VPN دائمًا\" في إعدادات نظام Android، ويتأكد من اتصالك الدائم بنفق VPN ويتصل تلقائيًا بعد إعادة التشغيل.</string>
@@ -105,7 +105,7 @@
     <string name="connect_panel_connection_details">تفاصيل الاتصال</string>
     <string name="connected">متصل</string>
     <string name="connecting">جارٍ الاتصال...</string>
-    <string name="connecting_to_daemon">جارٍ الاتصال بخدمة نظام Mullvad...</string>
+    <string name="connecting_to_daemon">جارٍ الاتصال بخدمة نظام Krtek...</string>
     <string name="connection_details_in">داخل</string>
     <string name="connection_details_out">خارج</string>
     <string name="cont">استمرار</string>
@@ -284,7 +284,7 @@
     <string name="ipv6_unavailable">تعذَّرت تهيئة بروتوكول IPv6. أوقفه في التطبيق أو فعِّله على جهازك.</string>
     <string name="is_offline">جهازك غير متصل بالإنترنت. سيتصل النفق تلقائيًا بمجرد اتصال جهازك مرة أخرى بالإنترنت.</string>
     <string name="language">اللغة</string>
-    <string name="legacy_always_on_vpn_error_notification_content">يتعذَّر بدء اتصال النفق. يُرجى إيقاف \"تشغيل VPN دائمًا\" قبل استخدام Mullvad VPN.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">يتعذَّر بدء اتصال النفق. يُرجى إيقاف \"تشغيل VPN دائمًا\" قبل استخدام Krtek.</string>
     <string name="legacy_always_on_vpn_error_notification_title">تم تعيين \"تشغيل VPN دائمًا\" إلى شبكة VPN أخرى</string>
     <string name="less_than_a_day_left">يتبقى أقل من يوم لهذا الحساب</string>
     <string name="less_than_one_day">أقل من يوم</string>

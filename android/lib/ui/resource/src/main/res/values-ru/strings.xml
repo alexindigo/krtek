@@ -24,7 +24,7 @@
     <string name="all_locations">Все местоположения</string>
     <string name="all_providers">Все провайдеры</string>
     <string name="always">Всегда</string>
-    <string name="always_on_vpn_error_notification_content">Не удалось запустить туннельное подключение. Перед использованием Mullvad VPN отключите опцию «Постоянная VPN» для приложения <b>%1$s</b>.</string>
+    <string name="always_on_vpn_error_notification_content">Не удалось запустить туннельное подключение. Перед использованием приложения Krtek отключите опцию «Постоянная VPN» для приложения <b>%1$s</b>.</string>
     <string name="always_on_vpn_error_notification_title">Опция «Постоянная VPN» назначена приложению «%1$s»</string>
     <string name="android_16_upgrade_warning_dialog_first_message">После обновления VPN-приложения на Android 16 VPN-приложения иногда теряют доступ к Интернету.</string>
     <string name="android_16_upgrade_warning_dialog_second_message">Перезагрузите устройство и снова попробуйте подключиться. Если это не поможет, отправьте письмо на %1$s на английском или шведском.</string>
@@ -50,7 +50,7 @@
     <string name="app_name_notes">Заметки</string>
     <string name="app_name_weather">Погода</string>
     <string name="appearance">Внешний вид</string>
-    <string name="appearance_description">Измените название и значок приложения Mullvad VPN на устройстве Android. Это не повлияет на значок уведомлений, связанных с Mullvad VPN.</string>
+    <string name="appearance_description">Измените название и значок приложения Krtek на устройстве Android. Это не повлияет на значок уведомлений, связанных с приложением Krtek.</string>
     <string name="appearance_description_warning"><b>Внимание:</b> после выбора нового значка и названия приложение автоматически закроется и его потребуется открыть вручную. Это не повлияет на ваше VPN-соединение.</string>
     <string name="appearance_description_warning_restart">Если после закрытия приложения значок и название не изменились, попробуйте перезагрузить устройство.</string>
     <string name="apply">Применить</string>
@@ -60,7 +60,7 @@
     <string name="authentication">Аутентификация</string>
     <string name="auto_connect_and_lockdown_mode">Автоподключение и режим блокировки</string>
     <string name="auto_connect_and_lockdown_mode_footer">Обеспечивает постоянное подключение устройства к туннелю VPN.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. После нажатия кнопки «Перейти к настройкам VPN» ниже нажмите на шестеренку рядом с пунктом Mullvad VPN.</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. После нажатия кнопки «Перейти к настройкам VPN» ниже нажмите на шестеренку рядом с пунктом Krtek.</string>
     <string name="auto_connect_carousel_first_slide_top_text">Настройки автоподключения и режима блокировки можно найти в системных настройках Android. Чтобы включить их, следуйте этой инструкции.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. Чтобы включить автоподключение, нажмите на переключатель возле пункта «Постоянная VPN».</string>
     <string name="auto_connect_carousel_second_slide_top_text">В системных настройках Android автоподключение называется «Постоянная VPN». Эта опция обеспечивает постоянное подключение к туннелю VPN и автоподключение после перезапуска.</string>
@@ -107,7 +107,7 @@
     <string name="connect_panel_connection_details">Сведения о подключении</string>
     <string name="connected">Подключено</string>
     <string name="connecting">Идет подключение...</string>
-    <string name="connecting_to_daemon">Подключение к системному сервису Mullvad...</string>
+    <string name="connecting_to_daemon">Подключение к системному сервису приложения Krtek...</string>
     <string name="connection_details_in">Вход</string>
     <string name="connection_details_out">Выход</string>
     <string name="cont">Продолжить</string>
@@ -294,7 +294,7 @@
     <string name="ipv6_unavailable">Не удается сконфигурировать IPv6. Отключите этот протокол в приложении или включите на устройстве.</string>
     <string name="is_offline">Устройство отключено от Интернета. Туннельное подключение автоматически запустится, как только ваше устройство подключится к Интернету.</string>
     <string name="language">Язык</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Не удалось запустить туннельное соединение. Перед использованием Mullvad VPN отключите опцию «Постоянная VPN».</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Не удалось запустить туннельное соединение. Перед использованием приложения Krtek отключите опцию «Постоянная VPN».</string>
     <string name="legacy_always_on_vpn_error_notification_title">Опция «Постоянная VPN» назначена другой VPN</string>
     <string name="less_than_a_day_left">На этой учетной записи осталось менее одного дня</string>
     <string name="less_than_one_day">менее суток</string>

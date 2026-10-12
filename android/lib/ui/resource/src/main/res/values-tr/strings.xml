@@ -24,7 +24,7 @@
     <string name="all_locations">Tüm konumlar</string>
     <string name="all_providers">Tüm hizmet sağlayıcılar</string>
     <string name="always">Her zaman</string>
-    <string name="always_on_vpn_error_notification_content">Tünel bağlantısı başlatılamıyor. Mullvad VPN\'i kullanmadan önce lütfen Her zaman açık VPN\'i <b>%1$s</b> için devre dışı bırakın.</string>
+    <string name="always_on_vpn_error_notification_content">Tünel bağlantısı başlatılamıyor. Krtek uygulamasını kullanmadan önce lütfen Her zaman açık VPN\'i <b>%1$s</b> için devre dışı bırakın.</string>
     <string name="always_on_vpn_error_notification_title">Her zaman açık VPN %1$s uygulamasına atandı</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Android 16\'da bir VPN uygulaması güncellendikten sonra, cihazlar VPN uygulamalarının artık internete erişemediği bir duruma geçebilir.</string>
     <string name="android_16_upgrade_warning_dialog_second_message">Lütfen cihazınızı yeniden başlatın ve tekrar bağlanmayı deneyin. Bu işe yaramazsa lütfen %1$s adresine İsveççe veya İngilizce bir e-posta yazın.</string>
@@ -50,7 +50,7 @@
     <string name="app_name_notes">Notlar</string>
     <string name="app_name_weather">Hava durumu</string>
     <string name="appearance">Görünüm</string>
-    <string name="appearance_description">Android cihazınızdaki Mullvad VPN uygulamasının başlığını ve simgesini değiştirin. Bu işlem, Mullvad VPN ile ilgili bildirimlerin simgesini değiştirmeyecektir.</string>
+    <string name="appearance_description">Android cihazınızdaki Krtek uygulamasının başlığını ve simgesini değiştirin. Bu işlem, Krtek ile ilgili bildirimlerin simgesini değiştirmeyecektir.</string>
     <string name="appearance_description_warning"><b>Dikkat:</b> Uygulama otomatik olarak kapanacağı için yeni bir simge ve başlık seçildikten sonra manuel olarak tekrar açılması gerekecektir. Bu durum VPN bağlantınızı etkilemez.</string>
     <string name="appearance_description_warning_restart">Uygulama kapatıldıktan sonra simge ve başlık hâlâ değişmediyse lütfen cihazı yeniden başlatmayı deneyin.</string>
     <string name="apply">Uygula</string>
@@ -60,7 +60,7 @@
     <string name="authentication">Yetkilendirme</string>
     <string name="auto_connect_and_lockdown_mode">Otomatik bağlantı ve Kilitleme modu</string>
     <string name="auto_connect_and_lockdown_mode_footer">Cihazın her zaman VPN tünelinde olduğundan emin olun.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. Aşağıdaki \"VPN ayarlarına git\" düğmesine tıkladıktan sonra \"Mullvad VPN\" adının yanındaki dişli çarka tıklayın.</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. Aşağıdaki \"VPN ayarlarına git\" düğmesine tıkladıktan sonra \"Krtek\" adının yanındaki dişli çarka tıklayın.</string>
     <string name="auto_connect_carousel_first_slide_top_text">Otomatik Bağlantı ve Kilitleme modu ayarları Android sistem ayarlarında yer alır. Bu ayarlardan birini veya her ikisini de etkinleştirmek için bu kılavuza göz atın.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. Otomatik bağlantıyı etkinleştirmek için \"VPN her zaman açık\" seçeneğinin yanındaki düğmeye tıklayın.</string>
     <string name="auto_connect_carousel_second_slide_top_text">Otomatik bağlantı, Android sistem ayarlarında VPN her zaman açık olarak gösterilir ve VPN tüneline sürekli bağlı olmanızı ve yeniden başlatma sonrası otomatik olarak bağlanmanızı sağlar.</string>
@@ -107,7 +107,7 @@
     <string name="connect_panel_connection_details">Bağlantı ayrıntıları</string>
     <string name="connected">Bağlandı</string>
     <string name="connecting">Bağlanılıyor...</string>
-    <string name="connecting_to_daemon">Mullvad sistem hizmetlerine bağlanılıyor...</string>
+    <string name="connecting_to_daemon">Krtek sistem hizmetlerine bağlanılıyor...</string>
     <string name="connection_details_in">Giriş</string>
     <string name="connection_details_out">Çıkış</string>
     <string name="cont">İleri</string>
@@ -294,7 +294,7 @@
     <string name="ipv6_unavailable">IPv6 yapılandırılamadı. IPv6\'yı uygulamada devre dışı bırakın veya cihazınızda etkinleştirin.</string>
     <string name="is_offline">Cihazınız çevrimdışı. Cihazınız tekrar çevrimiçi olduğunda tünel otomatik olarak bağlanacak.</string>
     <string name="language">Dil</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Tünel bağlantısı başlatılamıyor. Mullvad VPN\'i kullanmadan önce lütfen \"Her zaman açık VPN\"i devre dışı bırakın.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Tünel bağlantısı başlatılamıyor. Krtek uygulamasını kullanmadan önce lütfen \"Her zaman açık VPN\"i devre dışı bırakın.</string>
     <string name="legacy_always_on_vpn_error_notification_title">Her zaman açık VPN diğer VPN\'e atandı</string>
     <string name="less_than_a_day_left">Bu hesapta bir günden daha az süre kaldı</string>
     <string name="less_than_one_day">bir günden az</string>

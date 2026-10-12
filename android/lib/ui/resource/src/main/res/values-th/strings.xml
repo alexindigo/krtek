@@ -24,7 +24,7 @@
     <string name="all_locations">ตำแหน่งที่ตั้งทั้งหมด</string>
     <string name="all_providers">ผู้ให้บริการทั้งหมด</string>
     <string name="always">ตลอดเวลา</string>
-    <string name="always_on_vpn_error_notification_content">ไม่สามารถเริ่มการเชื่อมต่ออุโมงค์ได้ โปรดปิดใช้งาน Always-on VPN เป็นเวลา <b>%1$s</b> ก่อนที่จะใช้งาน Mullvad VPN</string>
+    <string name="always_on_vpn_error_notification_content">ไม่สามารถเริ่มการเชื่อมต่ออุโมงค์ได้ โปรดปิดใช้งาน Always-on VPN เป็นเวลา <b>%1$s</b> ก่อนที่จะใช้งาน Krtek</string>
     <string name="always_on_vpn_error_notification_title">VPN เปิดอยู่เสมอ ได้รับการมอบหมายไปยัง %1$s แล้ว</string>
     <string name="android_16_upgrade_warning_dialog_first_message">หลังจากอัปเดตแอป VPN บน Android 16 อุปกรณ์อาจอยู่ในสถานะที่แอป VPN ไม่สามารถเข้าถึงอินเทอร์เน็ตได้อีกต่อไป</string>
     <string name="android_16_upgrade_warning_dialog_second_message">โปรดรีสตาร์ทอุปกรณ์ของคุณและลองเชื่อมต่ออีกครั้ง หากวิธีนี้ไม่ได้ผล โปรดเขียนอีเมลถึง %1$s เป็นภาษาสวีเดนหรืออังกฤษ</string>
@@ -50,7 +50,7 @@
     <string name="app_name_notes">หมายเหตุ</string>
     <string name="app_name_weather">สภาพอากาศ</string>
     <string name="appearance">รูปลักษณ์</string>
-    <string name="appearance_description">เปลี่ยนชื่อและไอคอนของแอป Mullvad VPN บนอุปกรณ์ Android ของคุณ การดำเนินการนี้จะไม่เปลี่ยนไอคอนสำหรับการแจ้งเตือนที่เกี่ยวข้องกับ Mullvad VPN</string>
+    <string name="appearance_description">เปลี่ยนชื่อและไอคอนของแอป Krtek บนอุปกรณ์ Android ของคุณ การดำเนินการนี้จะไม่เปลี่ยนไอคอนสำหรับการแจ้งเตือนที่เกี่ยวข้องกับ Krtek</string>
     <string name="appearance_description_warning"><b>ข้อควรระวัง:</b> แอปจะปิดโดยอัตโนมัติและต้องเปิดใหม่ด้วยตนเองหลังจากเลือกไอคอนและชื่อใหม่ การดำเนินการนี้จะไม่ส่งผลต่อการเชื่อมต่อ VPN ของคุณ</string>
     <string name="appearance_description_warning_restart">หากไอคอนและชื่อยังไม่เปลี่ยนหลังจากปิดแอปแล้ว โปรดลองรีสตาร์ทอุปกรณ์</string>
     <string name="apply">ใช้</string>
@@ -60,7 +60,7 @@
     <string name="authentication">การรับรองความถูกต้อง</string>
     <string name="auto_connect_and_lockdown_mode">เชื่อมต่ออัตโนมัติและโหมดล็อกดาวน์</string>
     <string name="auto_connect_and_lockdown_mode_footer">ตรวจสอบให้แน่ใจว่า อุปกรณ์อยู่ในช่องทาง VPN เสมอ</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. หลังจากคลิกปุ่ม \"ไปที่การตั้งค่า VPN\" ที่ด้านล่าง ให้คลิกล้อเฟืองที่อยู่ถัดจากชื่อ \"Mullvad VPN\"</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. หลังจากคลิกปุ่ม \"ไปที่การตั้งค่า VPN\" ที่ด้านล่าง ให้คลิกล้อเฟืองที่อยู่ถัดจากชื่อ \"Krtek\"</string>
     <string name="auto_connect_carousel_first_slide_top_text">การตั้งค่าการเชื่อมต่ออัตโนมัติและโหมดล็อกดาวน์ อยู่ในการตั้งค่าระบบ Android โปรดทำตามคำแนะนำนี้ เพื่อเปิดใช้งานโหมดใดโหมดหนึ่ง หรือทั้งสองโหมด</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. ในการเปิดใช้การเชื่อมต่ออัตโนมัติ ให้คลิกปุ่มเปิด/ปิดที่อยู่ถัดจาก \"VPN เปิดอยู่เสมอ\"</string>
     <string name="auto_connect_carousel_second_slide_top_text">การเชื่อมต่ออัตโนมัติเรียกว่า Always-on VPN ในการตั้งค่าระบบ Android ซึ่งจะช่วยให้คุณมั่นใจได้ว่า คุณเชื่อมต่อกับช่องทาง VPN อย่างต่อเนื่อง และมีการเชื่อมต่ออัตโนมัติหลังจากรีสตาร์ต</string>
@@ -107,7 +107,7 @@
     <string name="connect_panel_connection_details">รายละเอียดการเชื่อมต่อ</string>
     <string name="connected">เชื่อมต่อแล้ว</string>
     <string name="connecting">กำลังเชื่อมต่อ...</string>
-    <string name="connecting_to_daemon">กำลังเชื่อมต่อบริการของระบบ Mullvad...</string>
+    <string name="connecting_to_daemon">กำลังเชื่อมต่อบริการของระบบ Krtek...</string>
     <string name="connection_details_in">เข้า</string>
     <string name="connection_details_out">ออก</string>
     <string name="cont">ดำเนินการต่อ</string>
@@ -294,7 +294,7 @@
     <string name="ipv6_unavailable">ไม่สามารถกำหนดค่า IPv6 ได้ โปรดปิดใช้งานรายการนี้ในแอป หรือเปิดใช้งานบนอุปกรณ์ของคุณ</string>
     <string name="is_offline">อุปกรณ์ของคุณออฟไลน์อยู่ อุโมงค์จะเชื่อมต่อโดยอัตโนมัติ หลังจากที่อุปกรณ์ของคุณกลับมาออนไลน์</string>
     <string name="language">ภาษา</string>
-    <string name="legacy_always_on_vpn_error_notification_content">ไม่สามารถเริ่มการเชื่อมต่ออุโมงค์ได้ โปรดปิดใช้งาน VPN เปิดอยู่เสมอ ก่อนที่จะใช้งาน Mullvad VPN</string>
+    <string name="legacy_always_on_vpn_error_notification_content">ไม่สามารถเริ่มการเชื่อมต่ออุโมงค์ได้ โปรดปิดใช้งาน VPN เปิดอยู่เสมอ ก่อนที่จะใช้งาน Krtek</string>
     <string name="legacy_always_on_vpn_error_notification_title">VPN เปิดอยู่เสมอ ได้รับการมอบหมายไปยัง VPN อื่นแล้ว</string>
     <string name="less_than_a_day_left">บัญชีนี้เหลือเวลาไม่ถึงหนึ่งวัน</string>
     <string name="less_than_one_day">น้อยกว่าหนึ่งวัน</string>

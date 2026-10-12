@@ -24,7 +24,7 @@
     <string name="all_locations">모든 위치</string>
     <string name="all_providers">모든 제공업체</string>
     <string name="always">항상</string>
-    <string name="always_on_vpn_error_notification_content">터널 연결을 시작할 수 없습니다. Mullvad VPN을 사용하기 전에 <b>%1$s</b>에 대한 상시 접속 VPN을 비활성화하세요.</string>
+    <string name="always_on_vpn_error_notification_content">터널 연결을 시작할 수 없습니다. Krtek을 사용하기 전에 <b>%1$s</b>에 대한 상시 접속 VPN을 비활성화하세요.</string>
     <string name="always_on_vpn_error_notification_title">상시 접속 VPN이 %1$s에 할당됨</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Android 16에서 VPN 앱을 업데이트하면 VPN 앱이 더 이상 인터넷에 연결되지 않는 상태가 될 수 있습니다.</string>
     <string name="android_16_upgrade_warning_dialog_second_message">장치를 재시작하고 다시 연결해 주세요. 그래도 해결되지 않는다면 %1$s에 스웨덴어 또는 영어로 이메일을 보내주세요.</string>
@@ -50,7 +50,7 @@
     <string name="app_name_notes">메모</string>
     <string name="app_name_weather">날씨</string>
     <string name="appearance">외관 설정</string>
-    <string name="appearance_description">Android 장치에서 Mullvad VPN의 타이틀과 아이콘을 변경하세요. Mullvad VPN과 관련된 알림의 아이콘은 변경되지 않습니다.</string>
+    <string name="appearance_description">Android 장치에서 Krtek의 타이틀과 아이콘을 변경하세요. Krtek과 관련된 알림의 아이콘은 변경되지 않습니다.</string>
     <string name="appearance_description_warning"><b>주의:</b> 새 아이콘과 타이틀을 선택하면 앱이 자동으로 종료되며 수동으로 다시 실행해야 합니다. VPN 연결에는 영향을 미치지 않습니다.</string>
     <string name="appearance_description_warning_restart">앱을 종료한 후에도 아이콘 및 타이틀이 변경되지 않는 경우 장치를 재시작해 주세요.</string>
     <string name="apply">적용</string>
@@ -60,7 +60,7 @@
     <string name="authentication">인증</string>
     <string name="auto_connect_and_lockdown_mode">자동 연결 및 잠금 모드</string>
     <string name="auto_connect_and_lockdown_mode_footer">장치가 항상 VPN 터널에 있어야 합니다.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. 아래의 \"VPN 설정으로 이동\" 버튼을 클릭한 후 \"Mullvad VPN\" 이름 옆의 톱니바퀴를 클릭합니다.</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. 아래의 \"VPN 설정으로 이동\" 버튼을 클릭한 후 \"Krtek\" 이름 옆의 톱니바퀴를 클릭합니다.</string>
     <string name="auto_connect_carousel_first_slide_top_text">자동 연결 및 잠금 모드 설정은 Android 시스템 설정에서 찾을 수 있습니다. 이 가이드에 따라 하나 또는 둘 다를 활성화하세요.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. 자동 연결을 활성화하려면 \"상시 접속 VPN\" 옆에 있는 토글을 클릭합니다.</string>
     <string name="auto_connect_carousel_second_slide_top_text">자동 연결은 Android 시스템 설정에서 상시 접속 VPN이라고 하며 VPN 터널에 지속적으로 연결되고 다시 시작한 후 자동 연결되게 해줍니다.</string>
@@ -107,7 +107,7 @@
     <string name="connect_panel_connection_details">연결 세부 정보</string>
     <string name="connected">연결됨</string>
     <string name="connecting">연결 중...</string>
-    <string name="connecting_to_daemon">Mullvad 시스템 서비스에 연결하는 중...</string>
+    <string name="connecting_to_daemon">Krtek 시스템 서비스에 연결하는 중...</string>
     <string name="connection_details_in">인</string>
     <string name="connection_details_out">아웃</string>
     <string name="cont">계속</string>
@@ -294,7 +294,7 @@
     <string name="ipv6_unavailable">IPv6을 구성할 수 없습니다. 앱에서 비활성화하거나 장치에서 활성화하세요.</string>
     <string name="is_offline">장치가 오프라인 상태입니다. 장치가 다시 온라인 상태가 되면 터널이 자동으로 연결됩니다.</string>
     <string name="language">언어</string>
-    <string name="legacy_always_on_vpn_error_notification_content">터널 연결을 시작할 수 없습니다. Mullvad VPN을 사용하기 전에 상시 접속 VPN을 비활성화하세요.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">터널 연결을 시작할 수 없습니다. Krtek을 사용하기 전에 상시 접속 VPN을 비활성화하세요.</string>
     <string name="legacy_always_on_vpn_error_notification_title">상시 접속 VPN이 다른 VPN에 할당됨</string>
     <string name="less_than_a_day_left">계정에 남은 기간이 1일 미만입니다</string>
     <string name="less_than_one_day">1일 미만</string>

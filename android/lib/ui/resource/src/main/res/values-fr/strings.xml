@@ -24,7 +24,7 @@
     <string name="all_locations">Toutes les localisations</string>
     <string name="all_providers">Tous les fournisseurs</string>
     <string name="always">Toujours</string>
-    <string name="always_on_vpn_error_notification_content">Impossible de démarrer la connexion au tunnel. Veuillez désactiver « Toujours exiger un VPN « pour <b>%1$s</b> avant d\'utiliser Mullvad VPN.</string>
+    <string name="always_on_vpn_error_notification_content">Impossible de démarrer la connexion au tunnel. Veuillez désactiver « Toujours exiger un VPN « pour <b>%1$s</b> avant d\'utiliser Krtek.</string>
     <string name="always_on_vpn_error_notification_title">« Toujours exiger un VPN » est assigné à %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Après la mise à jour d\'une application de VPN sur Android 16, les appareils peuvent se retrouver dans un état où ces applications de VPN ne sont plus en mesure d\'accéder à Internet.</string>
     <string name="android_16_upgrade_warning_dialog_second_message">Veuillez redémarrer votre appareil et réessayer de vous connecter. Si cela ne fonctionne pas, veuillez envoyer un e-mail à %1$s en suédois ou en anglais.</string>
@@ -50,7 +50,7 @@
     <string name="app_name_notes">Remarques</string>
     <string name="app_name_weather">Météo</string>
     <string name="appearance">Apparence</string>
-    <string name="appearance_description">Modifiez le titre et l\'icône de l\'application Mullvad VPN sur votre appareil Android. Cela ne modifiera pas l\'icône pour les notifications liées à Mullvad VPN.</string>
+    <string name="appearance_description">Modifiez le titre et l\'icône de l\'application Krtek sur votre appareil Android. Cela ne modifiera pas l\'icône pour les notifications liées à Krtek.</string>
     <string name="appearance_description_warning"><b>Attention :</b> l\'application se fermera automatiquement et devra être rouverte manuellement après avoir sélectionné une nouvelle icône et un nouveau titre. Cela n\'affectera pas votre connexion VPN.</string>
     <string name="appearance_description_warning_restart">Si l\'icône et le titre ne changent toujours pas une fois l\'application fermée, veuillez essayer de redémarrer l\'appareil.</string>
     <string name="apply">Appliquer</string>
@@ -60,7 +60,7 @@
     <string name="authentication">Authentification</string>
     <string name="auto_connect_and_lockdown_mode">Connexion automatique et mode Verrouillage</string>
     <string name="auto_connect_and_lockdown_mode_footer">Permet de s\'assurer que l\'appareil est toujours sur le tunnel VPN.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. Après avoir cliqué sur le bouton « Aller aux paramètres VPN » ci-dessous, cliquez sur l\'engrenage à côté du nom « Mullvad VPN ».</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. Après avoir cliqué sur le bouton « Aller aux paramètres VPN » ci-dessous, cliquez sur l\'engrenage à côté du nom « Krtek ».</string>
     <string name="auto_connect_carousel_first_slide_top_text">Les paramètres de la connexion automatique et du mode Verrouillage se trouvent dans les paramètres du système Android, suivez ce guide pour activer l\'un, l\'autre ou les deux.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. Pour activer la connexion automatique, cliquez sur l\'interrupteur situé à côté de « Toujours exiger un VPN ».</string>
     <string name="auto_connect_carousel_second_slide_top_text">La connexion automatique est appelée VPN toujours actif dans les paramètres du système Android et elle s\'assure que vous êtes constamment connecté au tunnel VPN et se connecte automatiquement après le redémarrage.</string>
@@ -107,7 +107,7 @@
     <string name="connect_panel_connection_details">Détails de la connexion</string>
     <string name="connected">Connecté</string>
     <string name="connecting">Connexion...</string>
-    <string name="connecting_to_daemon">Connexion au service système Mullvad...</string>
+    <string name="connecting_to_daemon">Connexion au service système Krtek...</string>
     <string name="connection_details_in">Entrante</string>
     <string name="connection_details_out">Sortante</string>
     <string name="cont">Continuer</string>
@@ -294,7 +294,7 @@
     <string name="ipv6_unavailable">Impossible de configurer IPv6. Désactivez le protocole dans l\'application ou activez-le dans votre appareil.</string>
     <string name="is_offline">Votre appareil est hors ligne. Le tunnel se connectera automatiquement une fois votre appareil à nouveau en ligne.</string>
     <string name="language">Langue</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Impossible de démarrer la connexion au tunnel. Veuillez désactiver Toujours exiger un VPN avant d\'utiliser Mullvad VPN.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Impossible de démarrer la connexion au tunnel. Veuillez désactiver Toujours exiger un VPN avant d\'utiliser Krtek.</string>
     <string name="legacy_always_on_vpn_error_notification_title">« Toujours exiger un VPN » est assigné à un autre VPN</string>
     <string name="less_than_a_day_left">Moins d\'un jour restant sur ce compte</string>
     <string name="less_than_one_day">moins d\'un jour</string>

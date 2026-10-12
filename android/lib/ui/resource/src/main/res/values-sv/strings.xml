@@ -24,7 +24,7 @@
     <string name="all_locations">Alla platser</string>
     <string name="all_providers">Alla leverantörer</string>
     <string name="always">Alltid</string>
-    <string name="always_on_vpn_error_notification_content">Det går inte att starta tunnelanslutning. Inaktivera Alltid på-VPN för <b>%1$s</b> innan du använder Mullvad VPN.</string>
+    <string name="always_on_vpn_error_notification_content">Det går inte att starta tunnelanslutning. Inaktivera Alltid på-VPN för <b>%1$s</b> innan du använder Krtek.</string>
     <string name="always_on_vpn_error_notification_title">Alltid på-VPN har tilldelats %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">När en VPN-app har uppdaterats på Android 16 kan enheterna hamna i ett tillstånd där VPN-apparna inte längre har åtkomst till internet.</string>
     <string name="android_16_upgrade_warning_dialog_second_message">Starta om enheten och försök att ansluta igen. Om det inte fungerar kan du skicka ett e-postmeddelande till %1$s på svenska eller engelska.</string>
@@ -50,7 +50,7 @@
     <string name="app_name_notes">Anteckningar</string>
     <string name="app_name_weather">Väder</string>
     <string name="appearance">Utseende</string>
-    <string name="appearance_description">Ändra titeln och ikonen för Mullvad VPN-appen på Android-enheten. Detta ändrar inte ikonen för Mullvad VPN-relaterade aviseringar.</string>
+    <string name="appearance_description">Ändra titeln och ikonen för Krtek-appen på Android-enheten. Detta ändrar inte ikonen för Krtek-relaterade aviseringar.</string>
     <string name="appearance_description_warning"><b>Obs!</b> Appen stängs automatiskt och måste öppnas igen manuellt efter att du väljer en ny ikon och titel. Detta påverkar inte din VPN-anslutning.</string>
     <string name="appearance_description_warning_restart">Om ikonen och titeln fortfarande inte ändras efter att appen har stängts, kan du prova att starta om enheten.</string>
     <string name="apply">Använd</string>
@@ -60,7 +60,7 @@
     <string name="authentication">Autentisering</string>
     <string name="auto_connect_and_lockdown_mode">Anslut automatiskt och Låsningsläge</string>
     <string name="auto_connect_and_lockdown_mode_footer">Ser till att enheten alltid är i VPN-tunneln.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. Efter att du har klickat på \"Gå till VPN-inställningar\" nedan klickar du på kugghjulet bredvid namnet \"Mullvad VPN\".</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. Efter att du har klickat på \"Gå till VPN-inställningar\" nedan klickar du på kugghjulet bredvid namnet \"Krtek\".</string>
     <string name="auto_connect_carousel_first_slide_top_text">Inställningar för Anslut automatiskt och Låsningsläge finns i Androids systeminställningar. Följ guiden för att aktivera en av dem eller båda.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. Om du vill aktivera Anslut automatiskt klickar du på växlingsknappen bredvid \"Alltid på-VPN\".</string>
     <string name="auto_connect_carousel_second_slide_top_text">Anslut automatiskt kallas Alltid på-VPN i Androids systeminställningar och ser till att du är ansluten till VPN-tunneln oavbrutet och ansluter automatiskt efter omstart.</string>
@@ -107,7 +107,7 @@
     <string name="connect_panel_connection_details">Anslutningsinformation</string>
     <string name="connected">Ansluten</string>
     <string name="connecting">Ansluter ...</string>
-    <string name="connecting_to_daemon">Ansluter till Mullvads systemtjänst...</string>
+    <string name="connecting_to_daemon">Ansluter till systemtjänsten för Krtek...</string>
     <string name="connection_details_in">In</string>
     <string name="connection_details_out">Ut</string>
     <string name="cont">Fortsätt</string>
@@ -294,7 +294,7 @@
     <string name="ipv6_unavailable">Det gick inte att konfigurera IPv6. Inaktivera det i appen eller aktivera det på din enhet.</string>
     <string name="is_offline">Din enhet är offline. Tunneln ansluts automatiskt när din enhet är online igen.</string>
     <string name="language">Språk</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Det går inte att starta tunnelanslutning. Inaktivera Alltid på-VPN innan du använder Mullvad VPN.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Det går inte att starta tunnelanslutning. Inaktivera Alltid på-VPN innan du använder Krtek.</string>
     <string name="legacy_always_on_vpn_error_notification_title">Alltid på-VPN har tilldelats en annan VPN</string>
     <string name="less_than_a_day_left">Mindre än en dag kvar på kontot</string>
     <string name="less_than_one_day">mindre än en dag</string>

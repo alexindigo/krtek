@@ -50,7 +50,7 @@
     <string name="app_name_notes">Noter</string>
     <string name="app_name_weather">Vejr</string>
     <string name="appearance">Udseende</string>
-    <string name="appearance_description">Ændr titlen og ikonet for Mullvad VPN-appen på din Android-enhed. Dette ændrer ikke ikonet for Mullvad VPN-relaterede notifikationer.</string>
+    <string name="appearance_description">Ændr titlen og ikonet for Krtek-appen på din Android-enhed. Dette ændrer ikke ikonet for Krtek-relaterede notifikationer.</string>
     <string name="appearance_description_warning"><b>Bemærk:</b> Appen lukker automatisk og skal åbnes igen manuelt efter valg af et nyt ikon og en ny titel. Dette påvirker ikke din VPN-forbindelse.</string>
     <string name="appearance_description_warning_restart">Hvis ikonet og titlen stadig ikke er ændret, efter at appen er lukket, skal du prøve at genstarte enheden.</string>
     <string name="apply">Anvend</string>
@@ -60,7 +60,7 @@
     <string name="authentication">Godkendelse</string>
     <string name="auto_connect_and_lockdown_mode">Auto-tilslutning og Lockdown-tilstand</string>
     <string name="auto_connect_and_lockdown_mode_footer">Sørger for, at enheden altid er på VPN-tunnelen.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. Når du har klikket på knappen \"Gå til VPN-indstillinger \"nedenfor, skal du klikke på tandhjulet ved siden af navnet \"Mullvad VPN\".</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. Når du har klikket på knappen \"Gå til VPN-indstillinger \"nedenfor, skal du klikke på tandhjulet ved siden af navnet \"Krtek\".</string>
     <string name="auto_connect_carousel_first_slide_top_text">Indstillingerne for automatisk forbindelse og Lockdown-tilstand kan findes i Android- systemindstillingerne. Følg denne vejledning for at aktivere en eller begge.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. For at aktivere automatisk forbindelse skal du klikke på knappen ved siden af \"Altid-til VPN\".</string>
     <string name="auto_connect_carousel_second_slide_top_text">Auto-tilslutning kaldes Altid-til VPN i Android-systemindstillingerne, og det sørger for, at du konstant er forbundet til VPN-tunnelen og automatisk forbinder efter genstart.</string>
@@ -107,7 +107,7 @@
     <string name="connect_panel_connection_details">Forbindelsesoplysninger</string>
     <string name="connected">Tilsluttet</string>
     <string name="connecting">Tilslutter...</string>
-    <string name="connecting_to_daemon">Opretter forbindelse til Mullvad-systemtjeneste...</string>
+    <string name="connecting_to_daemon">Opretter forbindelse til Krtek-systemtjeneste...</string>
     <string name="connection_details_in">Ind</string>
     <string name="connection_details_out">Ud</string>
     <string name="cont">Fortsæt</string>
@@ -294,7 +294,7 @@
     <string name="ipv6_unavailable">Kunne ikke konfigurere IPv6. Deaktiver det i appen, eller aktiver det på din enhed.</string>
     <string name="is_offline">Din enhed er offline. Tunnelen vil oprette forbindelse automatisk, når din enhed er online igen.</string>
     <string name="language">Sprog</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Kunne ikke starte tunnelforbindelse. Deaktiver Altid-til VPN før brug af Mullvad VPN.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Kunne ikke starte tunnelforbindelse. Deaktiver Altid-til VPN før brug af Krtek.</string>
     <string name="legacy_always_on_vpn_error_notification_title">Altid-til VPN tildelt en anden VPN</string>
     <string name="less_than_a_day_left">Mindre end en dag tilbage på denne konto</string>
     <string name="less_than_one_day">mindre end én dag</string>
