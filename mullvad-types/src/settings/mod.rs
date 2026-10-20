@@ -16,6 +16,8 @@ use talpid_types::net::GenericTunnelOptions;
 
 mod dns;
 
+pub mod local_network_access;
+
 /// Top level settings that can be controlled by the user. (i.e. not metadata or purely internal items)
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub enum SettingsKey {
