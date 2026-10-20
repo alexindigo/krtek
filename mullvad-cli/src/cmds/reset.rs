@@ -17,6 +17,7 @@ impl ValueEnum for SettingsKey {
             Self(ApiAccessMethods),
             Self(UpdateDefaultLocation),
             Self(AllowLan),
+            Self(LocalNetworkAccess),
             #[cfg(not(target_os = "android"))]
             Self(LockdownMode),
             Self(AutoConnect),
@@ -45,6 +46,9 @@ impl ValueEnum for SettingsKey {
                 PossibleValue::new("update-default-location")
             }
             mullvad_types::settings::SettingsKey::AllowLan => PossibleValue::new("allow-lan"),
+            mullvad_types::settings::SettingsKey::LocalNetworkAccess => {
+                PossibleValue::new("local-network-access")
+            }
             #[cfg(not(target_os = "android"))]
             mullvad_types::settings::SettingsKey::LockdownMode => {
                 PossibleValue::new("lockdown-mode")

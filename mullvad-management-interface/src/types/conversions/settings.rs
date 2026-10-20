@@ -30,6 +30,7 @@ impl From<&mullvad_types::settings::Settings> for proto::Settings {
         Self {
             relay_settings: Some(proto::RelaySettings::from(settings.get_relay_settings())),
             allow_lan: settings.allow_lan,
+            local_network_access: Some((&settings.local_network_access).into()),
             #[cfg(not(target_os = "android"))]
             lockdown_mode: settings.lockdown_mode,
             #[cfg(target_os = "android")]
@@ -151,6 +152,11 @@ impl TryFrom<proto::Settings> for mullvad_types::settings::Settings {
                 relay_settings,
             )?,
             allow_lan: settings.allow_lan,
+            local_network_access: settings
+                .local_network_access
+                .map(TryInto::try_into)
+                .transpose()?
+                .unwrap_or_default(),
             #[cfg(not(target_os = "android"))]
             lockdown_mode: settings.lockdown_mode,
             auto_connect: settings.auto_connect,

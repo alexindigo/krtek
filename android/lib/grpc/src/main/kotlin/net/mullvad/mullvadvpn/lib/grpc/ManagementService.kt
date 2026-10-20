@@ -289,7 +289,7 @@ class ManagementService(
 
     private fun handleEvent(daemonEvent: DaemonEvent) {
         if (extensiveLogging) {
-            Logger.v("Event: $daemonEvent")
+            daemonEvent.logSafeEventSummary()
         }
 
         when (val event = daemonEvent.event) {
