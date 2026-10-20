@@ -52,6 +52,14 @@ internal fun LocalRuleEditorControls(
         }
     }
     LocalWifiFields(draft, enabled, actions.onUpdate)
+    PrimaryTextButton(
+        onClick = actions.onConnectedWifi,
+        isEnabled = enabled,
+        text = stringResource(R.string.local_access_connected_wifi),
+    )
+    state.editor.wifiMessage?.let {
+        Text(stringResource(it), style = MaterialTheme.typography.bodyMedium)
+    }
     SwitchListItem(
         title = stringResource(R.string.local_access_rule_enabled),
         isToggled = draft.enabled,

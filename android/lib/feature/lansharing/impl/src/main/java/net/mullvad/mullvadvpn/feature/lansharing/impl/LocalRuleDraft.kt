@@ -87,6 +87,8 @@ data class LocalEditorState(
     val draft: LocalRuleDraft? = null,
     val baseline: LocalRuleDraft? = null,
     val confirmDiscard: Boolean = false,
+    val waitingForWifi: Boolean = false,
+    val wifiMessage: Int? = null,
 ) : Parcelable {
     val dirty: Boolean
         get() = draft != null && draft != baseline

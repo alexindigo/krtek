@@ -9,6 +9,8 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Build
 import android.os.Process
+import net.mullvad.mullvadvpn.lib.common.constant.LOCAL_NETWORK_PERMISSION
+import net.mullvad.mullvadvpn.lib.common.constant.LOCAL_NETWORK_PERMISSION_API
 
 internal data class LocalIdentityAccess(
     val local: Boolean,
@@ -28,9 +30,10 @@ internal class LocalIdentityAccessReader(private val context: Context) {
     fun read(): LocalIdentityAccess =
         LocalIdentityAccess(
             local =
-                Build.VERSION.SDK_INT < LOCAL_PERMISSION_API ||
-                    (granted(LOCAL_PERMISSION) &&
-                        (AppOpsManager.permissionToOp(LOCAL_PERMISSION)?.let(::allowed) ?: true)),
+                Build.VERSION.SDK_INT < LOCAL_NETWORK_PERMISSION_API ||
+                    (granted(LOCAL_NETWORK_PERMISSION) &&
+                        (AppOpsManager.permissionToOp(LOCAL_NETWORK_PERMISSION)?.let(::allowed)
+                            ?: true)),
             fine = granted(ACCESS_FINE_LOCATION) && granted(ACCESS_COARSE_LOCATION),
             background =
                 Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
@@ -68,9 +71,4 @@ internal class LocalIdentityAccessReader(private val context: Context) {
         } catch (_: SecurityException) {
             false
         }
-
-    companion object {
-        const val LOCAL_PERMISSION_API = 37
-        const val LOCAL_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"
-    }
 }

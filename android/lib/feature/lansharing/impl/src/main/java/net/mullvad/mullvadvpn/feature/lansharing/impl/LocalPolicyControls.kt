@@ -45,6 +45,7 @@ internal fun LocalPolicyControls(state: LocalNetworkSharingUiState, actions: Loc
                     enabled = !state.saving,
                     onEdit = { actions.onEdit(rule) },
                     onDelete = { deleteId = rule.id.toString() },
+                    onRequestAccess = { actions.onRequestAccess(rule.ssidIds.isNotEmpty()) },
                 )
                 HorizontalDivider()
             }
@@ -120,6 +121,7 @@ private fun LocalRuleRow(
     enabled: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onRequestAccess: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Dimens.smallPadding)) {
         Text(
@@ -150,9 +152,21 @@ private fun LocalRuleRow(
                 isEnabled = enabled,
                 text = stringResource(R.string.local_access_delete),
             )
+            if ((condition as? LocalRuleState.Inactive)?.reason.isMissingPermission()) {
+                PrimaryTextButton(
+                    onClick = onRequestAccess,
+                    isEnabled = enabled,
+                    text = stringResource(R.string.local_access_retry),
+                )
+            }
         }
     }
 }
+
+internal fun LocalRuleInactiveReason?.isMissingPermission(): Boolean =
+    this == LocalRuleInactiveReason.LocalPermissionMissing ||
+        this == LocalRuleInactiveReason.LocationPermissionMissing ||
+        this == LocalRuleInactiveReason.BackgroundLocationMissing
 
 @Composable
 private fun LocalPolicyConfirmation(

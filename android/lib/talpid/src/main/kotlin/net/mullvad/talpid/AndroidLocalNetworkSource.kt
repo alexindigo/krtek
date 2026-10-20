@@ -18,6 +18,7 @@ import android.os.Build
 import android.system.OsConstants
 import java.net.NetworkInterface
 import java.net.SocketException
+import net.mullvad.mullvadvpn.lib.common.constant.LOCAL_NETWORK_PERMISSION
 import net.mullvad.talpid.model.InetNetwork
 import net.mullvad.talpid.model.LocalPhysicalAddress
 import net.mullvad.talpid.model.LocalPhysicalNetwork
@@ -68,7 +69,7 @@ internal class AndroidLocalNetworkSource(private val context: Context) : LocalNe
             listOfNotNull(
                 AppOpsManager.OPSTR_FINE_LOCATION,
                 AppOpsManager.OPSTR_COARSE_LOCATION,
-                AppOpsManager.permissionToOp(LocalIdentityAccessReader.LOCAL_PERMISSION),
+                AppOpsManager.permissionToOp(LOCAL_NETWORK_PERMISSION),
             )
         watched.distinct().forEach { operation ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)

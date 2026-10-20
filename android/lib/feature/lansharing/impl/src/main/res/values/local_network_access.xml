@@ -52,4 +52,24 @@
     <string name="local_access_multiple_networks">More than one network matches</string>
     <string name="local_access_observer_unavailable">Local network status is unavailable</string>
     <string name="local_access_waiting_status">Waiting for rule status</string>
+    <string name="local_access_connected_wifi">Use connected Wi-Fi</string>
+    <string name="local_access_wifi_location_off">Turn on Location to read the Wi-Fi name.</string>
+    <string name="local_access_not_on_wifi">Not connected to Wi-Fi</string>
+    <string name="local_access_multiple_wifi">More than one Wi-Fi is connected</string>
+    <string name="local_access_waiting_wifi">Waiting for the Wi-Fi name</string>
+    <string name="local_access_wifi_limit">Remove a Wi-Fi name before adding another.</string>
+    <string name="local_access_retry">Retry access</string>
+    <string name="local_access_fine_title">Allow precise location?</string>
+    <string name="local_access_fine_help">Android needs precise location access to read Wi-Fi
+    names. %s uses the name only to check your rules.</string>
+    <string name="local_access_background_title">Allow location all the time?</string>
+    <string name="local_access_background_help">Choose Allow all the time so Wi-Fi rules can be
+    checked while %s is in the background.</string>
+    <string name="local_access_continue">Continue</string>
+    <string name="local_access_approximate">Choose precise location so Android can share Wi-Fi
+    names.</string>
+    <string name="local_access_settings_unavailable">Could not open Android settings. Try
+    again.</string>
+    <string name="local_access_app_settings">Open app settings</string>
+    <string name="local_access_location_settings">Open Location settings</string>
 </resources>

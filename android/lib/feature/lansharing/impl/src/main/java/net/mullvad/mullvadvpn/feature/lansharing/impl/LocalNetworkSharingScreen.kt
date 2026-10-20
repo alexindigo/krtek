@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.dropUnlessResumed
 import kotlin.text.appendLine
 import net.mullvad.mullvadvpn.core.Navigator
 import net.mullvad.mullvadvpn.lib.common.Lc
+import net.mullvad.mullvadvpn.lib.common.compose.CollectSideEffectWithLifecycle
 import net.mullvad.mullvadvpn.lib.common.compose.unlessIsDetail
 import net.mullvad.mullvadvpn.lib.model.FeatureIndicator
 import net.mullvad.mullvadvpn.lib.ui.component.Accordion
@@ -73,6 +74,8 @@ fun SharedTransitionScope.LocalNetworkSharing(
 ) {
     val viewModel = koinViewModel<LocalNetworkSharingViewModel> { parametersOf(isModal) }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val requestAccess = localPermissionRequester()
+    CollectSideEffectWithLifecycle(viewModel.uiSideEffect) { requestAccess(it.needsWifi) }
 
     val actions =
         LocalPolicyActions(
@@ -84,6 +87,8 @@ fun SharedTransitionScope.LocalNetworkSharing(
             onDiscard = viewModel::discard,
             onKeep = viewModel::keepEditing,
             onDelete = viewModel::delete,
+            onConnectedWifi = viewModel::useConnectedWifi,
+            onRequestAccess = requestAccess,
         )
 
     LocalNetworkSharingScreen(

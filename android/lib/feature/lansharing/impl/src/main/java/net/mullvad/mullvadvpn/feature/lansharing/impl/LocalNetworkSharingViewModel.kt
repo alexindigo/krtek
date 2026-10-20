@@ -4,19 +4,24 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import java.util.UUID
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import net.mullvad.mullvadvpn.lib.common.Lc
 import net.mullvad.mullvadvpn.lib.common.constant.VIEW_MODEL_STOP_TIMEOUT
 import net.mullvad.mullvadvpn.lib.common.toLc
+import net.mullvad.mullvadvpn.lib.model.ConnectedWifi
 import net.mullvad.mullvadvpn.lib.model.LocalBypassRule
 import net.mullvad.mullvadvpn.lib.model.LocalNetworkAccess
 import net.mullvad.mullvadvpn.lib.model.SetLocalNetworkAccessError
+import net.mullvad.mullvadvpn.lib.model.WifiUnknownReason
 import net.mullvad.mullvadvpn.lib.repository.SettingsRepository
 
 class LocalNetworkSharingViewModel(
@@ -28,6 +33,19 @@ class LocalNetworkSharingViewModel(
     private val editor = savedStateHandle.getStateFlow("local-rule-editor", LocalEditorState())
     private val saving = MutableStateFlow(false)
     private val error = MutableStateFlow<Int?>(null)
+    private val effects = Channel<LocalNetworkSharingSideEffect>(Channel.BUFFERED)
+    val uiSideEffect = effects.receiveAsFlow()
+
+    init {
+        viewModelScope.launch {
+            combine(settingsRepository.localNetworkStatus, editor) { status, edit ->
+                    status?.currentWifi to edit.waitingForWifi
+                }
+                .collect { (wifi, waiting) ->
+                    if (waiting && wifi is ConnectedWifi.Known) fillConnectedWifi(wifi)
+                }
+        }
+    }
 
     val uiState =
         combine(
@@ -67,7 +85,11 @@ class LocalNetworkSharingViewModel(
 
     fun updateDraft(update: (LocalRuleDraft) -> LocalRuleDraft) {
         if (saving.value) return
-        editor.value.draft?.let { setEditor(editor.value.copy(draft = update(it))) }
+        editor.value.draft?.let {
+            setEditor(
+                editor.value.copy(draft = update(it), waitingForWifi = false, wifiMessage = null)
+            )
+        }
         error.value = null
     }
 
@@ -91,7 +113,7 @@ class LocalNetworkSharingViewModel(
             error.value = R.string.local_access_invalid_rule
             return
         }
-        changePolicy(closeEditor = true) { current ->
+        changePolicy(closeEditor = true, requestWifi = rule.ssidIds.isNotEmpty()) { current ->
             current.copy(
                 rules =
                     if (current.rules.any { it.id == rule.id })
@@ -109,6 +131,7 @@ class LocalNetworkSharingViewModel(
 
     private fun changePolicy(
         closeEditor: Boolean = false,
+        requestWifi: Boolean? = null,
         update: (LocalNetworkAccess) -> LocalNetworkAccess,
     ) {
         val current = settingsRepository.settingsUpdates.value?.localNetworkAccess
@@ -126,7 +149,12 @@ class LocalNetworkSharingViewModel(
                     .setLocalNetworkAccess(replacement, expected = current)
                     .fold(
                         { error.value = it.message() },
-                        { if (closeEditor) setEditor(LocalEditorState()) },
+                        {
+                            if (closeEditor) setEditor(LocalEditorState())
+                            requestWifi?.let { needsWifi ->
+                                effects.send(LocalNetworkSharingSideEffect(needsWifi))
+                            }
+                        },
                     )
             } finally {
                 saving.value = false
@@ -137,7 +165,67 @@ class LocalNetworkSharingViewModel(
     private fun setEditor(value: LocalEditorState) {
         savedStateHandle["local-rule-editor"] = value
     }
+
+    fun useConnectedWifi() {
+        val wifi = settingsRepository.localNetworkStatus.value?.currentWifi
+        if (wifi is ConnectedWifi.Known) fillConnectedWifi(wifi)
+        else {
+            val edit = editor.value
+            val draft = edit.draft ?: return
+            val reason = (wifi as? ConnectedWifi.Unknown)?.reason ?: WifiUnknownReason.Pending
+            val missing = reason == WifiUnknownReason.PermissionMissing
+            setEditor(
+                edit.copy(
+                    draft =
+                        if (draft.wifiNames.isEmpty())
+                            draft.copy(wifiNames = listOf(LocalWifiDraft("")))
+                        else draft,
+                    waitingForWifi = missing,
+                    wifiMessage = reason.message(),
+                )
+            )
+            if (missing) viewModelScope.launch { effects.send(LocalNetworkSharingSideEffect(true)) }
+        }
+    }
+
+    private fun fillConnectedWifi(wifi: ConnectedWifi.Known) {
+        val edit = editor.value
+        val draft = edit.draft ?: return
+        val names = draft.wifiNames.toMutableList()
+        val blank = names.indexOfFirst { it.text.isEmpty() }
+        when {
+            names.any { it.identity() == wifi.ssid } -> Unit
+            blank >= 0 -> names[blank] = LocalWifiDraft.from(wifi.ssid)
+            names.size < LocalNetworkAccess.MAX_SSIDS_PER_RULE ->
+                names.add(LocalWifiDraft.from(wifi.ssid))
+            else -> {
+                setEditor(
+                    edit.copy(
+                        waitingForWifi = false,
+                        wifiMessage = R.string.local_access_wifi_limit,
+                    )
+                )
+                return
+            }
+        }
+        setEditor(
+            edit.copy(
+                draft = draft.copy(wifiNames = names),
+                waitingForWifi = false,
+                wifiMessage = null,
+            )
+        )
+    }
 }
+
+internal fun WifiUnknownReason.message(): Int =
+    when (this) {
+        WifiUnknownReason.PermissionMissing -> R.string.local_access_fine_missing
+        WifiUnknownReason.LocationOff -> R.string.local_access_wifi_location_off
+        WifiUnknownReason.NotOnWifi -> R.string.local_access_not_on_wifi
+        WifiUnknownReason.MultipleWifi -> R.string.local_access_multiple_wifi
+        WifiUnknownReason.Pending -> R.string.local_access_waiting_wifi
+    }
 
 internal fun SetLocalNetworkAccessError.message(): Int =
     when (this) {
