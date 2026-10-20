@@ -41,6 +41,7 @@ service ManagementService {
   // SettingsKeyList contains a list of settings to preserve during reset.
   rpc ResetSettings(SettingsKeyList) returns (google.protobuf.Empty) {}
   rpc SetAllowLan(google.protobuf.BoolValue) returns (google.protobuf.Empty) {}
+  rpc SetLocalNetworkAccess(LocalNetworkPolicyUpdate) returns (google.protobuf.Empty) {}
   rpc SetShowBetaReleases(google.protobuf.BoolValue) returns (google.protobuf.Empty) {}
   rpc SetLockdownMode(google.protobuf.BoolValue) returns (google.protobuf.Empty) {}
   rpc SetAutoConnect(google.protobuf.BoolValue) returns (google.protobuf.Empty) {}
@@ -572,6 +573,12 @@ message LocalBypassRule {
 message LocalNetworkAccess {
   bool enabled = 1;
   repeated LocalBypassRule rules = 2;
+}
+
+message LocalNetworkPolicyUpdate {
+  LocalNetworkAccess policy = 1;
+  // When present, reject an update if the current policy differs.
+  optional LocalNetworkAccess expected = 2;
 }
 
 message Settings {

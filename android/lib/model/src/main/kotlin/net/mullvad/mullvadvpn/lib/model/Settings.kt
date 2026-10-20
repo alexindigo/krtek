@@ -14,6 +14,7 @@ data class Settings(
     val splitTunnelSettings: SplitTunnelSettings,
     val apiAccessMethodSettings: List<ApiAccessMethodSetting>,
     val recents: Recents,
+    val localNetworkAccess: LocalNetworkAccess = LocalNetworkAccess(),
 ) {
     companion object
 }

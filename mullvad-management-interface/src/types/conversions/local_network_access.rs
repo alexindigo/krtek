@@ -125,6 +125,27 @@ mod tests {
     }
 
     #[test]
+    fn policy_update_preserves_absent_and_explicit_empty_expected_values() {
+        for expected in [
+            None,
+            Some(proto::LocalNetworkAccess::default()),
+            Some((&policy()).into()),
+        ] {
+            let update = proto::LocalNetworkPolicyUpdate {
+                policy: Some((&policy()).into()),
+                expected,
+            };
+            let decoded =
+                proto::LocalNetworkPolicyUpdate::decode(update.encode_to_vec().as_slice()).unwrap();
+            assert_eq!(decoded, update);
+            assert_eq!(
+                LocalNetworkAccess::try_from(decoded.policy.unwrap()).unwrap(),
+                policy()
+            );
+        }
+    }
+
+    #[test]
     fn settings_without_policy_default_and_reset_key_is_additive() {
         let mut settings = mullvad_types::settings::Settings::default();
         let mut wire = proto::Settings::from(&settings);

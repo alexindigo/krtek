@@ -270,6 +270,23 @@ impl ManagementService for ManagementServiceImpl {
         Ok(Response::new(()))
     }
 
+    async fn set_local_network_access(
+        &self,
+        request: Request<types::LocalNetworkPolicyUpdate>,
+    ) -> ServiceResult<()> {
+        let update = request.into_inner();
+        let policy = update
+            .policy
+            .ok_or_else(|| Status::invalid_argument("missing local network policy"))?
+            .try_into()?;
+        let expected = update.expected.map(TryInto::try_into).transpose()?;
+        log::debug!("set_local_network_access");
+        let (tx, rx) = oneshot::channel();
+        self.send_command_to_daemon(DaemonCommand::SetLocalNetworkAccess(tx, policy, expected))?;
+        self.wait_for_result(rx).await??;
+        Ok(Response::new(()))
+    }
+
     async fn set_show_beta_releases(&self, request: Request<bool>) -> ServiceResult<()> {
         let enabled = request.into_inner();
         log::debug!("set_show_beta_releases({})", enabled);

@@ -70,7 +70,7 @@ use mullvad_types::{
         ObfuscationSettings, RelayOverride, RelaySettings, allowed_ip::AllowedIps,
     },
     relay_list::RelayList,
-    settings::{DnsOptions, Settings, SettingsKeyList},
+    settings::{DnsOptions, Settings, SettingsKeyList, local_network_access::LocalNetworkAccess},
     states::{Secured, TargetState, TargetStateStrict, TunnelState},
     version::AppVersionInfo,
     wireguard::{PublicKey, QuantumResistantState, RotationInterval},
@@ -288,6 +288,12 @@ pub enum DaemonCommand {
     SetRelaySettings(ResponseTx<(), settings::Error>, RelaySettings),
     /// Set the allow LAN setting.
     SetAllowLan(ResponseTx<(), settings::Error>, bool),
+    /// Replace the local-network policy, optionally comparing its current value.
+    SetLocalNetworkAccess(
+        ResponseTx<(), settings::Error>,
+        LocalNetworkAccess,
+        Option<LocalNetworkAccess>,
+    ),
     /// Set the beta program setting.
     SetShowBetaReleases(ResponseTx<(), settings::Error>, bool),
     /// Set the lockdown_mode setting.
@@ -1546,6 +1552,9 @@ impl Daemon {
             ClearAccountHistory(tx) => self.on_clear_account_history(tx).await,
             SetRelaySettings(tx, update) => self.on_set_relay_settings(tx, update).await,
             SetAllowLan(tx, allow_lan) => self.on_set_allow_lan(tx, allow_lan).await,
+            SetLocalNetworkAccess(tx, policy, expected) => {
+                self.on_set_local_network_access(tx, policy, expected).await
+            }
             SetShowBetaReleases(tx, enabled) => self.on_set_show_beta_releases(tx, enabled).await,
             #[cfg(not(target_os = "android"))]
             SetLockdownMode(tx, lockdown_mode) => {
@@ -2584,6 +2593,25 @@ impl Daemon {
                 Self::oneshot_send(tx, Err(e), "set_allow_lan response");
             }
         }
+    }
+
+    async fn on_set_local_network_access(
+        &mut self,
+        tx: ResponseTx<(), settings::Error>,
+        policy: LocalNetworkAccess,
+        expected: Option<LocalNetworkAccess>,
+    ) {
+        let result = self
+            .settings
+            .set_local_network_access(policy, expected)
+            .await;
+        if let Err(error) = &result {
+            log::error!(
+                "{}",
+                error.display_chain_with_msg("Unable to save local network policy")
+            );
+        }
+        Self::oneshot_send(tx, result.map(|_| ()), "set_local_network_access response");
     }
 
     async fn on_set_show_beta_releases(

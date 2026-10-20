@@ -13,6 +13,7 @@ import net.mullvad.mullvadvpn.lib.model.CustomDnsOptions
 import net.mullvad.mullvadvpn.lib.model.DefaultDnsOptions
 import net.mullvad.mullvadvpn.lib.model.DnsOptions
 import net.mullvad.mullvadvpn.lib.model.DnsState
+import net.mullvad.mullvadvpn.lib.model.LocalNetworkAccess
 import net.mullvad.mullvadvpn.lib.model.Mtu
 import net.mullvad.mullvadvpn.lib.model.ObfuscationMode
 import net.mullvad.mullvadvpn.lib.model.Port
@@ -79,6 +80,11 @@ class SettingsRepository(
 
     suspend fun setLocalNetworkSharing(isEnabled: Boolean) =
         managementService.setAllowLan(isEnabled)
+
+    suspend fun setLocalNetworkAccess(
+        policy: LocalNetworkAccess,
+        expected: LocalNetworkAccess? = null,
+    ) = managementService.setLocalNetworkAccess(policy, expected)
 
     suspend fun setDaitaEnabled(enabled: Boolean) = managementService.setDaitaEnabled(enabled)
 

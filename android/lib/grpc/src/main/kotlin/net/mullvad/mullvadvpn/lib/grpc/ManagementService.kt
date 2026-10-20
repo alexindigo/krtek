@@ -45,11 +45,13 @@ import kotlinx.coroutines.withContext
 import mullvad_daemon.management_interface.DaemonEvent
 import mullvad_daemon.management_interface.Device
 import mullvad_daemon.management_interface.DeviceRemoval
+import mullvad_daemon.management_interface.LocalNetworkPolicyUpdate
 import mullvad_daemon.management_interface.ManagementServiceClient
 import mullvad_daemon.management_interface.NewCustomList
 import mullvad_daemon.relay_selector.RelaySelectorServiceClient
 import net.mullvad.mullvadvpn.lib.grpc.mapper.fromDomain
 import net.mullvad.mullvadvpn.lib.grpc.mapper.toDomain
+import net.mullvad.mullvadvpn.lib.grpc.mapper.toSetLocalNetworkAccessError
 import net.mullvad.mullvadvpn.lib.grpc.util.GrpcEventListener
 import net.mullvad.mullvadvpn.lib.grpc.util.UnixDomainSocketFactory
 import net.mullvad.mullvadvpn.lib.model.AccountData
@@ -93,6 +95,7 @@ import net.mullvad.mullvadvpn.lib.model.GetMigrationEventError
 import net.mullvad.mullvadvpn.lib.model.GetShadowsocksCiphersError
 import net.mullvad.mullvadvpn.lib.model.GetVersionInfoError
 import net.mullvad.mullvadvpn.lib.model.IpVersion
+import net.mullvad.mullvadvpn.lib.model.LocalNetworkAccess
 import net.mullvad.mullvadvpn.lib.model.LoginAccountError
 import net.mullvad.mullvadvpn.lib.model.LogoutAccountError
 import net.mullvad.mullvadvpn.lib.model.MultihopMode
@@ -127,6 +130,7 @@ import net.mullvad.mullvadvpn.lib.model.SetAllowLanError
 import net.mullvad.mullvadvpn.lib.model.SetApiAccessMethodError
 import net.mullvad.mullvadvpn.lib.model.SetDaitaSettingsError
 import net.mullvad.mullvadvpn.lib.model.SetDnsOptionsError
+import net.mullvad.mullvadvpn.lib.model.SetLocalNetworkAccessError
 import net.mullvad.mullvadvpn.lib.model.SetObfuscationOptionsError
 import net.mullvad.mullvadvpn.lib.model.SetRelayLocationError
 import net.mullvad.mullvadvpn.lib.model.SetWireguardConstraintsError
@@ -629,6 +633,23 @@ class ManagementService(
         Either.catch { grpc.SetAllowLan().execute(allow.toBoolValue()) }
             .onLeft { Logger.e("Set allow lan error") }
             .mapLeft(SetAllowLanError::Unknown)
+
+    suspend fun setLocalNetworkAccess(
+        policy: LocalNetworkAccess,
+        expected: LocalNetworkAccess? = null,
+    ): Either<SetLocalNetworkAccessError, Unit> =
+        Either.catch {
+                grpc
+                    .SetLocalNetworkAccess()
+                    .execute(
+                        LocalNetworkPolicyUpdate(
+                            policy = policy.fromDomain(),
+                            expected = expected?.fromDomain(),
+                        )
+                    )
+            }
+            .onLeft { Logger.e("Set local network policy error") }
+            .mapLeft { it.toSetLocalNetworkAccessError() }
 
     suspend fun setDaitaEnabled(enabled: Boolean): Either<SetDaitaSettingsError, Unit> =
         Either.catch { grpc.SetEnableDaita().execute(enabled.toBoolValue()) }
