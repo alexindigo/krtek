@@ -6,6 +6,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{collections::HashSet, fmt, net::IpAddr, str::FromStr};
 use uuid::Uuid;
 
+pub mod eligibility;
+pub mod status;
+
 const LOCAL_SCOPES: [&str; 6] = [
     "10.0.0.0/8",
     "172.16.0.0/12",
