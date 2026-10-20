@@ -213,6 +213,64 @@ class LocalNetworkWatcherTest {
         assertNotNull(LocalPhysicalNetwork::class.java.getDeclaredMethod("getSsidHex"))
         assertNotNull(LocalPhysicalAddress::class.java.getDeclaredMethod("getPrefix"))
         assertNotNull(LocalPhysicalRoute::class.java.getDeclaredMethod("getDestination"))
+        // jnix derives these getter names/signatures at runtime, outside compiler checking.
+        assertGetters(LocalNetworkSnapshot::class.java, Long::class.javaPrimitiveType!!, "Sequence")
+        assertGetters(
+            LocalNetworkSnapshot::class.java,
+            Boolean::class.javaPrimitiveType!!,
+            "ObserverRunning",
+            "LocalReady",
+            "FineReady",
+            "BackgroundReady",
+            "LocationEnabled",
+            "LocationAllowed",
+        )
+        assertGetters(LocalNetworkSnapshot::class.java, ArrayList::class.java, "Networks")
+        assertGetters(
+            LocalPhysicalNetwork::class.java,
+            Long::class.javaPrimitiveType!!,
+            "NetworkHandle",
+        )
+        assertGetters(
+            LocalPhysicalNetwork::class.java,
+            Int::class.javaPrimitiveType!!,
+            "Transport",
+            "InterfaceIndex",
+        )
+        assertGetters(
+            LocalPhysicalNetwork::class.java,
+            Boolean::class.javaPrimitiveType!!,
+            "CapabilitiesFresh",
+            "LinksFresh",
+            "Blocked",
+        )
+        assertGetters(
+            LocalPhysicalNetwork::class.java,
+            ArrayList::class.java,
+            "Addresses",
+            "Routes",
+        )
+        assertGetters(LocalPhysicalNetwork::class.java, String::class.java, "SsidHex")
+        assertGetters(LocalPhysicalAddress::class.java, InetNetwork::class.java, "Prefix")
+        assertGetters(
+            LocalPhysicalAddress::class.java,
+            Boolean::class.javaPrimitiveType!!,
+            "Usable",
+        )
+        assertGetters(LocalPhysicalRoute::class.java, InetNetwork::class.java, "Destination")
+        assertGetters(LocalPhysicalRoute::class.java, InetAddress::class.java, "Gateway")
+        assertGetters(
+            LocalPhysicalRoute::class.java,
+            Int::class.javaPrimitiveType!!,
+            "InterfaceIndex",
+            "RouteType",
+        )
+        assertGetters(InetNetwork::class.java, InetAddress::class.java, "Address")
+        assertGetters(InetNetwork::class.java, Short::class.javaPrimitiveType!!, "PrefixLength")
+    }
+
+    private fun assertGetters(type: Class<*>, result: Class<*>, vararg names: String) {
+        names.forEach { assertEquals(result, type.getDeclaredMethod("get$it").returnType) }
     }
 
     @Test

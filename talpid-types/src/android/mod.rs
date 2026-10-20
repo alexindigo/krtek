@@ -6,6 +6,8 @@ use std::fmt;
 use std::net::IpAddr;
 use std::sync::Arc;
 
+pub use crate::local_network;
+
 /// What Java calls an [IpAddr]
 pub type InetAddress = IpAddr;
 
@@ -13,6 +15,7 @@ pub type InetAddress = IpAddr;
 pub struct AndroidContext {
     pub jvm: Arc<JavaVM>,
     pub vpn_service: GlobalRef,
+    pub local_network: Arc<local_network::LocalNetworkFeed>,
 }
 
 /// A Java-compatible variant of [IpNetwork]
