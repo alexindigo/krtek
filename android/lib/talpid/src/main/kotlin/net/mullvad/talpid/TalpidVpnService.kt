@@ -37,6 +37,7 @@ import net.mullvad.talpid.util.UnderlyingConnectivityStatusResolver
 
 @Suppress("TooManyFunctions")
 open class TalpidVpnService : LifecycleVpnService() {
+    private lateinit var localNetworkWatcher: LocalNetworkWatcher
     private var activeTunStatus by
         observable<CreateTunResult?>(null) { _, oldTunStatus, _ ->
             val oldTunFd =
@@ -64,7 +65,22 @@ open class TalpidVpnService : LifecycleVpnService() {
                 UnderlyingConnectivityStatusResolver(::protect),
             )
         connectivityListener.register(lifecycleScope)
+        localNetworkWatcher = LocalNetworkWatcher(AndroidLocalNetworkSource(this), lifecycleScope)
+        localNetworkWatcher.start()
     }
+
+    @CallSuper
+    override fun onDestroy() {
+        localNetworkWatcher.stop()
+        super.onDestroy()
+    }
+
+    // Used by JNI. Attach is the only way to enable native delivery.
+    @Suppress("Unused")
+    fun attachLocalNetwork(registration: Long): Boolean = localNetworkWatcher.attach(registration)
+
+    @Suppress("Unused")
+    fun detachLocalNetwork(registration: Long): Boolean = localNetworkWatcher.detach(registration)
 
     // Used by JNI
     fun openTun(config: TunConfig): CreateTunResult =
