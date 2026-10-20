@@ -1,5 +1,6 @@
 package net.mullvad.mullvadvpn.feature.lansharing.impl
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.Image
@@ -73,6 +74,18 @@ fun SharedTransitionScope.LocalNetworkSharing(
     val viewModel = koinViewModel<LocalNetworkSharingViewModel> { parametersOf(isModal) }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
+    val actions =
+        LocalPolicyActions(
+            onEnabled = viewModel::setPolicyEnabled,
+            onEdit = viewModel::edit,
+            onUpdate = viewModel::updateDraft,
+            onSave = viewModel::save,
+            onClose = viewModel::closeEditor,
+            onDiscard = viewModel::discard,
+            onKeep = viewModel::keepEditing,
+            onDelete = viewModel::delete,
+        )
+
     LocalNetworkSharingScreen(
         state = state,
         modifier =
@@ -83,6 +96,7 @@ fun SharedTransitionScope.LocalNetworkSharing(
                 ),
         onLocalNetworkSharingEnable = viewModel::setLocalNetworkSharingEnabled,
         onBackClick = dropUnlessResumed { navigator.goBack() },
+        policyActions = actions,
     )
 }
 
@@ -92,15 +106,19 @@ fun LocalNetworkSharingScreen(
     onLocalNetworkSharingEnable: (enable: Boolean) -> Unit,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
+    policyActions: LocalPolicyActions = LocalPolicyActions(),
 ) {
+    val editing = (state as? Lc.Content)?.value?.editor?.draft != null
+    val onBack = { if (editing) policyActions.onClose() else onBackClick() }
+    BackHandler(enabled = editing, onBack = policyActions.onClose)
     ScaffoldWithSmallTopBar(
         appBarTitle = stringResource(id = R.string.local_network_sharing),
         modifier = modifier,
         navigationIcon = {
             if (state.isModal()) {
-                NavigateCloseIconButton { onBackClick() }
+                NavigateCloseIconButton { onBack() }
             } else {
-                unlessIsDetail { NavigateBackIconButton { onBackClick() } }
+                unlessIsDetail { NavigateBackIconButton { onBack() } }
             }
         },
     ) { contentModifier ->
@@ -123,6 +141,7 @@ fun LocalNetworkSharingScreen(
                     LocalNetworkSharingContent(
                         state = state.value,
                         onLanSharingEnabled = onLocalNetworkSharingEnable,
+                        policyActions = policyActions,
                     )
                 }
             }
@@ -134,6 +153,7 @@ fun LocalNetworkSharingScreen(
 private fun LocalNetworkSharingContent(
     state: LocalNetworkSharingUiState,
     onLanSharingEnabled: (enable: Boolean) -> Unit,
+    policyActions: LocalPolicyActions,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.sideMarginNew)) {
         Image(
@@ -186,6 +206,7 @@ private fun LocalNetworkSharingContent(
             isToggled = state.lanSharingEnabled,
             onCellClicked = onLanSharingEnabled,
         )
+        LocalPolicyControls(state, policyActions)
     }
 }
 
