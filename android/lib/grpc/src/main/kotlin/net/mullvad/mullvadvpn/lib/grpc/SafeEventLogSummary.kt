@@ -19,5 +19,6 @@ internal fun DaemonEvent.safeEventLogSummary(): String =
         is DaemonEvent.Event.VersionInfo -> "Event(type=version-info)"
         is DaemonEvent.Event.RemoveDevice -> "Event(type=remove-device)"
         is DaemonEvent.Event.LeakInfo -> "Event(type=leak-info)"
+        is DaemonEvent.Event.LocalNetworkStatus -> "Event(type=local-network-status)"
         null -> "Event(type=unknown)"
     }

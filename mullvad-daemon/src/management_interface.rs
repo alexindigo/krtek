@@ -252,6 +252,17 @@ impl ManagementService for ManagementServiceImpl {
             .map(|settings| Response::new(types::Settings::from(&settings)))
     }
 
+    async fn get_local_network_status(
+        &self,
+        _: Request<()>,
+    ) -> ServiceResult<types::LocalNetworkStatus> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command_to_daemon(DaemonCommand::GetLocalNetworkStatus(tx))?;
+        self.wait_for_result(rx)
+            .await
+            .map(|status| Response::new(types::LocalNetworkStatus::from(&status)))
+    }
+
     async fn reset_settings(&self, request: Request<types::SettingsKeyList>) -> ServiceResult<()> {
         let preserved = SettingsKeyList::try_from(request.into_inner())?;
         log::debug!("reset_settings");
@@ -1485,6 +1496,14 @@ pub struct ManagementInterfaceEventBroadcaster {
 }
 
 impl ManagementInterfaceEventBroadcaster {
+    pub(crate) fn notify_local_network_status(
+        &self,
+        status: mullvad_types::settings::local_network_access::status::LocalNetworkStatus,
+    ) {
+        self.notify(types::DaemonEvent {
+            event: Some(daemon_event::Event::LocalNetworkStatus((&status).into())),
+        });
+    }
     fn notify(&self, value: types::DaemonEvent) {
         let mut subscriptions = self.subscriptions.lock().unwrap();
         subscriptions.retain(|tx| tx.send(Ok(value.clone())).is_ok());

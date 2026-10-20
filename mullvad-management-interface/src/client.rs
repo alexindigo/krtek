@@ -49,6 +49,7 @@ pub enum DaemonEvent {
     RemoveDevice(RemoveDeviceEvent),
     NewAccessMethod(AccessMethodSetting),
     LeakDetected(LeakInfo),
+    LocalNetworkStatus(mullvad_types::settings::local_network_access::status::LocalNetworkStatus),
 }
 
 impl TryFrom<types::daemon_event::Event> for DaemonEvent {
@@ -82,6 +83,10 @@ impl TryFrom<types::daemon_event::Event> for DaemonEvent {
             types::daemon_event::Event::LeakInfo(leak) => {
                 LeakInfo::try_from(leak).map(DaemonEvent::LeakDetected)
             }
+            types::daemon_event::Event::LocalNetworkStatus(status) => status
+                .try_into()
+                .map(DaemonEvent::LocalNetworkStatus)
+                .map_err(Error::InvalidResponse),
         }
     }
 }
@@ -246,6 +251,17 @@ impl MullvadProxyClient {
     pub async fn get_settings(&mut self) -> Result<Settings> {
         let settings = self.0.get_settings(()).await?.into_inner();
         Settings::try_from(settings).map_err(Error::InvalidResponse)
+    }
+
+    pub async fn get_local_network_status(
+        &mut self,
+    ) -> Result<mullvad_types::settings::local_network_access::status::LocalNetworkStatus> {
+        self.0
+            .get_local_network_status(())
+            .await?
+            .into_inner()
+            .try_into()
+            .map_err(Error::InvalidResponse)
     }
 
     pub async fn reset_settings(&mut self, preserved: SettingsKeyList) -> Result<()> {

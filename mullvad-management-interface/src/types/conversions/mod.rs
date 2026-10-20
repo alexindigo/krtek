@@ -7,6 +7,7 @@ mod custom_tunnel;
 mod device;
 mod features;
 mod local_network_access;
+mod local_network_status;
 mod location;
 mod logging;
 mod net;

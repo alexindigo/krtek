@@ -62,6 +62,11 @@ impl Status {
                 DaemonEvent::NewAccessMethod(access_method) => {
                     print_debug_or_json(&args, "New access method", &access_method)?;
                 }
+                DaemonEvent::LocalNetworkStatus(status) => {
+                    if !args.json {
+                        print_local_network_summary(&status);
+                    }
+                }
                 DaemonEvent::LeakDetected(leak) => {
                     #[derive(Debug, Serialize)]
                     struct Leak {
@@ -91,6 +96,10 @@ pub async fn handle(cmd: Option<Status>, args: StatusArgs) -> Result<()> {
         format::print_state(&state, None, args.verbose);
     }
 
+    if !args.json {
+        print_local_network_summary(&rpc.get_local_network_status().await?);
+    }
+
     if cmd == Some(Status::Listen) {
         Status::listen(rpc, args, state).await?;
     }
@@ -110,6 +119,26 @@ fn print_account_logged_out(state: &TunnelState, device: &DeviceState) {
         }
         TunnelState::Disconnected { .. } | TunnelState::Disconnecting(_) => (),
     }
+}
+
+fn print_local_network_summary(
+    status: &mullvad_types::settings::local_network_access::status::LocalNetworkStatus,
+) {
+    use mullvad_types::settings::local_network_access::status::RuleState;
+    let ready = status
+        .rules
+        .iter()
+        .filter(|rule| rule.state == RuleState::ConditionsMet)
+        .count();
+    println!(
+        "Local network: forwarding not available; {ready}/{} rule conditions met; observer {}",
+        status.rules.len(),
+        if status.observer_available {
+            "available"
+        } else {
+            "unavailable"
+        }
+    );
 }
 
 /// Print the given value as debug or JSON output based on the provided arguments.

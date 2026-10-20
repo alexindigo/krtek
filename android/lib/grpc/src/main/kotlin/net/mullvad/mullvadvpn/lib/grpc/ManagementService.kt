@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -96,6 +97,7 @@ import net.mullvad.mullvadvpn.lib.model.GetShadowsocksCiphersError
 import net.mullvad.mullvadvpn.lib.model.GetVersionInfoError
 import net.mullvad.mullvadvpn.lib.model.IpVersion
 import net.mullvad.mullvadvpn.lib.model.LocalNetworkAccess
+import net.mullvad.mullvadvpn.lib.model.LocalNetworkStatus
 import net.mullvad.mullvadvpn.lib.model.LoginAccountError
 import net.mullvad.mullvadvpn.lib.model.LogoutAccountError
 import net.mullvad.mullvadvpn.lib.model.MultihopMode
@@ -236,6 +238,15 @@ class ManagementService(
     private val _mutableSettings = MutableStateFlow<ModelSettings?>(null)
     val settings: Flow<ModelSettings> = _mutableSettings.filterNotNull()
 
+    private val _localNetworkStatus = MutableStateFlow<LocalNetworkStatus?>(null)
+    val localNetworkStatus: StateFlow<LocalNetworkStatus?> = _localNetworkStatus.asStateFlow()
+
+    private fun acceptLocalNetworkStatus(status: LocalNetworkStatus) {
+        _localNetworkStatus.update { current ->
+            status.takeIf { current == null || status.revision >= current.revision } ?: current
+        }
+    }
+
     private val _mutableVersionInfo = MutableStateFlow<ModelAppVersionInfo?>(null)
     val versionInfo: Flow<ModelAppVersionInfo> = _mutableVersionInfo.filterNotNull()
 
@@ -271,6 +282,9 @@ class ManagementService(
     private suspend fun subscribeEvents() =
         withContext(ioDispatcher) {
             while (isActive) {
+                // Each subscription belongs to one daemon lifetime. Its revisions
+                // may restart below the previous daemon's last sample.
+                _localNetworkStatus.value = null
                 try {
                     // Coroutine scope is used to make sure that both the event listener and the
                     // initial state fetch are done before it will loop again.
@@ -305,6 +319,8 @@ class ManagementService(
                 _mutableCurrentAccessMethod.update { event.value.toDomain() }
             is DaemonEvent.Event.RelayList -> _mutableRelayList.update { event.value.toDomain() }
             is DaemonEvent.Event.Settings -> _mutableSettings.update { event.value.toDomain() }
+            is DaemonEvent.Event.LocalNetworkStatus ->
+                acceptLocalNetworkStatus(event.value.toDomain())
             is DaemonEvent.Event.TunnelState ->
                 _mutableTunnelState.update { event.value.toDomain() }
             is DaemonEvent.Event.VersionInfo ->
@@ -443,6 +459,9 @@ class ManagementService(
             async { _mutableTunnelState.update { getTunnelState() } },
             async { _mutableDeviceState.update { getDeviceState() } },
             async { _mutableSettings.update { getSettings() } },
+            async {
+                acceptLocalNetworkStatus(grpc.GetLocalNetworkStatus().execute(Unit).toDomain())
+            },
             async { _mutableVersionInfo.update { getVersionInfo().getOrNull() } },
             async { _mutableRelayList.update { getRelayList() } },
             async { _mutableCurrentAccessMethod.update { getCurrentApiAccessMethod() } },

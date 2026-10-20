@@ -25,6 +25,9 @@ class SettingsRepository(
     private val managementService: ManagementService,
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
+    val localNetworkStatus
+        get() = managementService.localNetworkStatus
+
     val settingsUpdates: StateFlow<Settings?> =
         managementService.settings.stateIn(
             CoroutineScope(dispatcher),

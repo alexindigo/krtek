@@ -12,6 +12,7 @@ import mullvad_daemon.management_interface.DaemonEvent
 import mullvad_daemon.management_interface.LocalBypassRule
 import mullvad_daemon.management_interface.LocalNetworkAccess
 import mullvad_daemon.management_interface.Settings
+import okio.Buffer
 import okio.ByteString.Companion.encodeUtf8
 import org.junit.jupiter.api.Test
 
@@ -22,6 +23,15 @@ class SafeEventLogSummaryTest {
         val name = "private-rule-marker"
         val cidr = "192.168.240.0/28"
         val bytes = ssid.encodeUtf8()
+        // unknownFields contains encoded fields, not arbitrary payload bytes:
+        // field 99, length-delimited, with this short synthetic SSID as payload.
+        val unknownFields =
+            Buffer()
+                .writeByte(0x9a)
+                .writeByte(0x06)
+                .writeByte(bytes.size)
+                .write(bytes)
+                .readByteString()
         val event =
             DaemonEvent(
                 event =
@@ -63,9 +73,25 @@ class SafeEventLogSummaryTest {
         val logger =
             Logger(StaticConfig(minSeverity = Severity.Verbose, logWriterList = listOf(writer)))
         decoded.logSafeEventSummary(logger)
-        DaemonEvent(unknownFields = bytes).logSafeEventSummary(logger)
+        DaemonEvent(unknownFields = unknownFields).logSafeEventSummary(logger)
+        val status =
+            mullvad_daemon.management_interface.LocalNetworkStatus(
+                current_wifi =
+                    mullvad_daemon.management_interface.ConnectedWifi(
+                        identity =
+                            mullvad_daemon.management_interface.ConnectedWifi.Identity.Ssid(bytes)
+                    ),
+                unknownFields = unknownFields,
+            )
+        val statusEvent = DaemonEvent(event = DaemonEvent.Event.LocalNetworkStatus(status))
+        DaemonEvent.ADAPTER.decode(DaemonEvent.ADAPTER.encode(statusEvent))
+            .logSafeEventSummary(logger)
         assertEquals(
-            listOf("Event(type=settings local-rule-count=1)", "Event(type=unknown)"),
+            listOf(
+                "Event(type=settings local-rule-count=1)",
+                "Event(type=unknown)",
+                "Event(type=local-network-status)",
+            ),
             messages,
         )
         val output = messages.joinToString("\n")

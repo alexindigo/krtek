@@ -14,6 +14,7 @@ mod dns;
 pub mod exception_logging;
 mod geoip;
 mod leak_checker;
+mod local_network;
 pub mod logging;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -293,6 +294,9 @@ pub enum DaemonCommand {
         ResponseTx<(), settings::Error>,
         LocalNetworkAccess,
         Option<LocalNetworkAccess>,
+    ),
+    GetLocalNetworkStatus(
+        oneshot::Sender<mullvad_types::settings::local_network_access::status::LocalNetworkStatus>,
     ),
     /// Set the beta program setting.
     SetShowBetaReleases(ResponseTx<(), settings::Error>, bool),
@@ -685,6 +689,7 @@ impl<E> DaemonEventSender<E> {
 }
 
 pub struct Daemon {
+    local_network: local_network::LocalNetworkRuntime,
     tunnel_state: TunnelState,
     target_state: PersistentTargetState,
     #[cfg(target_os = "linux")]
@@ -785,6 +790,14 @@ impl Daemon {
         .map_err(Error::ManagementInterfaceError)?;
 
         let (internal_event_tx, internal_event_rx) = daemon_command_channel.destructure();
+
+        let local_network = local_network::LocalNetworkRuntime::new(
+            &settings.local_network_access,
+            #[cfg(target_os = "android")]
+            Some(config.android_context.local_network.clone()),
+            #[cfg(not(target_os = "android"))]
+            None,
+        );
 
         #[cfg(target_os = "android")]
         let connectivity_listener = ConnectivityListener::new(config.android_context.clone())
@@ -1076,6 +1089,7 @@ impl Daemon {
         };
 
         let daemon = Daemon {
+            local_network,
             tunnel_state: TunnelState::Disconnected {
                 location: None,
                 #[cfg(not(target_os = "android"))]
@@ -1211,10 +1225,25 @@ impl Daemon {
 
     /// Handle internal daemon events until a shutdown event is received
     async fn handle_events(&mut self) {
-        while let Some(event) = self.rx.next().await {
-            if self.handle_event(event).await {
-                break;
+        loop {
+            tokio::select! {
+                event = self.rx.next() => {
+                    let Some(event) = event else { break; };
+                    if self.handle_event(event).await { break; }
+                }
+                _ = self.local_network.changed() => self.update_local_network_status(),
             }
+        }
+    }
+
+    fn update_local_network_status(&mut self) {
+        if let Some(status) = self
+            .local_network
+            .update(&self.settings.local_network_access)
+        {
+            self.management_interface
+                .notifier()
+                .notify_local_network_status(status);
         }
     }
 
@@ -1252,6 +1281,7 @@ impl Daemon {
             LocationEvent(location_data) => self.handle_location_event(location_data),
             SettingsChanged => {
                 self.update_feature_indicators_on_settings_changed();
+                self.update_local_network_status();
             }
             #[cfg(any(target_os = "windows", target_os = "android", target_os = "macos"))]
             ExcludedPathsEvent(update, tx) => self.handle_new_excluded_paths(update, tx).await,
@@ -1554,6 +1584,14 @@ impl Daemon {
             SetAllowLan(tx, allow_lan) => self.on_set_allow_lan(tx, allow_lan).await,
             SetLocalNetworkAccess(tx, policy, expected) => {
                 self.on_set_local_network_access(tx, policy, expected).await
+            }
+            GetLocalNetworkStatus(tx) => {
+                self.update_local_network_status();
+                Self::oneshot_send(
+                    tx,
+                    self.local_network.status().clone(),
+                    "local network status response",
+                );
             }
             SetShowBetaReleases(tx, enabled) => self.on_set_show_beta_releases(tx, enabled).await,
             #[cfg(not(target_os = "android"))]

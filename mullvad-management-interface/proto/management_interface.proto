@@ -42,6 +42,7 @@ service ManagementService {
   rpc ResetSettings(SettingsKeyList) returns (google.protobuf.Empty) {}
   rpc SetAllowLan(google.protobuf.BoolValue) returns (google.protobuf.Empty) {}
   rpc SetLocalNetworkAccess(LocalNetworkPolicyUpdate) returns (google.protobuf.Empty) {}
+  rpc GetLocalNetworkStatus(google.protobuf.Empty) returns (LocalNetworkStatus) {}
   rpc SetShowBetaReleases(google.protobuf.BoolValue) returns (google.protobuf.Empty) {}
   rpc SetLockdownMode(google.protobuf.BoolValue) returns (google.protobuf.Empty) {}
   rpc SetAutoConnect(google.protobuf.BoolValue) returns (google.protobuf.Empty) {}
@@ -838,7 +839,59 @@ message DaemonEvent {
     RemoveDeviceEvent remove_device = 6;
     AccessMethodSetting new_access_method = 7;
     LeakInfo leak_info = 8;
+    LocalNetworkStatus local_network_status = 9;
   }
+}
+
+// Observational readiness only; never a forwarding or admission grant.
+message LocalNetworkStatus {
+  uint64 revision = 1;
+  bool observer_available = 2;
+  enum ForwardingAvailability {
+    NOT_AVAILABLE = 0;
+  }
+  ForwardingAvailability forwarding = 3;
+  ConnectedWifi current_wifi = 4;
+  repeated LocalRuleStatus rules = 5;
+}
+
+message ConnectedWifi {
+  enum UnknownReason {
+    PERMISSION_MISSING = 0;
+    LOCATION_OFF = 1;
+    NOT_ON_WIFI = 2;
+    MULTIPLE_WIFI = 3;
+    PENDING = 4;
+  }
+  oneof identity {
+    bytes ssid = 1;
+    UnknownReason unknown = 2;
+  }
+}
+
+message LocalRuleStatus {
+  string id = 1;
+  enum State {
+    INACTIVE = 0;
+    CONDITIONS_MET = 1;
+  }
+  State state = 2;
+  optional LocalRuleInactiveReason reason = 3;
+}
+
+enum LocalRuleInactiveReason {
+  POLICY_OFF = 0;
+  RULE_OFF = 1;
+  LOCAL_PERMISSION_MISSING = 2;
+  LOCATION_PERMISSION_MISSING = 3;
+  BACKGROUND_LOCATION_MISSING = 4;
+  LOCATION_OFF = 5;
+  NO_ELIGIBLE_NETWORK = 6;
+  WAITING_FOR_NETWORK_DETAILS = 7;
+  DIFFERENT_WIFI = 8;
+  WIFI_NAME_UNKNOWN = 9;
+  MULTIPLE_NETWORKS = 10;
+  OBSERVER_UNAVAILABLE = 11;
 }
 
 // List of VPN relays

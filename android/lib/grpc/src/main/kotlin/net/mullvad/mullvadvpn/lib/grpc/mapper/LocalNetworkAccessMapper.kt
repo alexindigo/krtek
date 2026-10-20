@@ -45,7 +45,7 @@ private fun LocalBypassRule.toDomain(): ModelLocalBypassRule {
     )
 }
 
-private fun localRuleId(text: String): UUID {
+internal fun localRuleId(text: String): UUID {
     val uuid =
         try {
             UUID.fromString(text)
