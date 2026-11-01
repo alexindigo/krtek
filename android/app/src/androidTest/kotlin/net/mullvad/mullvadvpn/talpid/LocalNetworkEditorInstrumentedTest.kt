@@ -329,7 +329,7 @@ class LocalNetworkEditorInstrumentedTest {
                         // Return to the field that owns the canonical suggestion; scrolling
                         // only forward from Save cannot reach an earlier field.
                         field("local_access_addresses")
-                        awaitNode {
+                        awaitNode(scroll = true) {
                             it.text?.toString() ==
                                 copy(R.string.local_access_canonical_suggestion, "192.168.240.0/28")
                         }
@@ -362,9 +362,11 @@ class LocalNetworkEditorInstrumentedTest {
                         click(copy(R.string.local_access_discard), false)
                         assertEquals(saved, repository.settingsUpdates.value?.localNetworkAccess)
                         click(copy(R.string.local_access_delete))
+                        requireRenderedText(copy(R.string.local_access_delete_description, name))
                         click(copy(android.R.string.cancel), false)
                         assertEquals(saved, repository.settingsUpdates.value?.localNetworkAccess)
                         click(copy(R.string.local_access_delete))
+                        requireRenderedText(copy(R.string.local_access_delete_description, name))
                         click(copy(R.string.local_access_delete), false)
                         withTimeout(10_000) {
                             repository.settingsUpdates.first { it?.localNetworkAccess == original }

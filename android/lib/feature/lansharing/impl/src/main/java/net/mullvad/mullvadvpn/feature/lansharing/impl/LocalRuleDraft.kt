@@ -83,6 +83,13 @@ data class LocalRuleDraft(
 }
 
 @Parcelize
+data class LocalRuleDeleteTarget(val id: String, val name: String) : Parcelable {
+    fun displayName(unnamed: String): String = name.ifEmpty { unnamed }
+
+    override fun toString(): String = "LocalRuleDeleteTarget(redacted)"
+}
+
+@Parcelize
 data class LocalEditorState(
     val draft: LocalRuleDraft? = null,
     val baseline: LocalRuleDraft? = null,

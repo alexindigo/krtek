@@ -13,6 +13,8 @@ data class LocalPolicyActions(
     val onDiscard: () -> Unit = {},
     val onKeep: () -> Unit = {},
     val onDelete: (UUID) -> Unit = {},
+    val onRequestDelete: (LocalBypassRule) -> Unit = {},
+    val onCancelDelete: () -> Unit = {},
     val onConnectedWifi: () -> Unit = {},
     val onRequestAccess: (Boolean) -> Unit = {},
 )

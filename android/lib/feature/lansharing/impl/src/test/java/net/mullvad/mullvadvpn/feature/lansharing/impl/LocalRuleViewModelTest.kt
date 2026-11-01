@@ -219,6 +219,69 @@ class LocalRuleViewModelTest {
     }
 
     @Test
+    fun `should expose the selected persisted delete name and cancel without changing policy`() =
+        runTest {
+            val rule =
+                LocalRuleDraft(
+                        java.util.UUID.randomUUID().toString(),
+                        name = "Printer",
+                        addresses = "10.0.0.0/8",
+                    )
+                    .rule()!!
+            settings.value = mockk {
+                every { allowLan } returns false
+                every { localNetworkAccess } returns LocalNetworkAccess(rules = listOf(rule))
+            }
+            viewModel.uiState.test {
+                awaitItem()
+                viewModel.requestDelete(rule.copy(name = "Stale row name"))
+                runCurrent()
+                assertEquals(
+                    LocalRuleDeleteTarget(rule.id.toString(), "Printer"),
+                    content().deleteTarget,
+                )
+                assertEquals("Printer", content().deleteTarget?.displayName("Unnamed rule"))
+                viewModel.requestDelete(null)
+                runCurrent()
+                assertNull(content().deleteTarget)
+                coVerify(exactly = 0) { repository.setLocalNetworkAccess(any(), any()) }
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `should carry an unnamed delete target and use the same confirmation for empty and populated lists`() =
+        runTest {
+            val rule =
+                LocalRuleDraft(java.util.UUID.randomUUID().toString(), addresses = "10.0.0.0/8")
+                    .rule()!!
+            val current = LocalNetworkAccess(rules = listOf(rule))
+            settings.value = mockk {
+                every { allowLan } returns false
+                every { localNetworkAccess } returns current
+            }
+            coEvery { repository.setLocalNetworkAccess(any(), any()) } returns Unit.right()
+            viewModel.uiState.test {
+                awaitItem()
+                viewModel.requestDelete(rule)
+                runCurrent()
+                assertEquals("Unnamed rule", content().deleteTarget?.displayName("Unnamed rule"))
+                assertEquals(R.string.local_access_confirmation, content().confirmationMessage())
+                assertEquals(
+                    content().confirmationMessage(),
+                    content().copy(policy = LocalNetworkAccess()).confirmationMessage(),
+                )
+                viewModel.delete(rule.id)
+                runCurrent()
+                assertNull(content().deleteTarget)
+                coVerify(exactly = 1) {
+                    repository.setLocalNetworkAccess(current.copy(rules = emptyList()), current)
+                }
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
     fun `should reject invalid draft before persistence and close untouched editor without discard`() =
         runTest {
             viewModel.uiState.test {

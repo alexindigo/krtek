@@ -29,29 +29,28 @@ import net.mullvad.mullvadvpn.lib.ui.theme.Dimens
 @Composable
 internal fun LocalPolicyControls(state: LocalNetworkSharingUiState, actions: LocalPolicyActions) {
     var confirmEnable by rememberSaveable { mutableStateOf(false) }
-    var deleteId by rememberSaveable { mutableStateOf<String?>(null) }
     Column(
         Modifier.fillMaxWidth().padding(bottom = Dimens.screenBottomMarginNew),
         verticalArrangement = Arrangement.spacedBy(Dimens.smallPadding),
     ) {
         LocalPolicyHeader(state) { if (it) confirmEnable = true else actions.onEnabled(false) }
-        if (state.editor.draft == null) {
+        if (state.saving) {
+            Text(stringResource(R.string.local_access_saving))
+        } else if (state.editor.draft == null) {
             state.error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
             if (state.policy.rules.isEmpty()) Text(stringResource(R.string.local_access_empty))
             state.policy.rules.forEach { rule ->
                 LocalRuleRow(
                     rule = rule,
                     condition = state.status?.rules?.find { it.id == rule.id }?.state,
-                    enabled = !state.saving,
                     onEdit = { actions.onEdit(rule) },
-                    onDelete = { deleteId = rule.id.toString() },
+                    onDelete = { actions.onRequestDelete(rule) },
                     onRequestAccess = { actions.onRequestAccess(rule.ssidIds.isNotEmpty()) },
                 )
                 HorizontalDivider()
             }
             PrimaryButton(
                 text = stringResource(R.string.local_access_add_rule),
-                isEnabled = !state.saving,
                 onClick = { actions.onEdit(null) },
             )
         } else {
@@ -67,18 +66,22 @@ internal fun LocalPolicyControls(state: LocalNetworkSharingUiState, actions: Loc
                 actions.onEnabled(true)
             },
             onCancel = { confirmEnable = false },
-            description = R.string.local_access_confirmation,
+            description = stringResource(state.confirmationMessage()),
         )
     }
-    deleteId?.let { id ->
+    state.deleteTarget?.let { target ->
         LocalPolicyConfirmation(
             title = R.string.local_access_delete_title,
             confirm = R.string.local_access_delete,
             onConfirm = {
-                deleteId = null
-                actions.onDelete(UUID.fromString(id))
+                actions.onDelete(UUID.fromString(target.id))
             },
-            onCancel = { deleteId = null },
+            onCancel = actions.onCancelDelete,
+            description =
+                stringResource(
+                    R.string.local_access_delete_description,
+                    target.displayName(stringResource(R.string.local_access_unnamed)),
+                ),
         )
     }
     if (state.editor.confirmDiscard) {
@@ -99,13 +102,24 @@ private fun LocalPolicyHeader(state: LocalNetworkSharingUiState, onEnabled: (Boo
         stringResource(R.string.local_access_scope_help),
         style = MaterialTheme.typography.bodyMedium,
     )
-    SwitchListItem(
-        title = stringResource(R.string.local_access_enable),
-        isToggled = state.policy.enabled,
-        isEnabled = !state.saving && state.editor.draft == null,
-        singeLine = false,
-        onCellClicked = onEnabled,
-    )
+    if (!state.saving && state.editor.draft == null) {
+        SwitchListItem(
+            title = stringResource(R.string.local_access_enable),
+            isToggled = state.policy.enabled,
+            onCellClicked = onEnabled,
+        )
+    } else if (state.editor.draft != null) {
+        Text(
+            stringResource(
+                if (state.policy.enabled) R.string.local_access_policy_on
+                else R.string.local_access_policy_off
+            )
+        )
+        Text(
+            stringResource(R.string.local_access_finish_editing),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
     if (state.status?.forwarding == ForwardingAvailability.NotAvailable) {
         Text(
             stringResource(R.string.local_access_forwarding_unavailable),
@@ -118,7 +132,6 @@ private fun LocalPolicyHeader(state: LocalNetworkSharingUiState, onEnabled: (Boo
 private fun LocalRuleRow(
     rule: LocalBypassRule,
     condition: LocalRuleState?,
-    enabled: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onRequestAccess: () -> Unit,
@@ -144,18 +157,15 @@ private fun LocalRuleRow(
         FlowRow {
             PrimaryTextButton(
                 onClick = onEdit,
-                isEnabled = enabled,
                 text = stringResource(R.string.local_access_edit),
             )
             PrimaryTextButton(
                 onClick = onDelete,
-                isEnabled = enabled,
                 text = stringResource(R.string.local_access_delete),
             )
             if ((condition as? LocalRuleState.Inactive)?.reason.isMissingPermission()) {
                 PrimaryTextButton(
                     onClick = onRequestAccess,
-                    isEnabled = enabled,
                     text = stringResource(R.string.local_access_retry),
                 )
             }
@@ -175,16 +185,19 @@ private fun LocalPolicyConfirmation(
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
     cancel: Int = android.R.string.cancel,
-    description: Int? = null,
+    description: String? = null,
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text(stringResource(title)) },
-        text = description?.let { { Text(stringResource(it)) } },
+        text = description?.let { { Text(it) } },
         confirmButton = { PrimaryTextButton(onClick = onConfirm, text = stringResource(confirm)) },
         dismissButton = { PrimaryTextButton(onClick = onCancel, text = stringResource(cancel)) },
     )
 }
+
+internal fun LocalNetworkSharingUiState.confirmationMessage(): Int =
+    R.string.local_access_confirmation
 
 internal fun LocalRuleState?.message(): Int =
     when (this) {

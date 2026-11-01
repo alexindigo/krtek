@@ -138,7 +138,12 @@ private fun LocalPermissionExplanation(
             confirmButton = {
                 PrimaryTextButton(
                     onClick = onConfirm,
-                    text = stringResource(R.string.local_access_continue),
+                    text =
+                        stringResource(
+                            if (step == LocalPermissionStep.ExplainFine)
+                                R.string.local_access_request_location
+                            else R.string.local_access_continue
+                        ),
                 )
             },
             dismissButton = {

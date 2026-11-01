@@ -201,7 +201,7 @@ class LocalNetworkPermissionInstrumentedTest {
             "Device must be staged with denied location permissions before this test"
         }
         withRestrictionEdit { driver, rule ->
-            driver.click(copy(R.string.local_access_continue), false)
+            driver.click(copy(R.string.local_access_request_location), false)
             driver.settleAction()
             permissionControl("permission_deny_button")
             runBlocking {
@@ -209,7 +209,7 @@ class LocalNetworkPermissionInstrumentedTest {
             }
             driver.requireRenderedText(copy(R.string.local_access_fine_missing))
             driver.click(copy(R.string.local_access_retry), false)
-            driver.click(copy(R.string.local_access_continue), false)
+            driver.click(copy(R.string.local_access_request_location), false)
             driver.settleAction()
             systemClick("com.android.permissioncontroller") { it.text?.toString() == "Approximate" }
             permissionControl("permission_allow_foreground_only_button")
@@ -232,7 +232,7 @@ class LocalNetworkPermissionInstrumentedTest {
             "Device must be staged with denied precise and background location before this test"
         }
         withRestrictionEdit { driver, rule ->
-            driver.click(copy(R.string.local_access_continue), false)
+            driver.click(copy(R.string.local_access_request_location), false)
             driver.settleAction()
             systemClick("com.android.permissioncontroller") { it.text?.toString() == "Precise" }
             permissionControl("permission_allow_foreground_only_button")
