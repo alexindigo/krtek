@@ -124,14 +124,25 @@ fn print_account_logged_out(state: &TunnelState, device: &DeviceState) {
 fn print_local_network_summary(
     status: &mullvad_types::settings::local_network_access::status::LocalNetworkStatus,
 ) {
-    use mullvad_types::settings::local_network_access::status::RuleState;
+    use mullvad_types::settings::local_network_access::status::{
+        ForwardingAvailability, RuleState,
+    };
+    let forwarding = match status.forwarding {
+        ForwardingAvailability::NotAvailable => "forwarding not available",
+        ForwardingAvailability::Off => "delivery off",
+        ForwardingAvailability::Active => "local rules ready",
+        ForwardingAvailability::PausedWhileConnected => {
+            "delivery paused while connecting or connected"
+        }
+        ForwardingAvailability::Failed => "delivery failed",
+    };
     let ready = status
         .rules
         .iter()
-        .filter(|rule| rule.state == RuleState::ConditionsMet)
+        .filter(|rule| matches!(rule.state, RuleState::ConditionsMet | RuleState::Forwarding))
         .count();
     println!(
-        "Local network: forwarding not available; {ready}/{} rule conditions met; observer {}",
+        "Local network: {forwarding}; {ready}/{} rule conditions met; observer {}",
         status.rules.len(),
         if status.observer_available {
             "available"

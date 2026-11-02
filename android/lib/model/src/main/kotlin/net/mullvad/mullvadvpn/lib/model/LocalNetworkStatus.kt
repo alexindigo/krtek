@@ -11,7 +11,11 @@ data class LocalNetworkStatus(
 )
 
 enum class ForwardingAvailability {
-    NotAvailable
+    NotAvailable,
+    Off,
+    Active,
+    PausedWhileConnected,
+    Failed,
 }
 
 sealed interface ConnectedWifi {
@@ -32,6 +36,8 @@ data class LocalRuleStatus(val id: UUID, val state: LocalRuleState)
 
 sealed interface LocalRuleState {
     data object ConditionsMet : LocalRuleState
+
+    data object Forwarding : LocalRuleState
 
     data class Inactive(val reason: LocalRuleInactiveReason) : LocalRuleState
 }

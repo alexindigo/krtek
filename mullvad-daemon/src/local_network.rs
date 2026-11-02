@@ -1,6 +1,8 @@
 //! Single actor-owned status publisher over the core's latest observation.
 use mullvad_types::settings::local_network_access::{
-    LocalNetworkAccess, eligibility::NetworkObservation, status::LocalNetworkStatus,
+    LocalNetworkAccess,
+    eligibility::NetworkObservation,
+    status::{ForwardingAvailability, LocalNetworkStatus},
 };
 use std::sync::Arc;
 use talpid_types::local_network::{LocalNetworkFeed, LocalNetworkFeedState};
@@ -53,7 +55,8 @@ impl LocalNetworkRuntime {
                     .unwrap_or_default()
             })
         });
-        let mut sample = LocalNetworkStatus::from_observation(policy, observation.as_ref());
+        let mut sample = LocalNetworkStatus::from_observation(policy, observation.as_ref())
+            .with_forwarding(ForwardingAvailability::NotAvailable);
         sample.revision = self.status.revision;
         if sample == self.status {
             return None;

@@ -66,7 +66,8 @@ internal fun LocalPolicyControls(state: LocalNetworkSharingUiState, actions: Loc
                 actions.onEnabled(true)
             },
             onCancel = { confirmEnable = false },
-            description = stringResource(state.confirmationMessage()),
+            description =
+                stringResource(state.confirmationMessage(), stringResource(R.string.app_name)),
         )
     }
     state.deleteTarget?.let { target ->
@@ -120,9 +121,9 @@ private fun LocalPolicyHeader(state: LocalNetworkSharingUiState, onEnabled: (Boo
             style = MaterialTheme.typography.bodyMedium,
         )
     }
-    if (state.status?.forwarding == ForwardingAvailability.NotAvailable) {
+    state.forwardingMessage()?.let { message ->
         Text(
-            stringResource(R.string.local_access_forwarding_unavailable),
+            stringResource(message),
             style = MaterialTheme.typography.bodyMedium,
         )
     }
@@ -197,12 +198,27 @@ private fun LocalPolicyConfirmation(
 }
 
 internal fun LocalNetworkSharingUiState.confirmationMessage(): Int =
-    R.string.local_access_confirmation
+    when (status?.forwarding) {
+        null,
+        ForwardingAvailability.NotAvailable -> R.string.local_access_confirmation
+        else -> R.string.local_access_delivery_confirmation
+    }
+
+internal fun LocalNetworkSharingUiState.forwardingMessage(): Int? =
+    when (status?.forwarding) {
+        null -> null
+        ForwardingAvailability.NotAvailable -> R.string.local_access_forwarding_unavailable
+        ForwardingAvailability.Off -> R.string.local_access_forwarding_off
+        ForwardingAvailability.Active -> R.string.local_access_forwarding_active
+        ForwardingAvailability.PausedWhileConnected -> R.string.local_access_forwarding_paused
+        ForwardingAvailability.Failed -> R.string.local_access_forwarding_failed
+    }
 
 internal fun LocalRuleState?.message(): Int =
     when (this) {
         null -> R.string.local_access_waiting_status
         LocalRuleState.ConditionsMet -> R.string.local_access_conditions_met
+        LocalRuleState.Forwarding -> R.string.local_access_forwarding
         is LocalRuleState.Inactive -> reason.message()
     }
 

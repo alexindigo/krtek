@@ -16,6 +16,19 @@
     available in this version yet.</string>
     <string name="local_access_forwarding_unavailable">Local forwarding is not available in this
     version yet.</string>
+    <string name="local_access_delivery_confirmation">While Mullvad is disconnected, only the
+    addresses in enabled rules go through %1$s. %1$s delivers traffic only when a rule’s conditions
+    are met. Android handles everything else as it would without %1$s: other connections stay
+    blocked with “Block connections without VPN” on, and go out normally with it off.</string>
+    <string name="local_access_forwarding_active">Local rules are ready. Traffic is delivered only
+    when a rule’s conditions are met.</string>
+    <string name="local_access_forwarding_paused">Local delivery is paused while Mullvad is
+    connecting or connected.</string>
+    <string name="local_access_forwarding_failed">Local delivery could not start. Change a rule or
+    reconnect Mullvad to try again.</string>
+    <string name="local_access_forwarding_off">Local delivery is off. Turn on local network rules
+    and enable at least one rule to use it.</string>
+    <string name="local_access_forwarding">Forwarding</string>
     <string name="local_access_empty">Add a rule to choose local addresses.</string>
     <string name="local_access_add_rule">Add rule</string>
     <string name="local_access_edit_rule">Edit rule</string>
