@@ -115,11 +115,16 @@ class LocalPermissionRequestStateTest {
 
     @Test
     fun `should require a real background grant on return from settings`() {
-        val flight =
+        val background =
             LocalPermissionRequestState()
                 .begin(true, granted.copy(background = false))
                 .confirm()
-                .launched(LocalPermissionStep.AppSettings)
+                .launched()
+        val flight =
+            background
+                .result(background.token, granted.copy(background = false))
+                .confirm()
+                .launched()
         val denied = flight.result(flight.token, granted.copy(background = false))
         assertEquals(LocalPermissionFailure.BackgroundMissing, denied.failure)
         assertFalse(denied.active)
@@ -152,10 +157,7 @@ class LocalPermissionRequestStateTest {
         val missing = granted.copy(local = false, fine = false, coarse = false, background = false)
         val fine = LocalPermissionRequestState().begin(true, missing).confirm().launched()
         val background =
-            fine
-                .result(fine.token, missing.copy(fine = true, coarse = true))
-                .confirm()
-                .launched(LocalPermissionStep.AppSettings)
+            fine.result(fine.token, missing.copy(fine = true, coarse = true)).confirm().launched()
         val local = background.result(background.token, granted.copy(local = false)).launched()
         assertEquals(LocalPermissionStep.Local, local.flight)
         assertFalse(local.result(local.token, granted).active)
@@ -166,19 +168,111 @@ class LocalPermissionRequestStateTest {
     }
 
     @Test
-    fun `should use the API29 dialog and API30 app settings for background access`() {
+    fun `should request background directly with destination specific copy on API29 30 and 37`() {
+        for (sdk in listOf(29, 30, 37)) {
+            val explained =
+                LocalPermissionRequestState()
+                    .begin(true, granted.copy(sdk = sdk, background = false))
+            val content = checkNotNull(explained.step.explanation(sdk))
+            assertEquals(
+                if (sdk == 29) R.string.local_access_background_dialog_help
+                else R.string.local_access_background_help,
+                content.help,
+            )
+            assertEquals(
+                if (sdk == 29) R.string.local_access_request_location
+                else R.string.local_access_location_permission,
+                content.action,
+            )
+            assertEquals(LocalPermissionStep.Background, explained.confirm().launched().flight)
+        }
+    }
+
+    @Test
+    fun `should explain App info only after a background refusal without foreground departure`() {
+        for (sdk in listOf(30, 37)) {
+            val missing = granted.copy(sdk = sdk, background = false)
+            val flight = LocalPermissionRequestState().begin(true, missing).confirm().launched()
+            val fallback = flight.result(flight.token, missing)
+            assertEquals(LocalPermissionStep.ExplainBackgroundFallback, fallback.step)
+            assertTrue(fallback.active)
+            assertNull(fallback.flight)
+            assertEquals(fallback, fallback.begin(true, missing))
+            val content = checkNotNull(fallback.step.explanation(sdk))
+            assertEquals(R.string.local_access_background_settings_help, content.help)
+            assertEquals(R.string.local_access_app_settings, content.action)
+            assertEquals(LocalPermissionStep.AppSettings, fallback.confirm().launched().flight)
+            val cancelled = fallback.cancel()
+            assertFalse(cancelled.active)
+            assertEquals(LocalPermissionStep.Idle, cancelled.step)
+        }
+    }
+
+    @Test
+    fun `should stop after a real background page refusal rather than offer the no UI fallback`() {
+        for (sdk in listOf(29, 30, 37)) {
+            val missing = granted.copy(sdk = sdk, background = false)
+            val flight = LocalPermissionRequestState().begin(true, missing).confirm().launched()
+            val denied = flight.foregroundLeft(flight.token).result(flight.token, missing)
+            assertEquals(LocalPermissionFailure.BackgroundMissing, denied.failure)
+            assertEquals(LocalPermissionStep.Idle, denied.step)
+            assertFalse(denied.active)
+            assertFalse(denied.leftForeground)
+            assertEquals(LocalPermissionStep.AppSettings, denied.settings().step)
+        }
+    }
+
+    @Test
+    fun `should not offer the API30 fallback after an API29 dialog denial`() {
+        val missing = granted.copy(sdk = 29, background = false)
+        val flight = LocalPermissionRequestState().begin(true, missing).confirm().launched()
         assertEquals(
-            LocalPermissionStep.Background,
-            LocalPermissionStep.Background.platformStep(29),
+            LocalPermissionFailure.BackgroundMissing,
+            flight.result(flight.token, missing).failure,
         )
-        assertEquals(
-            LocalPermissionStep.AppSettings,
-            LocalPermissionStep.Background.platformStep(30),
-        )
-        assertEquals(
-            LocalPermissionStep.AppSettings,
-            LocalPermissionStep.Background.platformStep(37),
-        )
+    }
+
+    @Test
+    fun `should bind foreground departure to the live background flight token`() {
+        val missing = granted.copy(background = false)
+        val request = LocalPermissionRequestState().begin(true, missing)
+        assertEquals(request, request.foregroundLeft(request.token))
+        val flight = request.confirm().launched()
+        assertEquals(flight, flight.foregroundLeft(flight.token - 1))
+        val departed = flight.foregroundLeft(flight.token)
+        assertTrue(departed.leftForeground)
+        assertEquals(departed, departed.result(flight.token - 1, missing))
+        val cancelled = departed.cancel()
+        assertEquals(cancelled, cancelled.foregroundLeft(flight.token))
+        assertEquals(cancelled, cancelled.begin(true, missing))
+        val drained = cancelled.result(flight.token, missing)
+        assertFalse(drained.active)
+        assertFalse(drained.leftForeground)
+        assertNull(drained.flightToken)
+        assertNull(drained.failure)
+        val next = drained.begin(true, missing).confirm().launched()
+        assertFalse(next.leftForeground)
+        assertEquals(next, next.foregroundLeft(flight.token))
+    }
+
+    @Test
+    fun `should complete a synchronous background grant without showing fallback`() {
+        val flight =
+            LocalPermissionRequestState()
+                .begin(true, granted.copy(background = false))
+                .confirm()
+                .launched()
+        val result = flight.result(flight.token, granted)
+        assertFalse(result.active)
+        assertNull(result.failure)
+        assertEquals(LocalPermissionStep.Idle, result.step)
+    }
+
+    @Test
+    fun `should ignore foreground departure for other permission launchers`() {
+        val flight =
+            LocalPermissionRequestState().begin(false, granted.copy(local = false)).launched()
+        assertEquals(flight, flight.foregroundLeft(flight.token))
     }
 
     @Test

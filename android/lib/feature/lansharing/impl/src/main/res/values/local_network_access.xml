@@ -75,14 +75,18 @@
     <string name="local_access_fine_help">Android needs precise location access to read Wi-Fi
     names. %s uses the name only to check your rules.</string>
     <string name="local_access_background_title">Allow location all the time?</string>
-    <string name="local_access_background_help">Choose Allow all the time so Wi-Fi rules can be
-    checked while %s is in the background.</string>
-    <string name="local_access_continue">Continue</string>
+    <string name="local_access_background_help">On the location permission page, choose Allow all
+    the time so Wi-Fi rules can be checked while %s is in the background.</string>
+    <string name="local_access_background_dialog_help">Choose Allow all the time in the Android
+    permission dialog so Wi-Fi rules can be checked while %s is in the background.</string>
+    <string name="local_access_background_settings_help">In App info, open Permissions → Location →
+    Allow all the time so Wi-Fi rules can be checked while %s is in the background.</string>
+    <string name="local_access_location_permission">Open location permission</string>
     <string name="local_access_request_location">Request location</string>
     <string name="local_access_approximate">Choose precise location so Android can share Wi-Fi
     names.</string>
     <string name="local_access_settings_unavailable">Could not open Android settings. Try
     again.</string>
-    <string name="local_access_app_settings">Open app settings</string>
+    <string name="local_access_app_settings">Open App info</string>
     <string name="local_access_location_settings">Open Location settings</string>
 </resources>

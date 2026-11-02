@@ -188,23 +188,65 @@ class LocalNetworkEditorInstrumentedTest {
         instrumentation.waitForIdleSync()
     }
 
-    /**
-     * Return through the owned Android settings flow, never by counting asynchronous Back presses.
-     */
-    internal fun returnFromSystemSettings() {
-        repeat(6) {
-            instrumentation.uiAutomation.waitForIdle(500, 5_000)
-            val owner = instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString()
-            if (owner == target.packageName) {
+    private fun mainActivityResumed(): Boolean {
+        var resumed = false
+        instrumentation.runOnMainSync {
+            resumed =
+                ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(Stage.RESUMED)
+                    .any { it is MainActivity }
+        }
+        return resumed
+    }
+
+    /** One Back per acknowledged system window; resumption forbids further navigation. */
+    internal fun returnFromSystemSettings(step: String) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
+        var departingWindow: Int? = null
+        fun record(action: String, window: Int) {
+            instrumentation.sendStatus(
+                0,
+                Bundle().apply { putString("krtek_settings_return", "$step:$action:$window") },
+            )
+        }
+        while (System.nanoTime() < deadline) {
+            val root = instrumentation.uiAutomation.rootInActiveWindow
+            val owner = root?.packageName?.toString()
+            val resumed = mainActivityResumed()
+            if (resumed && owner == target.packageName) {
                 compose.waitForIdle()
+                assertTrue(
+                    compose
+                        .onAllNodes(
+                            hasTestTag("local_network_sharing_screen_test_tag"),
+                            useUnmergedTree = true,
+                        )
+                        .fetchSemanticsNodes()
+                        .size == 1,
+                    "System return left the original Local network sharing route",
+                )
+                departingWindow?.let { record("ack", it) }
+                record("local-screen", checkNotNull(root).windowId)
                 return
             }
-            check(owner == "com.android.settings" || owner == "com.android.permissioncontroller") {
-                "Refuse to navigate an unrelated system window"
+            // Lifecycle and accessibility are independent channels. A stale system root
+            // after MainActivity resumes must never authorize a Back into the app.
+            if (!resumed && root != null && owner != target.packageName) {
+                check(
+                    owner == "com.android.settings" || owner == "com.android.permissioncontroller"
+                ) {
+                    "Refuse to navigate an unrelated system window"
+                }
+                if (root.windowId != departingWindow && root.refresh() && !mainActivityResumed()) {
+                    departingWindow?.let { record("ack", it) }
+                    departingWindow = root.windowId
+                    record("back", root.windowId)
+                    back()
+                }
             }
-            back()
+            Thread.sleep(25)
         }
-        error("Owned app did not resume after returning from system settings")
+        error("System return transition was not acknowledged on the original route")
     }
 
     /** Reuses the proven async MainActivity environment for additional shipped-UI outcomes. */
