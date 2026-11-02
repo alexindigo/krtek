@@ -186,6 +186,7 @@ mod tests {
     }
     fn observation() -> NetworkObservation {
         NetworkObservation {
+            sequence: 0,
             permissions: Some(PermissionState {
                 local_network: true,
                 precise_location: true,
