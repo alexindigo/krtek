@@ -10,6 +10,7 @@ cfg_if! {
         mod imp;
         use self::imp::{AndroidTunProvider, VpnServiceTun};
         pub use self::imp::Error;
+        pub use self::imp::local_network;
 
         pub type Tun = VpnServiceTun;
         pub type TunProvider = AndroidTunProvider;

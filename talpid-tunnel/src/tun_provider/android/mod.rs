@@ -1,4 +1,6 @@
 use super::TunConfig;
+
+pub mod local_network;
 use ipnetwork::{IpNetwork, Ipv4Network};
 use jnix::{
     FromJava, IntoJava, JnixEnv,
@@ -117,6 +119,7 @@ impl AndroidTunProvider {
     /// Returns an open tunnel with the current configuration, if a tunnel already exists with the
     /// corresponding VpnTunConfig it returns a cached copy.
     pub fn open_tun(&mut self) -> Result<VpnServiceTun, Error> {
+        self.check_frontend_owner()?;
         let config = VpnServiceConfig::new(self.config.clone());
 
         // i have no idea why this is/isn't safe.
@@ -143,6 +146,7 @@ impl AndroidTunProvider {
 
     /// Returns an open tunnel with the current configuration
     pub fn open_tun_forced(&mut self) -> Result<VpnServiceTun, Error> {
+        self.check_frontend_owner()?;
         let config = VpnServiceConfig::new(self.config.clone());
 
         // i have no idea why this is/isn't safe.
@@ -269,6 +273,23 @@ impl AndroidTunProvider {
             .map_err(Error::AttachJvmToThread)?;
 
         Ok(JnixEnv::from(jni_env))
+    }
+
+    fn check_frontend_owner(&self) -> Result<(), Error> {
+        let (name, signature) = local_network::METHODS[2];
+        if matches!(
+            self.call_method(
+                name,
+                signature,
+                JavaType::Primitive(Primitive::Boolean),
+                &[]
+            )?,
+            JValue::Bool(0)
+        ) {
+            Ok(())
+        } else {
+            Err(Error::TunnelDeviceError)
+        }
     }
 }
 

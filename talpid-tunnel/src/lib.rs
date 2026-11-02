@@ -9,6 +9,9 @@ use std::{
 pub mod network_interface;
 
 pub mod tun_provider;
+
+#[cfg(any(target_os = "android", target_os = "linux"))]
+pub mod android_frontend;
 use futures::{
     SinkExt,
     channel::{
