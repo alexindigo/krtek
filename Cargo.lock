@@ -6119,6 +6119,8 @@ version = "0.0.0"
 dependencies = [
  "log",
  "smoltcp",
+ "socket2",
+ "tokio",
 ]
 
 [[package]]

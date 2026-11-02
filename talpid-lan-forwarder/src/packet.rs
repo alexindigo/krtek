@@ -176,7 +176,7 @@ pub fn udp_reply(flow: Flow, payload: &[u8]) -> Result<Vec<u8>, PacketRefusal> {
     Ok(bytes)
 }
 
-fn ip_packet(
+pub(crate) fn ip_packet(
     source: SocketAddr,
     destination: SocketAddr,
     protocol: IpProtocol,
