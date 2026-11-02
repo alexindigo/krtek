@@ -6114,6 +6114,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "talpid-lan-forwarder"
+version = "0.0.0"
+dependencies = [
+ "log",
+ "smoltcp",
+]
+
+[[package]]
 name = "talpid-macos"
 version = "0.0.0"
 dependencies = [

@@ -37,6 +37,7 @@ members = [
   "talpid-dns",
   "talpid-error",
   "talpid-future",
+  "talpid-lan-forwarder",
   "talpid-macos",
   "talpid-net",
   "talpid-netstack",

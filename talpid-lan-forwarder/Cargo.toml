@@ -1,0 +1,20 @@
+[package]
+name = "talpid-lan-forwarder"
+edition.workspace = true
+rust-version.workspace = true
+description = "Bounded local TCP and UDP delivery through an injected socket authority"
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+log = { workspace = true }
+smoltcp = { version = "0.13", default-features = false, features = [
+  "medium-ip",
+  "proto-ipv4",
+  "proto-ipv6",
+  "socket-tcp",
+  "std",
+] }
+
+[lints]
+workspace = true
