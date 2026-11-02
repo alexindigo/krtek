@@ -1,5 +1,6 @@
 package net.mullvad.talpid
 
+import android.net.Network
 import java.lang.reflect.Modifier
 import java.net.InetAddress
 import kotlin.test.assertEquals
@@ -308,6 +309,8 @@ class LocalNetworkWatcherTest {
         var fail = false
 
         override fun readAccess(): LocalIdentityAccess = access
+
+        override fun network(handle: Long): Network? = null
 
         override fun start(
             includeLocation: Boolean,

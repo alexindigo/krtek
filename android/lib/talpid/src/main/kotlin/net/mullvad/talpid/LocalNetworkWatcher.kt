@@ -1,5 +1,6 @@
 package net.mullvad.talpid
 
+import android.net.Network
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +26,8 @@ internal class LocalNetworkWatcher(
     private var registration = 0L
     private var epoch = 0L
     private var sequence = 0L
+    private var pending = false
+    private var published: LocalNetworkSnapshot? = null
     private var worker: Job? = null
 
     fun start(): Unit =
@@ -92,8 +95,39 @@ internal class LocalNetworkWatcher(
     }
 
     private fun changed() {
+        pending = true
         changes.trySend(Unit)
     }
+
+    /** The decision and the framework protect/bind action share this one lock hold. */
+    fun withCurrentNetwork(
+        handle: Long,
+        sequence: Long,
+        needsWifiName: Boolean,
+        action: (Network) -> Int,
+    ): Int =
+        synchronized(lock) {
+            if (!running || registration == 0L) return LocalSocketPreparation.INACTIVE
+            val record = published
+            if (pending || sequence != this.sequence || record == null)
+                return LocalSocketPreparation.STALE
+            val network =
+                record.networks.singleOrNull { it.networkHandle == handle && !it.blocked }
+                    ?: return LocalSocketPreparation.STALE
+            try {
+                if (source.readAccess() != access) {
+                    changed()
+                    return LocalSocketPreparation.STALE
+                }
+                if (!access.local || (needsWifiName && network.ssidHex == null))
+                    return LocalSocketPreparation.STALE
+                val current = source.network(handle) ?: return LocalSocketPreparation.STALE
+                action(current)
+            } catch (_: RuntimeException) {
+                changed()
+                LocalSocketPreparation.STALE
+            }
+        }
 
     private fun unavailable() {
         running = false
@@ -108,6 +142,8 @@ internal class LocalNetworkWatcher(
             synchronized(lock) {
                 if (!running) return
                 val snapshot = observation()
+                published = snapshot
+                pending = false
                 if (registration == 0L) null else registration to snapshot
             }
         delivery?.let { publish(it.first, it.second) }
@@ -159,6 +195,8 @@ internal class LocalNetworkWatcher(
 
 internal interface LocalNetworkSource {
     fun readAccess(): LocalIdentityAccess
+
+    fun network(handle: Long): Network?
 
     fun start(
         includeLocation: Boolean,
