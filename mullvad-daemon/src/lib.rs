@@ -14,6 +14,7 @@ mod dns;
 pub mod exception_logging;
 mod geoip;
 mod leak_checker;
+mod local_delivery;
 mod local_network;
 pub mod logging;
 #[cfg(target_os = "macos")]
@@ -72,7 +73,7 @@ use mullvad_types::{
     },
     relay_list::RelayList,
     settings::{DnsOptions, Settings, SettingsKeyList, local_network_access::LocalNetworkAccess},
-    states::{Secured, TargetState, TargetStateStrict, TunnelState},
+    states::{TargetState, TunnelState},
     version::AppVersionInfo,
     wireguard::{PublicKey, QuantumResistantState, RotationInterval},
 };
@@ -797,6 +798,12 @@ impl Daemon {
             Some(config.android_context.local_network.clone()),
             #[cfg(not(target_os = "android"))]
             None,
+            #[cfg(target_os = "android")]
+            Arc::new(
+                talpid_tunnel::tun_provider::local_network::LocalNetworkPlatform::new(
+                    config.android_context.clone(),
+                ),
+            ),
         );
 
         #[cfg(target_os = "android")]
@@ -1146,17 +1153,21 @@ impl Daemon {
     /// Consume the `Daemon` and run the main event loop. Blocks until an error happens or a
     /// shutdown event is received.
     pub async fn run(mut self) -> Result<(), Error> {
-        self.handle_initial_target_state();
+        self.update_local_network_status().await;
+        self.handle_initial_target_state().await;
         self.handle_events().await;
+        if let Err(error) = self.local_network.shutdown().await {
+            log::error!("Local frontend shutdown retains a release obligation: {error}");
+        }
         self.disconnect_tunnel_and_wait().await;
         self.finalize().await;
         Ok(())
     }
 
-    fn handle_initial_target_state(&mut self) {
+    async fn handle_initial_target_state(&mut self) {
         match self.target_state.to_strict() {
-            either::Either::Right(state) => {
-                self.send_tunnel_command(Self::secured_state_to_tunnel_command(state));
+            either::Either::Right(_) => {
+                self.send_connect().await;
             }
             either::Either::Left(_) => {
                 // Fetching GeoIpLocation is automatically done when connecting.
@@ -1165,11 +1176,6 @@ impl Daemon {
                 self.fetch_am_i_mullvad()
             }
         }
-    }
-
-    /// Map the secured target state to a tunnel command
-    const fn secured_state_to_tunnel_command(_: TargetStateStrict<Secured>) -> TunnelCommand {
-        TunnelCommand::Connect
     }
 
     /// Begin disconnecting and wait for the tunnel state machine to be disconnected
@@ -1225,21 +1231,55 @@ impl Daemon {
 
     /// Handle internal daemon events until a shutdown event is received
     async fn handle_events(&mut self) {
+        enum Wake {
+            Event(Option<InternalDaemonEvent>),
+            Feed,
+            Owner,
+        }
         loop {
-            tokio::select! {
-                event = self.rx.next() => {
-                    let Some(event) = event else { break; };
-                    if self.handle_event(event).await { break; }
+            let wake = {
+                let (feed, owner) = self.local_network.notifications();
+                tokio::select! {
+                    event = self.rx.next() => Wake::Event(event),
+                    _ = feed => Wake::Feed,
+                    _ = owner => Wake::Owner,
                 }
-                _ = self.local_network.changed() => self.update_local_network_status(),
+            };
+            match wake {
+                Wake::Event(event) => {
+                    let Some(event) = event else {
+                        break;
+                    };
+                    if self.handle_event(event).await {
+                        break;
+                    }
+                }
+                Wake::Feed => self.update_local_network_status().await,
+                Wake::Owner => {
+                    let status = self.local_network.owner_changed(
+                        &self.settings.local_network_access,
+                        *self.target_state,
+                        self.tunnel_state.is_disconnected(),
+                    );
+                    if let Some(status) = status {
+                        self.management_interface
+                            .notifier()
+                            .notify_local_network_status(status);
+                    }
+                }
             }
         }
     }
 
-    fn update_local_network_status(&mut self) {
+    async fn update_local_network_status(&mut self) {
         if let Some(status) = self
             .local_network
-            .update(&self.settings.local_network_access)
+            .update(
+                &self.settings.local_network_access,
+                *self.target_state,
+                self.tunnel_state.is_disconnected(),
+            )
+            .await
         {
             self.management_interface
                 .notifier()
@@ -1281,7 +1321,7 @@ impl Daemon {
             LocationEvent(location_data) => self.handle_location_event(location_data),
             SettingsChanged => {
                 self.update_feature_indicators_on_settings_changed();
-                self.update_local_network_status();
+                self.update_local_network_status().await;
             }
             #[cfg(any(target_os = "windows", target_os = "android", target_os = "macos"))]
             ExcludedPathsEvent(update, tx) => self.handle_new_excluded_paths(update, tx).await,
@@ -1397,6 +1437,7 @@ impl Daemon {
             .notifier()
             .notify_new_state(tunnel_state);
         self.fetch_am_i_mullvad();
+        self.update_local_network_status().await;
     }
 
     /// Get the geographical location from am.i.mullvad.net. When it arrives,
@@ -1586,7 +1627,7 @@ impl Daemon {
                 self.on_set_local_network_access(tx, policy, expected).await
             }
             GetLocalNetworkStatus(tx) => {
-                self.update_local_network_status();
+                // Reads never authorize a failed-owner restart or release retry.
                 Self::oneshot_send(
                     tx,
                     self.local_network.status().clone(),
@@ -3616,13 +3657,16 @@ impl Daemon {
     /// progress towards that state.
     /// Returns a bool representing whether a state change was initiated.
     async fn set_target_state(&mut self, new_state: TargetState) -> bool {
-        if new_state != *self.target_state || self.tunnel_state.is_in_error_state() {
+        if new_state != *self.target_state
+            || self.tunnel_state.is_in_error_state()
+            || (new_state == TargetState::Secured && self.local_network.has_owner())
+        {
             log::debug!("Target state {:?} => {:?}", *self.target_state, new_state);
 
             self.target_state.set(new_state).await;
 
             match *self.target_state {
-                TargetState::Secured => self.connect_tunnel(),
+                TargetState::Secured => self.send_connect().await,
                 TargetState::Unsecured => self.disconnect_tunnel(),
             }
             true
@@ -3631,7 +3675,28 @@ impl Daemon {
         }
     }
 
+    async fn send_connect(&mut self) {
+        if let Err(error) = self.local_network.stop().await {
+            log::error!("Connect withheld until local frontend release completes: {error}");
+            return;
+        }
+        self.update_local_network_status().await;
+        self.connect_tunnel();
+    }
+
+    #[track_caller]
     fn connect_tunnel(&mut self) {
+        if self.local_network.has_owner() {
+            log::error!(
+                "Connect refused with retained local frontend owner at {}",
+                std::panic::Location::caller()
+            );
+            debug_assert!(
+                !self.local_network.has_owner(),
+                "Connect before frontend release"
+            );
+            return;
+        }
         self.send_tunnel_command(TunnelCommand::Connect);
     }
 

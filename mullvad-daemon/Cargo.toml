@@ -94,10 +94,12 @@ mullvad-version = { path = "../mullvad-version" }
 rand = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["std"] }
+socket2 = { workspace = true }
 talpid-core = { path = "../talpid-core" }
 talpid-dns = { path = "../talpid-dns" }
 talpid-error.workspace = true
 talpid-future = { path = "../talpid-future" }
+talpid-lan-forwarder = { path = "../talpid-lan-forwarder" }
 talpid-platform-metadata = { path = "../talpid-platform-metadata" }
 talpid-routing = { path = "../talpid-routing" }
 talpid-time = { path = "../talpid-time" }
@@ -131,6 +133,7 @@ async-trait = { workspace = true }
 ctrlc = { workspace = true }
 hickory-resolver = { workspace = true }
 paranoid-android = "0.2.2"
+talpid-tunnel = { path = "../talpid-tunnel" }
 
 [target.'cfg(target_os="linux")'.dependencies]
 ctrlc = { workspace = true, features = ["termination"] }
