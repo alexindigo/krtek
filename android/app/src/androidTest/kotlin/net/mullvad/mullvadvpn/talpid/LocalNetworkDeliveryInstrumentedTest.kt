@@ -31,12 +31,16 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import net.mullvad.mullvadvpn.app.MullvadApplication
+import net.mullvad.mullvadvpn.lib.model.ConnectedWifi
 import net.mullvad.mullvadvpn.lib.model.DisconnectReason
 import net.mullvad.mullvadvpn.lib.model.ForwardingAvailability
+import net.mullvad.mullvadvpn.lib.model.LocalBypassRule
+import net.mullvad.mullvadvpn.lib.model.LocalCidr
 import net.mullvad.mullvadvpn.lib.model.LocalNetworkAccess
 import net.mullvad.mullvadvpn.lib.model.LocalNetworkStatus
 import net.mullvad.mullvadvpn.lib.model.LocalRuleInactiveReason
 import net.mullvad.mullvadvpn.lib.model.LocalRuleState
+import net.mullvad.mullvadvpn.lib.model.SsidIdentity
 import net.mullvad.mullvadvpn.lib.model.TunnelState
 import net.mullvad.mullvadvpn.lib.repository.ConnectionProxy
 import net.mullvad.mullvadvpn.lib.repository.SettingsRepository
@@ -52,6 +56,8 @@ class LocalNetworkDeliveryInstrumentedTest {
     private val args = InstrumentationRegistry.getArguments()
     private val peer
         get() = args.getString("krtek_peer", "10.0.2.2")
+
+    private var probeIndex = 0
 
     private fun report(key: String, value: Any) {
         instrumentation.sendStatus(0, Bundle().apply { putString("krtek_$key", value.toString()) })
@@ -203,6 +209,7 @@ class LocalNetworkDeliveryInstrumentedTest {
         connection: ConnectionProxy,
         forwarding: ForwardingAvailability,
         ruleState: LocalRuleState?,
+        expectedTunnel: String = args.getString("krtek_expect_tunnel", "Disconnected"),
     ): LocalNetworkStatus = runBlocking {
         val policy = checkNotNull(repository.settingsUpdates.value).localNetworkAccess
         val peerRuleIds =
@@ -210,7 +217,6 @@ class LocalNetworkDeliveryInstrumentedTest {
                 .filter { it.enabled && it.cidrs.any { cidr -> cidr.toString() == "$peer/32" } }
                 .map { it.id }
         if (ruleState != null) assertTrue(peerRuleIds.isNotEmpty(), "Expected enabled peer rule")
-        val expectedTunnel = args.getString("krtek_expect_tunnel", "Disconnected")
         val status =
             withTimeout(30_000) {
                 combine(connection.tunnelState, repository.localNetworkStatus.filterNotNull()) {
@@ -258,6 +264,212 @@ class LocalNetworkDeliveryInstrumentedTest {
     }
 
     @Test fun consumerRunsAsAnotherApp() = withConsumer(null) { _, _, _ -> }
+
+    private fun peerPolicy(
+        enabled: Boolean = true,
+        ruleEnabled: Boolean = true,
+        cidr: String = "$peer/32",
+        wifi: List<SsidIdentity> = emptyList(),
+    ) =
+        LocalNetworkAccess(
+            enabled,
+            listOf(
+                LocalBypassRule(
+                    UUID.randomUUID(),
+                    "Krtek delivery fixture",
+                    ruleEnabled,
+                    listOf(checkNotNull(LocalCidr.parse(cidr).getOrNull())),
+                    wifi,
+                )
+            ),
+        )
+
+    private fun withPolicy(
+        repository: SettingsRepository,
+        policy: LocalNetworkAccess,
+        block: () -> Unit,
+    ) = runBlocking {
+        val original = checkNotNull(repository.settingsUpdates.value).localNetworkAccess
+        try {
+            assertTrue(repository.setLocalNetworkAccess(policy, original).isRight())
+            withTimeout(10_000) {
+                repository.settingsUpdates.first { it?.localNetworkAccess == policy }
+            }
+            block()
+        } finally {
+            val current = checkNotNull(repository.settingsUpdates.value).localNetworkAccess
+            check(current == original || current == policy) { "Concurrent configuration retained" }
+            if (current != original)
+                assertTrue(repository.setLocalNetworkAccess(original, current).isRight())
+            withTimeout(10_000) {
+                repository.settingsUpdates.first { it?.localNetworkAccess == original }
+            }
+            report("policy_restored", true)
+        }
+    }
+
+    private fun deliveryCase(
+        policy: LocalNetworkAccess,
+        forwarding: ForwardingAvailability,
+        expect: String,
+        ruleState: LocalRuleState? = null,
+        transports: List<String> = listOf("tcp", "udp"),
+    ) =
+        withConsumer(null) { consumer, repository, connection ->
+            withPolicy(repository, policy) {
+                awaitState(repository, connection, forwarding, ruleState)
+                transports.forEach { transport ->
+                    consumer.identity()
+                    appliedConfiguration(policy, forwarding)
+                    probeSocket(consumer, transport, expect)
+                }
+            }
+        }
+
+    @Test
+    fun approvedPeerAnswersTcpAndUdpWhileDisconnected() =
+        deliveryCase(
+            peerPolicy(),
+            ForwardingAvailability.Active,
+            "reply",
+            LocalRuleState.Forwarding,
+        )
+
+    @Test
+    fun unapprovedAddressStaysBlocked() =
+        deliveryCase(
+            peerPolicy(cidr = args.getString("krtek_unapproved_rule", "10.0.2.99/32")),
+            ForwardingAvailability.Active,
+            "blocked",
+        )
+
+    @Test
+    fun disabledRuleStaysBlocked() =
+        deliveryCase(peerPolicy(ruleEnabled = false), ForwardingAvailability.Off, "blocked")
+
+    @Test
+    fun policyOffStaysBlocked() =
+        deliveryCase(peerPolicy(enabled = false), ForwardingAvailability.Off, "blocked")
+
+    @Test
+    fun publicAddressStaysBlocked() =
+        deliveryCase(
+            peerPolicy(),
+            ForwardingAvailability.Active,
+            "blocked",
+            transports = listOf("tcp-connect"),
+        )
+
+    @Test
+    fun announcedRuleWithUnmetConditionsIsDropped() =
+        withConsumer(null) { consumer, repository, connection ->
+            // Revocation kills this process. The guest runner owns staging and exact
+            // restoration, with separate invocations around revoke and re-grant.
+            val stage = args.getString("krtek_location_stage", "granted")
+            check(stage in setOf("granted", "denied", "regranted"))
+            val granted = stage != "denied"
+            assertEquals("3", shell("settings get secure location_mode"))
+            listOf(
+                    "android.permission.ACCESS_COARSE_LOCATION",
+                    "android.permission.ACCESS_FINE_LOCATION",
+                    "android.permission.ACCESS_BACKGROUND_LOCATION",
+                )
+                .forEach { permission ->
+                    val observed = permissionState(target.packageName, permission)
+                    report("location_$permission", observed)
+                    assertEquals(
+                        granted,
+                        observed.first,
+                        "Location permissions must be staged externally",
+                    )
+                }
+            report("location_stage", stage)
+            val synthetic = checkNotNull(SsidIdentity.fromUserText("krtek-m3-different-wifi"))
+            if (granted) {
+                val known = runBlocking {
+                    withTimeout(30_000) {
+                            repository.localNetworkStatus.filterNotNull().first {
+                                it.currentWifi is ConnectedWifi.Known
+                            }
+                        }
+                        .currentWifi as ConnectedWifi.Known
+                }
+                assertNotEquals(known.ssid, synthetic)
+                report("location_wifi", "Known")
+            }
+            val policy = peerPolicy(wifi = listOf(synthetic))
+            withPolicy(repository, policy) {
+                awaitState(
+                    repository,
+                    connection,
+                    ForwardingAvailability.Active,
+                    LocalRuleState.Inactive(
+                        if (granted) LocalRuleInactiveReason.DifferentWifi
+                        else LocalRuleInactiveReason.LocationPermissionMissing
+                    ),
+                )
+                listOf("tcp", "udp").forEach { transport ->
+                    consumer.identity()
+                    appliedConfiguration(policy, ForwardingAvailability.Active)
+                    probeSocket(consumer, transport, "blocked")
+                }
+            }
+        }
+
+    @Test
+    fun connectPausesAndDisconnectResumes() =
+        withConsumer(null) { consumer, repository, connection ->
+            val policy = peerPolicy()
+            withPolicy(repository, policy) {
+                try {
+                    awaitState(
+                        repository,
+                        connection,
+                        ForwardingAvailability.Active,
+                        LocalRuleState.Forwarding,
+                    )
+                    appliedConfiguration(policy, ForwardingAvailability.Active)
+                    runBlocking {
+                        assertTrue(connection.connect().isRight())
+                        withTimeout(60_000) {
+                            connection.tunnelState.first { it is TunnelState.Connected }
+                        }
+                    }
+                    report("cycle_tunnel", "Connected")
+                    awaitState(
+                        repository,
+                        connection,
+                        ForwardingAvailability.PausedWhileConnected,
+                        null,
+                        "Connected",
+                    )
+                    appliedConfiguration(policy, ForwardingAvailability.PausedWhileConnected)
+                } finally {
+                    runBlocking {
+                        assertTrue(
+                            connection
+                                .disconnect(DisconnectReason.USER_INITIATED_DISCONNECT_BUTTON)
+                                .isRight()
+                        )
+                        withTimeout(30_000) {
+                            connection.tunnelState.first { it is TunnelState.Disconnected }
+                        }
+                    }
+                    report("cycle_tunnel", "Disconnected")
+                }
+                awaitState(
+                    repository,
+                    connection,
+                    ForwardingAvailability.Active,
+                    LocalRuleState.Forwarding,
+                )
+                listOf("tcp", "udp").forEach { transport ->
+                    consumer.identity()
+                    appliedConfiguration(policy, ForwardingAvailability.Active)
+                    probeSocket(consumer, transport, "reply")
+                }
+            }
+        }
 
     @Test
     fun consumerProbe() {
@@ -325,55 +537,59 @@ class LocalNetworkDeliveryInstrumentedTest {
                 result.getString("error_class")?.let { report("lookup_error_class", it) }
                 report("lookup_elapsed_ms", result.getLong("elapsed_ms"))
             } else {
-                val nonce = "krtek-m3-" + UUID.randomUUID()
-                if (transport != "tcp-connect")
-                    report(
-                        if (expect == "reply") "expect_hit_0" else "expect_none_0",
-                        "$transport:$nonce",
-                    )
-                val destination =
-                    if (transport == "tcp-connect") args.getString("krtek_public", "1.1.1.1")
-                    else peer
-                val port =
-                    if (transport == "tcp-connect") 443
-                    else
-                        args
-                            .getString(
-                                if (transport == "tcp") "krtek_tcp_port" else "krtek_udp_port",
-                                if (transport == "tcp") "18080" else "18081",
-                            )
-                            .toInt()
-                val result =
-                    consumer.request(
-                        Bundle().apply {
-                            putString("transport", transport)
-                            putString("destination", destination)
-                            putInt("port", port)
-                            putString("nonce", nonce)
-                            putInt("timeout_ms", 5_000)
-                        }
-                    )
-                report("probe_transport", checkNotNull(transport))
-                report("probe_outcome", checkNotNull(result.getString("outcome")))
-                result.getString("error_class")?.let { report("probe_error_class", it) }
-                result.getString("socket_report")?.let { report("socket_report", it) }
-                assertEquals(
-                    when (expect) {
-                        "reply" -> "reply"
-                        "connected" -> "connected"
-                        else -> "failed"
-                    },
-                    result.getString("outcome"),
-                )
-                if (expect == "reply")
-                    assertContentEquals(
-                        nonce.toByteArray(Charsets.US_ASCII),
-                        result.getByteArray("reply"),
-                    )
-                if (expect == "blocked")
-                    assertTrue(checkNotNull(result.getString("error_class")).contains('.'))
+                probeSocket(consumer, checkNotNull(transport), checkNotNull(expect))
             }
         }
+    }
+
+    private fun probeSocket(consumer: Consumer, transport: String, expect: String) {
+        val nonce = "krtek-m3-" + UUID.randomUUID()
+        val index = probeIndex++
+        if (transport != "tcp-connect")
+            report(
+                if (expect == "reply") "expect_hit_$index" else "expect_none_$index",
+                "$transport:$nonce",
+            )
+        val destination =
+            if (transport == "tcp-connect") args.getString("krtek_public", "1.1.1.1") else peer
+        val port =
+            if (transport == "tcp-connect") 443
+            else
+                args
+                    .getString(
+                        if (transport == "tcp") "krtek_tcp_port" else "krtek_udp_port",
+                        if (transport == "tcp") "18080" else "18081",
+                    )
+                    .toInt()
+        val result =
+            consumer.request(
+                Bundle().apply {
+                    putString("transport", transport)
+                    putString("destination", destination)
+                    putInt("port", port)
+                    putString("nonce", nonce)
+                    putInt("timeout_ms", 5_000)
+                }
+            )
+        report("probe_transport", checkNotNull(transport))
+        report("probe_outcome", checkNotNull(result.getString("outcome")))
+        result.getString("error_class")?.let { report("probe_error_class", it) }
+        result.getString("socket_report")?.let { report("socket_report", it) }
+        assertEquals(
+            when (expect) {
+                "reply" -> "reply"
+                "connected" -> "connected"
+                else -> "failed"
+            },
+            result.getString("outcome"),
+        )
+        if (expect == "reply")
+            assertContentEquals(
+                nonce.toByteArray(Charsets.US_ASCII),
+                result.getByteArray("reply"),
+            )
+        if (expect == "blocked")
+            assertTrue(checkNotNull(result.getString("error_class")).contains('.'))
     }
 
     private fun canonicalPrefix(text: String): String =
