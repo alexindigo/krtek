@@ -1,7 +1,7 @@
-use super::TunConfig;
+use super::{SOCKS_PROXIES, TunConfig};
 
 pub mod local_network;
-use ipnetwork::{IpNetwork, Ipv4Network};
+use ipnetwork::IpNetwork;
 use jnix::{
     FromJava, IntoJava, JnixEnv,
     jni::{
@@ -10,7 +10,6 @@ use jnix::{
         signature::{JavaType, Primitive},
     },
 };
-use std::net::Ipv4Addr;
 use std::{
     net::IpAddr,
     os::{
@@ -24,11 +23,6 @@ use talpid_routing::Route;
 use talpid_types::net::ipnetwork_sub::IpNetworkSub;
 use talpid_types::net::{ALLOWED_LAN_MULTICAST_NETS, ALLOWED_LAN_NETS};
 use talpid_types::{android::AndroidContext, android::InetNetwork};
-
-/// Socks5 proxies on Mullvad relays can be connected on the range 10.124.0.0/23 if already
-/// connected to another Mullvad relay.
-const SOCKS_PROXIES: IpNetwork =
-    IpNetwork::V4(Ipv4Network::new_checked(Ipv4Addr::new(10, 124, 0, 0), 23).unwrap());
 
 /// Errors that occur while setting up VpnService tunnel.
 #[derive(Debug, thiserror::Error)]

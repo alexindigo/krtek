@@ -23,6 +23,24 @@ pub struct ManagedTun {
 
 impl ManagedTun {
     pub fn request(broker: AttachmentBroker, config: TunConfig) -> Result<Self, AttachmentError> {
+        #[cfg(target_os = "android")]
+        let config = {
+            // Apply Native's LAN/gateway/DNS/family projection first, then union
+            // enabled local destinations. Do not subtract LAN a second time.
+            let effective = super::VpnServiceConfig::new(config.clone());
+            let mut config = config;
+            config.routes = effective
+                .routes
+                .iter()
+                .map(ipnetwork::IpNetwork::from)
+                .collect();
+            config.routes.extend(broker.local_routes());
+            config.routes.sort();
+            config.routes.dedup();
+            config.allow_lan = false;
+            config.dns_servers = Some(effective.dns_servers);
+            config
+        };
         let request = broker.request_capture(config.clone())?;
         Ok(Self {
             broker,

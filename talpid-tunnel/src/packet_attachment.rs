@@ -63,7 +63,33 @@ struct Configuration {
     id: u64,
     config: TunConfig,
     status: watch::Sender<RequestStatus>,
+    release: watch::Sender<CaptureRelease>,
+    release_changes: watch::Sender<u64>,
     _storage: Arc<dyn RelayBufferReservation>,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct CaptureRelease {
+    transport_joined: bool,
+    handover_joined: bool,
+}
+
+impl Configuration {
+    fn update_release(&self, change: impl FnOnce(&mut CaptureRelease)) {
+        if self.release.send_if_modified(|state| {
+            let before = *state;
+            change(state);
+            before != *state
+        }) {
+            self.release_changes.send_modify(|revision| {
+                *revision = revision.checked_add(1).expect("capture release revision");
+            });
+        }
+    }
+    fn release_ready(&self) -> bool {
+        let state = *self.release.borrow();
+        state.transport_joined && state.handover_joined
+    }
 }
 
 #[derive(Clone)]
@@ -125,6 +151,9 @@ struct State {
     request: Option<Arc<Configuration>>,
     capture: Option<Capture>,
     attempt: Option<Arc<Attempt>>,
+    local_routes: Vec<ipnetwork::IpNetwork>,
+    route_storage: Option<Arc<dyn RelayBufferReservation>>,
+    paused: bool,
 }
 
 impl State {
@@ -172,6 +201,7 @@ impl State {
 struct Inner {
     state: Mutex<State>,
     changes: watch::Sender<BrokerSnapshot>,
+    release_changes: watch::Sender<u64>,
     replies: Notify,
     application: Arc<dyn RelayBufferAllocator>,
     capture: Arc<dyn RelayBufferAllocator>,
@@ -250,12 +280,16 @@ impl AttachmentBroker {
             request: None,
             capture: None,
             attempt: None,
+            local_routes: Vec::new(),
+            route_storage: None,
+            paused: false,
         };
         let changes = watch::channel(state.snapshot()).0;
         Ok(Self {
             inner: Arc::new(Inner {
                 state: Mutex::new(state),
                 changes,
+                release_changes: watch::channel(0).0,
                 replies: Notify::new(),
                 application,
                 capture,
@@ -282,6 +316,45 @@ impl AttachmentBroker {
     }
     pub fn application_buffers(&self) -> Arc<dyn RelayBufferAllocator> {
         self.inner.application.clone()
+    }
+
+    /// Immutable configuration input for the next transport. The daemon changes
+    /// this only after joined teardown; the broker never interprets local policy.
+    pub fn set_local_routes(
+        &self,
+        routes: Vec<ipnetwork::IpNetwork>,
+    ) -> Result<(), AttachmentError> {
+        let storage = self.inner.capture.try_reserve(
+            routes
+                .capacity()
+                .checked_mul(std::mem::size_of::<ipnetwork::IpNetwork>())
+                .and_then(|n| n.checked_add(512))
+                .ok_or(AttachmentError::Full)?,
+        )?;
+        let mut state = self.inner.state.lock().expect("attachment state");
+        if state.closed {
+            return Err(AttachmentError::Closed);
+        }
+        if state.request.is_some() || state.capture.is_some() || state.attempt.is_some() {
+            return Err(AttachmentError::Busy);
+        }
+        state.local_routes = routes;
+        state.route_storage = Some(storage);
+        state.paused = false;
+        Ok(())
+    }
+
+    pub fn local_routes(&self) -> Vec<ipnetwork::IpNetwork> {
+        self.inner
+            .state
+            .lock()
+            .expect("attachment state")
+            .local_routes
+            .clone()
+    }
+
+    pub fn capture_release_changes(&self) -> watch::Receiver<u64> {
+        self.inner.release_changes.subscribe()
     }
 
     pub fn set_mode(&self, mode: AttachmentMode) -> Result<(), AttachmentError> {
@@ -314,6 +387,9 @@ impl AttachmentBroker {
         if state.mode != AttachmentMode::ManagedRequired {
             return Err(AttachmentError::Disabled);
         }
+        if state.paused {
+            return Err(AttachmentError::Closed);
+        }
         if state.request.is_some() {
             return Err(AttachmentError::Busy);
         }
@@ -326,6 +402,12 @@ impl AttachmentBroker {
             id,
             config,
             status: status_tx,
+            release: watch::channel(CaptureRelease {
+                transport_joined: true,
+                handover_joined: true,
+            })
+            .0,
+            release_changes: self.inner.release_changes.clone(),
             _storage: storage,
         });
         state.next_request = id;
@@ -471,6 +553,9 @@ impl AttachmentBroker {
     pub fn acquire(&self, receipt: &CaptureReceipt) -> Result<TransportPair, AttachmentError> {
         let storage = self.inner.capture.try_reserve(CHANNEL_STORAGE)?;
         let mut state = self.inner.state.lock().expect("attachment state");
+        if state.paused {
+            return Err(AttachmentError::OrdinaryUnready);
+        }
         if !receipt.matches(&self.inner, &state) {
             return Err(AttachmentError::CaptureUnready);
         }
@@ -495,6 +580,12 @@ impl AttachmentBroker {
             .and_then(|c| c.owner.as_ref())
             .ok_or(AttachmentError::CaptureUnready)?
             .open_attempt(self.inner.capture.as_ref())?;
+        state
+            .capture
+            .as_ref()
+            .and_then(|capture| capture.config.as_ref())
+            .expect("configured capture")
+            .update_release(|release| release.transport_joined = false);
         let attempt = Arc::new(Attempt {
             id,
             owner,
@@ -543,6 +634,27 @@ impl AttachmentBroker {
         self.inner.publish(&state);
         self.inner.replies.notify_one();
     }
+
+    /// Revoke ordinary output before requesting TSM teardown. Capture/platform
+    /// release remains owned by the retained frontend and its joined stop.
+    pub fn pause_transport(&self) {
+        let mut state = self.inner.state.lock().expect("attachment state");
+        state.paused = true;
+        if let Some(config) = state
+            .capture
+            .as_ref()
+            .and_then(|capture| capture.config.as_ref())
+        {
+            config.update_release(|release| release.handover_joined = false);
+        }
+        if let Some(request) = state.request.take() {
+            request.update_release(|release| release.handover_joined = false);
+            request.status.send_replace(RequestStatus::Cancelled);
+        }
+        state.detach();
+        self.inner.publish(&state);
+        self.inner.replies.notify_one();
+    }
 }
 
 impl CaptureReceipt {
@@ -571,9 +683,37 @@ impl PendingCaptureRequest {
     pub fn config(&self) -> &TunConfig {
         &self.0.config
     }
+    /// The daemon holds this stage before revoking an attempt for a normal TSM
+    /// handover. A transport's own cleanup cannot bypass the actor's joined ack.
+    pub fn defer_release(&self) {
+        self.0
+            .update_release(|release| release.handover_joined = false);
+    }
+    /// Called only at an observed joined TSM boundary, never at Disconnecting.
+    pub fn handover_joined(&self) {
+        self.0.update_release(|release| {
+            release.transport_joined = true;
+            release.handover_joined = true;
+        });
+    }
+    pub fn release_ready(&self) -> bool {
+        self.0.release_ready()
+    }
+    pub async fn wait_release(&self) {
+        let mut changes = self.0.release.subscribe();
+        while !self.0.release_ready() {
+            let _ = changes.changed().await;
+        }
+    }
 }
 
 impl ConfigurationRequest {
+    /// The transport owner calls this only after its device and private control
+    /// tasks have joined. Cancellation/retirement alone never acknowledge it.
+    pub fn transport_joined(&self) {
+        self.request
+            .update_release(|release| release.transport_joined = true);
+    }
     pub async fn configured(&mut self) -> Result<CaptureReceipt, AttachmentError> {
         loop {
             let status = self.status.borrow_and_update().clone();

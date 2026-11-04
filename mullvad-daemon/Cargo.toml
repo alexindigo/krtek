@@ -104,6 +104,7 @@ talpid-netstack = { path = "../talpid-netstack" }
 talpid-platform-metadata = { path = "../talpid-platform-metadata" }
 talpid-routing = { path = "../talpid-routing" }
 talpid-time = { path = "../talpid-time" }
+talpid-tunnel = { path = "../talpid-tunnel" }
 talpid-types = { path = "../talpid-types" }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = [
@@ -134,7 +135,6 @@ async-trait = { workspace = true }
 ctrlc = { workspace = true }
 hickory-resolver = { workspace = true }
 paranoid-android = "0.2.2"
-talpid-tunnel = { path = "../talpid-tunnel" }
 
 [target.'cfg(target_os="linux")'.dependencies]
 ctrlc = { workspace = true, features = ["termination"] }

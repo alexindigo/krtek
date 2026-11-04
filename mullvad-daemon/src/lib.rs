@@ -512,6 +512,9 @@ pub(crate) enum InternalDaemonEvent {
     LocationEvent(LocationEventData),
     /// A generic event for when any settings change.
     SettingsChanged,
+    /// Resume a mode-aware Connect without blocking the current event.
+    #[cfg(target_os = "android")]
+    LocalNetworkReconcile,
     /// The split tunnel paths or state were updated.
     #[cfg(any(target_os = "windows", target_os = "android", target_os = "macos"))]
     ExcludedPathsEvent(ExcludedPathsUpdate, oneshot::Sender<Result<(), Error>>),
@@ -691,6 +694,7 @@ impl<E> DaemonEventSender<E> {
 
 pub struct Daemon {
     local_network: local_network::LocalNetworkRuntime,
+    local_connect: local_network::ConnectContinuation,
     tunnel_state: TunnelState,
     target_state: PersistentTargetState,
     #[cfg(target_os = "linux")]
@@ -998,7 +1002,7 @@ impl Daemon {
             #[cfg(target_os = "android")]
             config.android_context,
             #[cfg(target_os = "android")]
-            None,
+            Some(local_network.broker()),
             #[cfg(target_os = "android")]
             connectivity_listener.clone(),
             #[cfg(target_os = "linux")]
@@ -1099,6 +1103,7 @@ impl Daemon {
 
         let daemon = Daemon {
             local_network,
+            local_connect: local_network::ConnectContinuation::default(),
             tunnel_state: TunnelState::Disconnected {
                 location: None,
                 #[cfg(not(target_os = "android"))]
@@ -1155,21 +1160,23 @@ impl Daemon {
     /// Consume the `Daemon` and run the main event loop. Blocks until an error happens or a
     /// shutdown event is received.
     pub async fn run(mut self) -> Result<(), Error> {
+        self.local_connect = self
+            .local_network
+            .initialize_transport(local_network::TunnelPhase::from(&self.tunnel_state));
+        self.handle_initial_target_state();
         self.update_local_network_status().await;
-        self.handle_initial_target_state().await;
         self.handle_events().await;
-        if let Err(error) = self.local_network.shutdown().await {
-            log::error!("Local frontend shutdown retains a release obligation: {error}");
-        }
+        self.local_network.begin_shutdown();
         self.disconnect_tunnel_and_wait().await;
+        self.finish_local_shutdown().await;
         self.finalize().await;
         Ok(())
     }
 
-    async fn handle_initial_target_state(&mut self) {
+    fn handle_initial_target_state(&mut self) {
         match self.target_state.to_strict() {
             either::Either::Right(_) => {
-                self.send_connect().await;
+                self.send_connect();
             }
             either::Either::Left(_) => {
                 // Fetching GeoIpLocation is automatically done when connecting.
@@ -1182,7 +1189,7 @@ impl Daemon {
 
     /// Begin disconnecting and wait for the tunnel state machine to be disconnected
     async fn disconnect_tunnel_and_wait(&mut self) {
-        if self.tunnel_state.is_disconnected() {
+        if self.tunnel_state.is_disconnected() && self.local_connect.joined() {
             return;
         }
 
@@ -1200,6 +1207,27 @@ impl Daemon {
 
             if self.tunnel_state.is_disconnected() {
                 break;
+            }
+        }
+    }
+
+    async fn finish_local_shutdown(&mut self) {
+        // Failed fallible release is still an owned resource. Keep the daemon
+        // and recovery handle alive; a later external event may retry it. Internal
+        // terminal notifications never create an automatic release retry loop.
+        while let Err(error) = self.local_network.shutdown().await {
+            log::error!("Local frontend shutdown retains a release obligation: {error}");
+            let event = {
+                let (feed, _, _) = self.local_network.notifications();
+                tokio::select! {
+                    event = self.rx.next() => {
+                        match event { Some(event) => Some(event), None => std::future::pending().await }
+                    }
+                    _ = feed => None,
+                }
+            };
+            if let Some(event) = event {
+                self.handle_event(event).await;
             }
         }
     }
@@ -1237,14 +1265,16 @@ impl Daemon {
             Event(Option<InternalDaemonEvent>),
             Feed,
             Owner,
+            Broker,
         }
         loop {
             let wake = {
-                let (feed, owner) = self.local_network.notifications();
+                let (feed, owner, broker) = self.local_network.notifications();
                 tokio::select! {
                     event = self.rx.next() => Wake::Event(event),
                     _ = feed => Wake::Feed,
                     _ = owner => Wake::Owner,
+                    _ = broker => Wake::Broker,
                 }
             };
             match wake {
@@ -1257,11 +1287,12 @@ impl Daemon {
                     }
                 }
                 Wake::Feed => self.update_local_network_status().await,
+                Wake::Broker => self.refresh_local_network_status(false).await,
                 Wake::Owner => {
                     let status = self.local_network.owner_changed(
                         &self.settings.local_network_access,
                         *self.target_state,
-                        self.tunnel_state.is_disconnected(),
+                        local_network::TunnelPhase::from(&self.tunnel_state),
                     );
                     if let Some(status) = status {
                         self.management_interface
@@ -1274,19 +1305,58 @@ impl Daemon {
     }
 
     async fn update_local_network_status(&mut self) {
-        if let Some(status) = self
-            .local_network
-            .update(
-                &self.settings.local_network_access,
-                *self.target_state,
-                self.tunnel_state.is_disconnected(),
-            )
-            .await
-        {
+        self.refresh_local_network_status(true).await;
+    }
+
+    async fn refresh_local_network_status(&mut self, external: bool) {
+        let continued = if external || !self.local_network.failed() {
+            self.continue_local_connect().await
+        } else {
+            false
+        };
+        let phase = local_network::TunnelPhase::from(&self.tunnel_state);
+        let status = if external && continued {
+            self.local_network
+                .update(
+                    &self.settings.local_network_access,
+                    *self.target_state,
+                    phase,
+                )
+                .await
+        } else {
+            self.local_network
+                .internal_update(
+                    &self.settings.local_network_access,
+                    *self.target_state,
+                    phase,
+                )
+                .await
+        };
+        if let Some(status) = status {
             self.management_interface
                 .notifier()
                 .notify_local_network_status(status);
         }
+    }
+
+    async fn continue_local_connect(&mut self) -> bool {
+        match self
+            .local_network
+            .continue_connect(
+                &mut self.local_connect,
+                &self.settings.local_network_access,
+                *self.target_state,
+            )
+            .await
+        {
+            Ok(Some(command)) => self.send_tunnel_command(command),
+            Ok(None) => {}
+            Err(error) => {
+                log::error!("Transport selection withheld until frontend release: {error}");
+                return false;
+            }
+        }
+        true
     }
 
     async fn handle_event(&mut self, event: InternalDaemonEvent) -> bool {
@@ -1325,6 +1395,8 @@ impl Daemon {
                 self.update_feature_indicators_on_settings_changed();
                 self.update_local_network_status().await;
             }
+            #[cfg(target_os = "android")]
+            LocalNetworkReconcile => self.update_local_network_status().await,
             #[cfg(any(target_os = "windows", target_os = "android", target_os = "macos"))]
             ExcludedPathsEvent(update, tx) => self.handle_new_excluded_paths(update, tx).await,
             LeakDetected(leak_info) => {
@@ -1435,6 +1507,10 @@ impl Daemon {
         }
 
         self.tunnel_state = tunnel_state.clone();
+        self.local_network.observe_transport(
+            &mut self.local_connect,
+            local_network::TunnelPhase::from(&self.tunnel_state),
+        );
         self.management_interface
             .notifier()
             .notify_new_state(tunnel_state);
@@ -3668,7 +3744,7 @@ impl Daemon {
             self.target_state.set(new_state).await;
 
             match *self.target_state {
-                TargetState::Secured => self.send_connect().await,
+                TargetState::Secured => self.send_connect(),
                 TargetState::Unsecured => self.disconnect_tunnel(),
             }
             true
@@ -3677,33 +3753,26 @@ impl Daemon {
         }
     }
 
-    async fn send_connect(&mut self) {
-        if let Err(error) = self.local_network.stop().await {
-            log::error!("Connect withheld until local frontend release completes: {error}");
-            return;
-        }
-        self.update_local_network_status().await;
+    fn send_connect(&mut self) {
         self.connect_tunnel();
     }
 
     #[track_caller]
     fn connect_tunnel(&mut self) {
-        if self.local_network.has_owner() {
-            log::error!(
-                "Connect refused with retained local frontend owner at {}",
-                std::panic::Location::caller()
-            );
-            debug_assert!(
-                !self.local_network.has_owner(),
-                "Connect before frontend release"
-            );
-            return;
-        }
+        #[cfg(not(target_os = "android"))]
         self.send_tunnel_command(TunnelCommand::Connect);
+        #[cfg(target_os = "android")]
+        {
+            self.local_connect.connect();
+            let _ = self.tx.send(InternalDaemonEvent::LocalNetworkReconcile);
+        }
     }
 
-    fn disconnect_tunnel(&self) {
-        self.send_tunnel_command(TunnelCommand::Disconnect);
+    fn disconnect_tunnel(&mut self) {
+        let command = self
+            .local_network
+            .request_disconnect(&mut self.local_connect);
+        self.send_tunnel_command(command);
     }
 
     fn reconnect_tunnel(&mut self) {

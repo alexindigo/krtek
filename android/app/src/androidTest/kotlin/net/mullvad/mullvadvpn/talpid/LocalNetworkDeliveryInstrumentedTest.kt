@@ -17,6 +17,7 @@ import android.os.ParcelFileDescriptor
 import android.os.Process
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import java.io.RandomAccessFile
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
@@ -158,10 +159,6 @@ class LocalNetworkDeliveryInstrumentedTest {
                     val forwarding =
                         expectation
                             ?: if (
-                                args.getString("krtek_expect_tunnel", "Disconnected") == "Connected"
-                            )
-                                ForwardingAvailability.PausedWhileConnected
-                            else if (
                                 configured.enabled &&
                                     configured.rules.any { it.enabled && it.cidrs.isNotEmpty() }
                             )
@@ -252,8 +249,9 @@ class LocalNetworkDeliveryInstrumentedTest {
             status.forwarding,
             "Daemon reports forwarding $forwarding while $expectedTunnel",
         )
-        if (expectedTunnel == "Connected")
-            assertEquals(ForwardingAvailability.PausedWhileConnected, forwarding)
+        if (forwarding == ForwardingAvailability.Active) {
+            assertTrue(policy.enabled && policy.rules.any { it.enabled && it.cidrs.isNotEmpty() })
+        }
         if (ruleState != null)
             assertTrue(
                 peerRuleIds.all { id -> status.rules.any { it.id == id && it.state == ruleState } }
@@ -417,7 +415,7 @@ class LocalNetworkDeliveryInstrumentedTest {
         }
 
     @Test
-    fun connectPausesAndDisconnectResumes() =
+    fun connectDeliversAndDisconnectResumes() =
         withConsumer(null) { consumer, repository, connection ->
             val policy = peerPolicy()
             withPolicy(repository, policy) {
@@ -439,11 +437,17 @@ class LocalNetworkDeliveryInstrumentedTest {
                     awaitState(
                         repository,
                         connection,
-                        ForwardingAvailability.PausedWhileConnected,
-                        null,
+                        ForwardingAvailability.Active,
+                        LocalRuleState.Forwarding,
                         "Connected",
                     )
-                    appliedConfiguration(policy, ForwardingAvailability.PausedWhileConnected)
+                    listOf("tcp", "udp").forEach { transport ->
+                        consumer.identity()
+                        appliedConfiguration(policy, ForwardingAvailability.Active, "Connected")
+                        probeSocket(consumer, transport, "reply")
+                    }
+                    probeExit(consumer, "mullvad")
+                    probeIcmp(consumer, "echo")
                 } finally {
                     runBlocking {
                         assertTrue(
@@ -477,7 +481,7 @@ class LocalNetworkDeliveryInstrumentedTest {
         val expect = args.getString("krtek_probe_expect")
         val state = args.getString("krtek_probe_forwarding")
         assumeTrue(transport != null && expect != null && state != null, "Probe arguments required")
-        check(transport in setOf("tcp", "udp", "tcp-connect", "lookup"))
+        check(transport in setOf("tcp", "udp", "tcp-connect", "lookup", "exit-check", "icmp-check"))
         val forwarding = ForwardingAvailability.valueOf(checkNotNull(state))
         check(
             forwarding in
@@ -488,9 +492,13 @@ class LocalNetworkDeliveryInstrumentedTest {
                 )
         )
         check(
-            if (transport == "lookup")
-                expect == "record" && forwarding != ForwardingAvailability.PausedWhileConnected
-            else expect in setOf("reply", "connected", "blocked")
+            when (transport) {
+                "lookup" ->
+                    expect == "record" && forwarding != ForwardingAvailability.PausedWhileConnected
+                "exit-check" -> expect in setOf("mullvad", "direct", "record")
+                "icmp-check" -> expect in setOf("echo", "record", "blocked")
+                else -> expect in setOf("reply", "connected", "blocked")
+            }
         )
         val explicitReason =
             args.getString("krtek_probe_rule_state")?.let {
@@ -509,7 +517,11 @@ class LocalNetworkDeliveryInstrumentedTest {
                 checkNotNull(repository.settingsUpdates.value).localNetworkAccess,
                 forwarding,
             )
-            if (transport == "lookup") {
+            if (transport == "exit-check") {
+                probeExit(consumer, checkNotNull(expect))
+            } else if (transport == "icmp-check") {
+                probeIcmp(consumer, checkNotNull(expect))
+            } else if (transport == "lookup") {
                 val hostname = args.getString("krtek_lookup_host", "example.com")
                 assertEquals("example.com", hostname)
                 val result =
@@ -540,6 +552,82 @@ class LocalNetworkDeliveryInstrumentedTest {
                 probeSocket(consumer, checkNotNull(transport), checkNotNull(expect))
             }
         }
+    }
+
+    private fun probeExit(consumer: Consumer, expect: String) {
+        val result = consumer.request(Bundle().apply { putString("transport", "exit-check") })
+        report("exit_outcome", checkNotNull(result.getString("outcome")))
+        report("exit_elapsed_ms", result.getLong("elapsed_ms"))
+        result.getString("error_kind")?.let { report("exit_error_kind", it) }
+        result.getString("error_class")?.let { report("exit_error_class", it) }
+        assertEquals(
+            "exit-check",
+            result.getString("outcome"),
+            "Exit response, not harness failure",
+        )
+        assertEquals(200, result.getInt("http_status"))
+        assertTrue(result.containsKey("mullvad_exit_ip"))
+        val exit = result.getBoolean("mullvad_exit_ip")
+        val ip = checkNotNull(result.getString("ip"))
+        assertTrue(InetAddresses.isNumericAddress(ip))
+        assertEquals(if (ip.contains(':')) 6 else 4, result.getInt("family"))
+        report("exit_mullvad", exit)
+        report("exit_ip", ip)
+        report("exit_family", result.getInt("family"))
+        if (expect != "record") assertEquals(expect == "mullvad", exit)
+    }
+
+    private fun probeIcmp(consumer: Consumer, expect: String) {
+        val result = consumer.request(Bundle().apply { putString("transport", "icmp-check") })
+        report("icmp_outcome", checkNotNull(result.getString("outcome")))
+        report("icmp_elapsed_ms", result.getLong("elapsed_ms"))
+        result.getString("error_class")?.let { report("icmp_error_class", it) }
+        result.getString("error_reason")?.let { report("icmp_error_reason", it) }
+        assertEquals(
+            "icmp-check",
+            result.getString("outcome"),
+            "Parsed result, not harness failure",
+        )
+        assertEquals("icmp-dgram", result.getString("socket_kind"))
+        assertEquals(2, result.getInt("attempted"))
+        val nonce = checkNotNull(result.getByteArray("request_payload"))
+        assertEquals(32, nonce.size)
+        report("icmp_socket_uid", result.getInt("uid"))
+        report("icmp_socket_kind", checkNotNull(result.getString("socket_kind")))
+        report("icmp_request_payload", nonce.joinToString("") { "%02x".format(it) })
+        val received = result.getInt("received")
+        assertTrue(received in 0..2)
+        assertEquals(received.toLong(), result.getLong("echo_replies"))
+        var verified = 0
+        for (sequence in 1..2) {
+            result.getByteArray("reply_$sequence")?.let { reply ->
+                assertContentEquals(nonce, reply, "Echo must carry this request's nonce")
+                val packet = checkNotNull(result.getByteArray("packet_$sequence"))
+                assertEquals(40, packet.size)
+                assertEquals(0, packet[0].toInt())
+                assertEquals(0, packet[1].toInt())
+                assertEquals(
+                    sequence,
+                    (packet[6].toInt() and 255) * 256 + (packet[7].toInt() and 255),
+                )
+                assertContentEquals(nonce, packet.copyOfRange(8, packet.size))
+                report("icmp_reply_$sequence", reply.joinToString("") { "%02x".format(it) })
+                report("icmp_packet_$sequence", packet.joinToString("") { "%02x".format(it) })
+                verified++
+            }
+            result
+                .getInt("network_errno_$sequence")
+                .takeIf { it != 0 }
+                ?.let { report("icmp_errno_$sequence", it) }
+        }
+        assertEquals(received, verified)
+        report("icmp_attempted", result.getInt("attempted"))
+        report("icmp_transmitted", result.getInt("transmitted"))
+        report("icmp_received", received)
+        assertTrue(result.getInt("transmitted") in 0..2)
+        if (received > 0 || expect == "echo") assertEquals(2, result.getInt("transmitted"))
+        if (expect == "echo") assertTrue(received > 0, "Actual public ICMP echo replies required")
+        if (expect == "blocked") assertEquals(0, received, "Public ICMP must remain blocked")
     }
 
     private fun probeSocket(consumer: Consumer, transport: String, expect: String) {
@@ -615,6 +703,7 @@ class LocalNetworkDeliveryInstrumentedTest {
     private fun appliedConfiguration(
         policy: LocalNetworkAccess,
         forwarding: ForwardingAvailability,
+        expectedTunnel: String = args.getString("krtek_expect_tunnel", "Disconnected"),
     ) = runBlocking {
         val expected =
             policy.rules
@@ -649,7 +738,7 @@ class LocalNetworkDeliveryInstrumentedTest {
                         .toList()
                 val agent = agents.singleOrNull()
                 val active = vpn.contains("Active vpn type: 1")
-                if (forwarding == ForwardingAvailability.Off) {
+                if (forwarding == ForwardingAvailability.Off && expectedTunnel == "Disconnected") {
                     if (vpn.contains("Active vpn type: -1") && agents.isEmpty()) {
                         report("frontend", "absent")
                         return@withTimeout
@@ -665,12 +754,6 @@ class LocalNetworkDeliveryInstrumentedTest {
                     val bookkeeping =
                         setOf(canonicalPrefix("192.0.2.2/32"), canonicalPrefix("2001:db8::2/128"))
                     val frontend = addresses == bookkeeping
-                    if (forwarding == ForwardingAvailability.PausedWhileConnected) {
-                        assertTrue(!frontend, "Upstream tunnel, not local frontend, must own VPN")
-                        report("frontend", "absent-upstream-tunnel")
-                        report("vpn_config", agent)
-                        return@withTimeout
-                    }
                     val routeText = checkNotNull(delimitedField(agent, "Routes: [", ']'))
                     val dns = checkNotNull(delimitedField(agent, "DnsAddresses: [", ']')).trim()
                     val allRoutes =
@@ -685,6 +768,30 @@ class LocalNetworkDeliveryInstrumentedTest {
                         delimitedField(agent, "network{", '}')?.takeIf { value ->
                             value.isNotEmpty() && value.all { it in '0'..'9' }
                         }
+                    if (expectedTunnel == "Connected" && iface != null && netId != null) {
+                        assertTrue(!frontend, "Connected capture must use assigned addresses")
+                        assertTrue(addresses.isNotEmpty() && dns.isNotEmpty())
+                        val mtu = checkNotNull(tokenField(agent, "MTU: ")).toInt()
+                        assertTrue(mtu >= 1280)
+                        if (forwarding == ForwardingAvailability.Active) {
+                            assertTrue(policy.enabled && expected.isNotEmpty())
+                            assertTrue(allRoutes.containsAll(expected))
+                            captureReceipt(iface, netId, allRoutes, mtu)
+                            report("frontend", "present-managed")
+                        } else {
+                            assertEquals(ForwardingAvailability.Off, forwarding)
+                            assertTrue(expected.isEmpty())
+                            report("frontend", "native")
+                        }
+                        report("frontend_interface", iface)
+                        report("frontend_net_id", netId)
+                        report("frontend_routes", allRoutes.sorted().joinToString(","))
+                        report("frontend_addresses", addresses.sorted().joinToString(","))
+                        report("frontend_dns", dns)
+                        report("frontend_mtu", mtu)
+                        report("vpn_config", agent)
+                        return@withTimeout
+                    }
                     if (
                         frontend &&
                             routes == expected &&
@@ -709,6 +816,41 @@ class LocalNetworkDeliveryInstrumentedTest {
                 delay(500)
             }
         }
+    }
+
+    private fun captureReceipt(iface: String, netId: String, routes: Set<String>, mtu: Int) {
+        val tail =
+            RandomAccessFile(File(target.filesDir, "daemon.log"), "r").use { log ->
+                val size = minOf(log.length(), 256 * 1024L).toInt()
+                log.seek(log.length() - size)
+                ByteArray(size).also { log.readFully(it) }.toString(Charsets.UTF_8)
+            }
+        val line =
+            tail.lineSequence().last {
+                (it.contains("capture-ready ") || it.contains("capture-lost ")) &&
+                    it.contains(" network=$netId interface=$iface ")
+            }
+        assertTrue(line.contains("capture-ready "), "Current capture must not have been lost")
+        val ready = line.substringAfter("capture-ready ")
+        val generation =
+            checkNotNull(tokenField(ready, "generation: ") ?: tokenField(ready, "generation="))
+        val handle = checkNotNull(tokenField(ready, "handle="))
+        assertTrue(generation.toULong() > 0uL && handle.toULong() > 0uL)
+        assertTrue(ready.contains("owner_uid=Some(${target.applicationInfo.uid})"))
+        assertTrue(ready.contains("mtu=Some($mtu)"))
+        val requested =
+            ready.substringAfter("requested_routes=").substringBefore(" observed_routes=")
+        val observed = ready.substringAfter("observed_routes=").substringBefore(" api=")
+        assertEquals(requested, observed, "Exact pushed route receipt, never a superset")
+        val prefixes =
+            Regex("""CapturePrefix \{ address: ([^,]+), prefix_length: ([0-9]+) \}""")
+                .findAll(observed)
+                .map { canonicalPrefix("${it.groupValues[1]}/${it.groupValues[2]}") }
+                .toSet()
+        assertEquals(routes, prefixes, "Capture-owned receipt must match current Android routes")
+        report("capture_generation", generation)
+        report("capture_handle", handle)
+        report("capture_receipt", ready)
     }
 
     private inner class Consumer : AutoCloseable {

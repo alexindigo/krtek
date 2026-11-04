@@ -213,6 +213,7 @@ async fn receipt_waits_for_current_fd_bound_observation_and_loss_retires_before_
     bounded(state.wait_for(|s| *s == FrontendState::Failed))
         .await
         .unwrap();
+    request.transport_joined();
     owner.stop().await.unwrap();
     assert!(bounded(receive(&peer)).await.is_empty());
 }
@@ -288,6 +289,8 @@ async fn local_and_raw_consumers_share_capture_without_denied_local_fallback() {
             .is_err()
     );
     assert!(hits.try_recv().is_err());
+    transport.control.detach();
+    request.transport_joined();
     owner.stop().await.unwrap();
     echo.abort();
     tcp_server.abort();
@@ -349,6 +352,7 @@ async fn raw_fatal_sink_joins_physical_work_and_retains_failed_release() {
     bounded(state.wait_for(|s| *s == FrontendState::Failed))
         .await
         .unwrap();
+    request.transport_joined();
     assert!(bounded(owner.stop()).await.is_err());
     assert_eq!(platform.closed.load(SeqCst), 1);
     assert!(platform.active.load(SeqCst));
@@ -396,6 +400,8 @@ async fn secured_local_output_never_uses_partial_guard_while_transport_is_pendin
             .is_err(),
         "unready Secured output used Partial authority"
     );
+    transport.control.detach();
+    request.transport_joined();
     owner.stop().await.unwrap();
     assert!(bounded(receive(&peer)).await.is_empty());
     echo.abort();

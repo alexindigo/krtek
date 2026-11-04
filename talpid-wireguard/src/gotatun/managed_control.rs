@@ -66,6 +66,18 @@ impl PendingManaged {
     /// Retry uses a fresh configuration request, receipt and sole receiver.
     /// The caller must finish joined cleanup of the previous pair first.
     pub(super) async fn create(&mut self, config: &Config) -> io::Result<ManagedPair> {
+        let result = self.create_inner(config).await;
+        if result.is_err()
+            && let Some(request) = &self.request
+        {
+            // No installed device escaped. The fallible control construction
+            // below joins its guard before returning an error.
+            request.transport_joined();
+        }
+        result
+    }
+
+    async fn create_inner(&mut self, config: &Config) -> io::Result<ManagedPair> {
         if self.request.is_none() {
             self.request = Some(
                 self.broker
@@ -225,6 +237,9 @@ impl ManagedControl {
     pub(super) async fn stop(&self) {
         self.revoke();
         self.guard.lock().await.stop().await;
+        // Every production caller has already joined create_devices failure or
+        // devices.stop(). The control guard is the final transport task owner.
+        self.request.transport_joined();
     }
 
     // This deliberately recognizes only a plain IPv4 private echo. Fragments,

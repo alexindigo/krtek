@@ -144,6 +144,14 @@ impl FrontendOwner {
                 observation.retire();
             }
             forwarder.close_all().await;
+            if terminal == FrontendState::Failed {
+                // Failure revokes promptly, but is not a descriptor/platform
+                // release acknowledgement. Keep this task and fd owned below.
+                state_tx.send_replace(FrontendState::Failed);
+            }
+            if let CaptureConfig::Secured { request, .. } = &config {
+                request.wait_release().await;
+            }
             drop(fd);
             let released = task_platform.closed();
             if released.is_ok() {
@@ -177,6 +185,11 @@ impl FrontendOwner {
 
     pub fn state(&self) -> watch::Receiver<FrontendState> {
         self.state.clone()
+    }
+
+    pub fn release_failed(&self) -> bool {
+        self.release_pending.load(Ordering::Acquire)
+            && self.task.as_ref().is_none_or(JoinHandle::is_finished)
     }
 
     /// Join physical cleanup and the initial platform release attempt. Cancellation
