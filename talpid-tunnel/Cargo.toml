@@ -21,6 +21,7 @@ talpid-lan-forwarder = { path = "../talpid-lan-forwarder" }
 nix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dev-dependencies]
+talpid-netstack = { path = "../talpid-netstack" }
 nix = { workspace = true, features = ["socket"] }
 socket2 = { workspace = true }
 smoltcp = { version = "0.13", default-features = false, features = [

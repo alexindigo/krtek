@@ -12,6 +12,10 @@ use smoltcp::{
 use std::{
     collections::{VecDeque, hash_map::RandomState},
     hash::BuildHasher,
+    sync::Arc,
+};
+use talpid_types::relay_flow::{
+    BUFFER_OVERHEAD, RelayBuffer, RelayBufferAllocator, RelayBufferReservation,
 };
 
 pub(super) struct Stack {
@@ -21,11 +25,17 @@ pub(super) struct Stack {
 }
 
 impl Stack {
-    pub fn new(mtu: usize) -> Self {
+    pub fn new(
+        mtu: usize,
+        input: Arc<dyn RelayBufferAllocator>,
+        output: Arc<dyn RelayBufferAllocator>,
+    ) -> Self {
         let mut device = PacketDevice {
             incoming: None,
-            outgoing: VecDeque::new(),
+            outgoing: VecDeque::with_capacity(OUTPUT_PACKETS),
             mtu,
+            input,
+            output,
         };
         let mut config = Config::new(HardwareAddress::Ip);
         config.random_seed = RandomState::new().hash_one("local TCP sequence seed");
@@ -51,7 +61,7 @@ impl Stack {
             .expect("IPv6 route slot");
         Self {
             interface,
-            sockets: SocketSet::new(Vec::new()),
+            sockets: SocketSet::new(Vec::with_capacity(super::TCP_FLOWS)),
             device,
         }
     }
@@ -88,7 +98,10 @@ impl Stack {
         if self.device.outgoing.len() == OUTPUT_PACKETS {
             return false;
         }
-        self.device.incoming = Some(bytes.to_vec());
+        let Ok(bytes) = RelayBuffer::copy_from(bytes, &*self.device.input) else {
+            return false;
+        };
+        self.device.incoming = Some(bytes);
         self.interface
             .poll(now, &mut self.device, &mut self.sockets);
         // A full output queue can defer ingress; never retain unowned input.
@@ -162,12 +175,18 @@ pub(super) fn segment(bytes: &[u8]) -> Option<Segment> {
 }
 
 pub(super) struct PacketDevice {
-    incoming: Option<Vec<u8>>,
-    pub outgoing: VecDeque<Vec<u8>>,
+    incoming: Option<RelayBuffer>,
+    pub outgoing: VecDeque<RelayBuffer>,
+    mtu: usize,
+    input: Arc<dyn RelayBufferAllocator>,
+    output: Arc<dyn RelayBufferAllocator>,
+}
+pub(super) struct Rx(RelayBuffer);
+pub(super) struct Tx<'a> {
+    outgoing: &'a mut VecDeque<RelayBuffer>,
+    charge: Arc<dyn RelayBufferReservation>,
     mtu: usize,
 }
-pub(super) struct Rx(Vec<u8>);
-pub(super) struct Tx<'a>(&'a mut VecDeque<Vec<u8>>);
 impl phy::RxToken for Rx {
     fn consume<R, F: FnOnce(&[u8]) -> R>(self, f: F) -> R {
         f(&self.0)
@@ -175,9 +194,12 @@ impl phy::RxToken for Rx {
 }
 impl phy::TxToken for Tx<'_> {
     fn consume<R, F: FnOnce(&mut [u8]) -> R>(self, len: usize, f: F) -> R {
+        assert!(len <= self.mtu, "stack output exceeds advertised MTU");
         let mut bytes = vec![0; len];
         let result = f(&mut bytes);
-        self.0.push_back(bytes);
+        let bytes =
+            RelayBuffer::from_reservation(bytes, self.charge).expect("precharged stack output");
+        self.outgoing.push_back(bytes);
         result
     }
 }
@@ -188,10 +210,26 @@ impl Device for PacketDevice {
         if self.outgoing.len() == OUTPUT_PACKETS {
             return None;
         }
-        Some((Rx(self.incoming.take()?), Tx(&mut self.outgoing)))
+        let charge = self.output.try_reserve(self.mtu + BUFFER_OVERHEAD).ok()?;
+        Some((
+            Rx(self.incoming.take()?),
+            Tx {
+                outgoing: &mut self.outgoing,
+                charge,
+                mtu: self.mtu,
+            },
+        ))
     }
     fn transmit(&mut self, _: Instant) -> Option<Tx<'_>> {
-        (self.outgoing.len() < OUTPUT_PACKETS).then_some(Tx(&mut self.outgoing))
+        if self.outgoing.len() == OUTPUT_PACKETS {
+            return None;
+        }
+        let charge = self.output.try_reserve(self.mtu + BUFFER_OVERHEAD).ok()?;
+        Some(Tx {
+            outgoing: &mut self.outgoing,
+            charge,
+            mtu: self.mtu,
+        })
     }
     fn capabilities(&self) -> DeviceCapabilities {
         let mut caps = DeviceCapabilities::default();

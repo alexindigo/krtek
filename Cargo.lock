@@ -3497,6 +3497,7 @@ dependencies = [
  "talpid-future",
  "talpid-lan-forwarder",
  "talpid-macos",
+ "talpid-netstack",
  "talpid-platform-metadata",
  "talpid-routing",
  "talpid-time",
@@ -6123,6 +6124,8 @@ dependencies = [
  "log",
  "smoltcp",
  "socket2",
+ "talpid-netstack",
+ "talpid-types",
  "tokio",
 ]
 
@@ -6223,6 +6226,7 @@ dependencies = [
  "socket2",
  "talpid-error",
  "talpid-lan-forwarder",
+ "talpid-netstack",
  "talpid-routing",
  "talpid-types",
  "talpid-windows",

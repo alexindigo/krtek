@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 log = { workspace = true }
 socket2 = { workspace = true }
+talpid-types = { path = "../talpid-types" }
 tokio = { workspace = true, features = ["net", "rt", "sync", "time", "macros"] }
 smoltcp = { version = "0.13", default-features = false, features = [
   "medium-ip",
@@ -19,6 +20,7 @@ smoltcp = { version = "0.13", default-features = false, features = [
 ] }
 
 [dev-dependencies]
+talpid-netstack = { path = "../talpid-netstack" }
 tokio = { workspace = true, features = ["test-util"] }
 
 [lints]

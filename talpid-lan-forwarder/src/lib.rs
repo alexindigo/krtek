@@ -15,6 +15,9 @@
 //! writability separately while `Forwarder::has_output` is true.
 //! Update authority inputs before signalling revalidation; join
 //! `Forwarder::close_all` before acknowledging shutdown to the consumer.
+//! Construction requires the runtime's shared storage allocator. Admission
+//! reserves fixed per-flow ingress/ring/task credit; output and capture working
+//! space are precharged separately so earlier flows can progress under pressure.
 
 pub mod authority;
 mod forwarder;

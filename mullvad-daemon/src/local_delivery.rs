@@ -14,7 +14,39 @@ use std::{
     sync::{Arc, RwLock},
 };
 use talpid_lan_forwarder::{Disposition, Flow, LocalAuthority, Refused};
+use talpid_netstack::buffer_budget::BufferBudget;
+use talpid_types::relay_flow::{RelayBufferAllocator, RelayBufferReservation};
 use tokio::sync::watch;
+
+/// One root per runtime, retained across frontend replacements. Other regions
+/// remain protected until managed relay/control/capture consumers are installed.
+pub struct DeliveryBuffers {
+    pub local: Arc<dyn RelayBufferAllocator>,
+    pub _application: Arc<dyn RelayBufferAllocator>,
+    pub _control: Arc<dyn RelayBufferAllocator>,
+    pub _capture: Arc<dyn RelayBufferAllocator>,
+    _root: BufferBudget,
+    _metadata: Arc<dyn RelayBufferReservation>,
+}
+impl DeliveryBuffers {
+    pub fn new() -> Self {
+        let root = BufferBudget::new(64 * 1024 * 1024);
+        let region = |mib: usize| {
+            root.reserve(mib * 1024 * 1024)
+                .expect("fixed root partition")
+                .region()
+                .expect("region metadata")
+        };
+        Self {
+            local: Arc::new(region(30)),
+            _application: Arc::new(region(22)),
+            _control: Arc::new(region(8)),
+            _capture: Arc::new(region(2)),
+            _metadata: root.try_reserve(512).expect("root metadata"),
+            _root: root,
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OwnerState {
@@ -172,6 +204,7 @@ pub trait FrontendFactory: Send + Sync {
         &self,
         routes: Vec<String>,
         authority: Arc<DeliveryAuthority>,
+        buffers: Arc<dyn RelayBufferAllocator>,
     ) -> io::Result<Self::Owner>;
 }
 
@@ -183,10 +216,15 @@ pub struct Delivery<F: FrontendFactory> {
     last_start_failed: bool,
     release_outstanding: bool,
     owner_ready: bool,
+    buffers: Arc<dyn RelayBufferAllocator>,
 }
 
 impl<F: FrontendFactory> Delivery<F> {
-    pub fn new(factory: F, authority: Arc<DeliveryAuthority>) -> Self {
+    pub fn new(
+        factory: F,
+        authority: Arc<DeliveryAuthority>,
+        buffers: Arc<dyn RelayBufferAllocator>,
+    ) -> Self {
         Self {
             factory,
             authority,
@@ -195,6 +233,7 @@ impl<F: FrontendFactory> Delivery<F> {
             last_start_failed: false,
             release_outstanding: false,
             owner_ready: false,
+            buffers,
         }
     }
 
@@ -266,7 +305,10 @@ impl<F: FrontendFactory> Delivery<F> {
             return;
         }
         if wanted && !self.has_owner() {
-            match self.factory.start(routes.clone(), self.authority.clone()) {
+            match self
+                .factory
+                .start(routes.clone(), self.authority.clone(), self.buffers.clone())
+            {
                 Ok(owner) => {
                     // Acquire the recovery handle before the first suspension.
                     self.owner = Some(owner);
@@ -364,10 +406,12 @@ mod platform {
             &self,
             routes: Vec<String>,
             authority: Arc<DeliveryAuthority>,
+            buffers: Arc<dyn RelayBufferAllocator>,
         ) -> io::Result<PlatformOwner> {
             let updates = authority.subscribe();
-            let owner =
-                FrontendOwner::start(self.0.clone(), routes, Forwarder::new(authority), updates)?;
+            let forwarder = Forwarder::new(authority, buffers)
+                .map_err(|_| io::Error::other("Local storage budget full"))?;
+            let owner = FrontendOwner::start(self.0.clone(), routes, forwarder, updates)?;
             let receiver = owner.state();
             Ok(PlatformOwner {
                 owner,
@@ -419,7 +463,12 @@ mod platform {
         fn supported(&self) -> bool {
             false
         }
-        fn start(&self, _: Vec<String>, _: Arc<DeliveryAuthority>) -> io::Result<PlatformOwner> {
+        fn start(
+            &self,
+            _: Vec<String>,
+            _: Arc<DeliveryAuthority>,
+            _: Arc<dyn RelayBufferAllocator>,
+        ) -> io::Result<PlatformOwner> {
             Err(io::ErrorKind::Unsupported.into())
         }
     }

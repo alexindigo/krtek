@@ -1,6 +1,7 @@
 //! Single actor-owned authority, frontend lifecycle and semantic status publisher.
 use crate::local_delivery::{
-    self, Delivery, DeliveryAuthority, FrontendFactory, PlatformFactory, SocketPreparer,
+    self, Delivery, DeliveryAuthority, DeliveryBuffers, FrontendFactory, PlatformFactory,
+    SocketPreparer,
 };
 use mullvad_types::settings::local_network_access::{
     LocalNetworkAccess, eligibility::NetworkObservation, status::LocalNetworkStatus,
@@ -17,6 +18,7 @@ pub struct LocalNetworkRuntime<F: FrontendFactory = PlatformFactory> {
     observation: Option<NetworkObservation>,
     delivery: Delivery<F>,
     shutting_down: bool,
+    _buffers: DeliveryBuffers,
 }
 
 impl LocalNetworkRuntime {
@@ -46,13 +48,19 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
         preparer: Arc<SocketPreparer>,
     ) -> Self {
         let receiver = feed.as_ref().and_then(|feed| feed.take_receiver());
+        let buffers = DeliveryBuffers::new();
         let mut runtime = Self {
             feed: feed.filter(|_| receiver.is_some()),
             receiver,
             status: LocalNetworkStatus::from_observation(policy, None),
             observation: None,
-            delivery: Delivery::new(factory, Arc::new(DeliveryAuthority::new(policy, preparer))),
+            delivery: Delivery::new(
+                factory,
+                Arc::new(DeliveryAuthority::new(policy, preparer)),
+                buffers.local.clone(),
+            ),
             shutting_down: false,
+            _buffers: buffers,
         };
         runtime.observation = runtime.observation();
         // Startup reconciles before exposing real delivery availability. Do not

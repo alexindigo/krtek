@@ -100,6 +100,7 @@ talpid-dns = { path = "../talpid-dns" }
 talpid-error.workspace = true
 talpid-future = { path = "../talpid-future" }
 talpid-lan-forwarder = { path = "../talpid-lan-forwarder" }
+talpid-netstack = { path = "../talpid-netstack" }
 talpid-platform-metadata = { path = "../talpid-platform-metadata" }
 talpid-routing = { path = "../talpid-routing" }
 talpid-time = { path = "../talpid-time" }

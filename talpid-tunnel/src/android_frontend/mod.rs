@@ -15,7 +15,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
-use talpid_lan_forwarder::{Forwarder, LocalAuthority, packet::MAX_PACKET_SIZE};
+use talpid_lan_forwarder::{Forwarder, LocalAuthority};
 use tokio::{
     io::{Interest, unix::AsyncFd},
     sync::{oneshot, watch},
@@ -202,7 +202,9 @@ async fn drive<A: LocalAuthority>(
     mut revalidate: watch::Receiver<u64>,
     mut stop: oneshot::Receiver<()>,
 ) -> FrontendState {
-    let mut packet = vec![0; MAX_PACKET_SIZE];
+    let Ok(mut packet) = forwarder.read_buffer() else {
+        return FrontendState::Failed;
+    };
     let mut updates_open = true;
     loop {
         let wants_write = forwarder.has_output();

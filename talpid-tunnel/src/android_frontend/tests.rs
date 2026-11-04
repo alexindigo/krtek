@@ -18,6 +18,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
+use talpid_lan_forwarder::packet::MAX_PACKET_SIZE;
 use talpid_lan_forwarder::{Disposition, Flow, Refused, Transport, packet};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -27,6 +28,16 @@ use tokio::{
 
 fn routes() -> Vec<String> {
     vec!["10.0.2.2/32".into(), "fd42::/64".into()]
+}
+
+fn test_forwarder(authority: Arc<Authority>) -> Forwarder<Authority> {
+    Forwarder::new(
+        authority,
+        Arc::new(talpid_netstack::buffer_budget::BufferBudget::new(
+            30 * 1024 * 1024,
+        )),
+    )
+    .unwrap()
 }
 fn pair() -> (OwnedFd, OwnedFd) {
     socketpair(
@@ -416,7 +427,7 @@ async fn tcp_and_udp_nonces_return_through_the_owned_interface() {
         let (platform, peer) = Platform::new();
         let authority = Arc::new(Authority::default());
         let (_tx, rx) = watch::channel(0);
-        let mut owner = start(platform.clone(), routes(), Forwarder::new(authority), rx)
+        let mut owner = start(platform.clone(), routes(), test_forwarder(authority), rx)
             .await
             .unwrap();
         let (tcp, mut accepts, server) = tcp_echo(ipv6).await;
@@ -451,7 +462,7 @@ async fn drop_packets_never_prepare_or_reach_the_peer() {
     let authority = Arc::new(Authority::default());
     authority.drop.store(true, SeqCst);
     let (_tx, rx) = watch::channel(0);
-    let mut owner = start(platform, routes(), Forwarder::new(authority.clone()), rx)
+    let mut owner = start(platform, routes(), test_forwarder(authority.clone()), rx)
         .await
         .unwrap();
     let (address, mut hits, echo) = udp_echo(false).await;
@@ -479,7 +490,7 @@ async fn stop_drop_eof_and_route_replacement_preserve_single_descriptor_ownershi
         start(
             platform.clone(),
             vec![],
-            Forwarder::new(Arc::new(Authority::default())),
+            test_forwarder(Arc::new(Authority::default())),
             rx.clone()
         )
         .await
@@ -489,7 +500,7 @@ async fn stop_drop_eof_and_route_replacement_preserve_single_descriptor_ownershi
     let mut owner = start(
         platform.clone(),
         routes(),
-        Forwarder::new(Arc::new(Authority::default())),
+        test_forwarder(Arc::new(Authority::default())),
         rx.clone(),
     )
     .await
@@ -504,7 +515,7 @@ async fn stop_drop_eof_and_route_replacement_preserve_single_descriptor_ownershi
     let owner = start(
         platform.clone(),
         replacement.clone(),
-        Forwarder::new(Arc::new(Authority::default())),
+        test_forwarder(Arc::new(Authority::default())),
         rx,
     )
     .await
@@ -531,7 +542,7 @@ async fn stop_drop_eof_and_route_replacement_preserve_single_descriptor_ownershi
     let mut owner = start(
         platform.clone(),
         routes(),
-        Forwarder::new(Arc::new(Authority::default())),
+        test_forwarder(Arc::new(Authority::default())),
         rx,
     )
     .await
@@ -554,7 +565,7 @@ async fn observation_loss_revokes_both_protocols_without_replacing_the_interface
     let mut owner = start(
         platform.clone(),
         routes(),
-        Forwarder::new(authority.clone()),
+        test_forwarder(authority.clone()),
         rx,
     )
     .await
@@ -619,7 +630,7 @@ async fn empty_interface_loop_has_no_progress_for_one_real_second() {
     let count = polls.clone();
     let future = tokio::spawn(async move {
         let capture = AsyncFd::new(fd.as_fd()).unwrap();
-        let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+        let mut forwarder = test_forwarder(Arc::new(Authority::default()));
         let mut driven = Box::pin(drive(&capture, &mut forwarder, rx, stopped));
         poll_fn(move |cx| {
             count.fetch_add(1, SeqCst);
@@ -636,6 +647,72 @@ async fn empty_interface_loop_has_no_progress_for_one_real_second() {
     };
     let (terminal, ()) = bounded(async { tokio::join!(future, monitor) }).await;
     assert_eq!(terminal.unwrap(), FrontendState::Stopped);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn exhausted_input_is_consumed_without_readiness_spin_then_recovers() {
+    use talpid_netstack::buffer_budget::BufferBudget;
+    let budget = BufferBudget::new(30 * 1024 * 1024);
+    let authority = Arc::new(Authority::default());
+    let mut forwarder = Forwarder::new(authority.clone(), Arc::new(budget.clone())).unwrap();
+    let pressure = budget.reserve(budget.limit() - budget.used()).unwrap();
+    let (fd, peer) = pair();
+    let raw = fd.as_raw_fd();
+    let peer = AsyncFd::new(peer).unwrap();
+    let (_updates, rx) = watch::channel(0);
+    let (stop, stopped) = oneshot::channel();
+    let polls = Arc::new(AtomicUsize::new(0));
+    let count = polls.clone();
+    let future = tokio::spawn(async move {
+        let capture = AsyncFd::new(fd.as_fd()).unwrap();
+        let terminal = {
+            let mut driven = Box::pin(drive(&capture, &mut forwarder, rx, stopped));
+            poll_fn(move |cx| {
+                count.fetch_add(1, SeqCst);
+                driven.as_mut().poll(cx)
+            })
+            .await
+        };
+        forwarder.close_all().await;
+        terminal
+    });
+    let (address, mut hits, echo) = udp_echo(false).await;
+    let request = flow(address, Transport::Udp, 49000);
+    send(&peer, &udp(request, b"refused input")).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(
+        nix::sys::socket::recv(
+            raw,
+            &mut [0; 64],
+            nix::sys::socket::MsgFlags::MSG_PEEK | nix::sys::socket::MsgFlags::MSG_DONTWAIT
+        ),
+        Err(nix::errno::Errno::EAGAIN),
+        "refused level-triggered input must be consumed"
+    );
+    let before = polls.load(SeqCst);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert_eq!(
+        polls.load(SeqCst),
+        before,
+        "budget refusal installed a progress loop"
+    );
+    assert_eq!(authority.prepares.load(SeqCst), 0);
+    assert!(hits.try_recv().is_err());
+    drop(pressure);
+    send(&peer, &udp(request, b"recovered consumer nonce")).await;
+    let reply = bounded(receive(&peer)).await;
+    assert_eq!(
+        packet::parse(&reply).unwrap().payload,
+        b"recovered consumer nonce"
+    );
+    assert_eq!(
+        bounded(hits.recv()).await.unwrap(),
+        b"recovered consumer nonce"
+    );
+    stop.send(()).unwrap();
+    assert_eq!(bounded(future).await.unwrap(), FrontendState::Stopped);
+    assert_eq!(budget.used(), 0);
+    echo.abort();
 }
 
 async fn blocked_sink(revoke: bool, stop_while_blocked: bool) {
@@ -662,7 +739,7 @@ async fn blocked_sink(revoke: bool, stop_while_blocked: bool) {
     let mut owner = start(
         platform.clone(),
         routes(),
-        Forwarder::new(authority.clone()),
+        test_forwarder(authority.clone()),
         rx,
     )
     .await
@@ -750,7 +827,7 @@ async fn blocking_descriptor_is_closed_before_failed_start_returns() {
         start(
             platform.clone(),
             routes(),
-            Forwarder::new(Arc::new(Authority::default())),
+            test_forwarder(Arc::new(Authority::default())),
             rx
         )
         .await
@@ -795,7 +872,7 @@ async fn physical_preparations_join_before_descriptor_close_and_stop_acknowledge
         ..Authority::default()
     });
     let (_updates, rx) = watch::channel(0);
-    let mut owner = start(platform.clone(), routes(), Forwarder::new(authority), rx)
+    let mut owner = start(platform.clone(), routes(), test_forwarder(authority), rx)
         .await
         .unwrap();
     let (address, mut hits, echo) = udp_echo(false).await;
@@ -850,7 +927,7 @@ async fn cancelled_start_still_joins_open_and_finishes_the_detached_descriptor()
     let opening = tokio::spawn(start(
         paused,
         routes(),
-        Forwarder::new(Arc::new(Authority::default())),
+        test_forwarder(Arc::new(Authority::default())),
         rx,
     ));
     bounded(pause.entered.notified()).await;
@@ -878,7 +955,7 @@ async fn actual_wouldblock_clears_cached_writability_and_keeps_the_grant_until_r
     let capture = AsyncFd::new(fd.as_fd()).unwrap();
     let peer = AsyncFd::new(peer).unwrap();
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let (address, mut hits, echo) = udp_echo(false).await;
     forwarder.ingest(&udp(
         flow(address, Transport::Udp, 45000),
@@ -952,7 +1029,7 @@ async fn release_failure_retains_ownership_until_explicit_joined_retry() {
         let mut owner = FrontendOwner::start(
             platform.clone(),
             routes(),
-            Forwarder::new(Arc::new(Authority::default())),
+            test_forwarder(Arc::new(Authority::default())),
             rx.clone(),
         )
         .unwrap();
@@ -999,7 +1076,7 @@ async fn release_failure_retains_ownership_until_explicit_joined_retry() {
         let mut replacement = start(
             platform.clone(),
             routes(),
-            Forwarder::new(Arc::new(Authority::default())),
+            test_forwarder(Arc::new(Authority::default())),
             rx,
         )
         .await
@@ -1029,7 +1106,7 @@ async fn cancelled_readiness_and_stop_keep_the_recovery_owner() {
             pause: pause.clone(),
         }),
         routes(),
-        Forwarder::new(Arc::new(Authority::default())),
+        test_forwarder(Arc::new(Authority::default())),
         rx,
     )
     .unwrap();
@@ -1066,7 +1143,7 @@ async fn fatal_sink_write_joins_physical_work_before_close_release_and_failed_pu
         pause_after: 1,
         ..Authority::default()
     });
-    let mut forwarder = Forwarder::new(authority);
+    let mut forwarder = test_forwarder(authority);
     let (address, mut hits, echo) = udp_echo(false).await;
     forwarder.ingest(&udp(
         flow(address, Transport::Udp, 46000),
@@ -1117,7 +1194,7 @@ async fn fatal_sink_write_joins_physical_work_before_close_release_and_failed_pu
 #[tokio::test]
 async fn short_and_zero_packet_writes_are_fatal_at_the_checked_sink_boundary() {
     for short in [false, true] {
-        let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+        let mut forwarder = test_forwarder(Arc::new(Authority::default()));
         let (address, mut hits, echo) = udp_echo(false).await;
         forwarder.ingest(&udp(
             flow(address, Transport::Udp, 47000),

@@ -23,6 +23,34 @@ use tokio::{
     task::JoinHandle,
 };
 
+#[test]
+fn runtime_regions_share_one_root_and_local_exhaustion_preserves_control() {
+    let pools = DeliveryBuffers::new();
+    let root = pools._root.clone();
+    assert_eq!(root.limit(), 64 * 1024 * 1024);
+    assert_eq!(root.used(), 62 * 1024 * 1024 + 512);
+    let local = pools.local.try_reserve(30 * 1024 * 1024 - 512).unwrap();
+    assert!(pools.local.try_reserve(1).is_err());
+    let application = pools
+        ._application
+        .try_reserve(22 * 1024 * 1024 - 512)
+        .unwrap();
+    let control = pools._control.try_reserve(8 * 1024 * 1024 - 512).unwrap();
+    let capture = pools._capture.try_reserve(2 * 1024 * 1024 - 512).unwrap();
+    assert!(pools._application.try_reserve(1).is_err());
+    assert!(pools._control.try_reserve(1).is_err());
+    assert!(pools._capture.try_reserve(1).is_err());
+    assert_eq!(root.used(), 62 * 1024 * 1024 + 512);
+    drop((pools, application, control, capture));
+    assert_eq!(
+        root.used(),
+        30 * 1024 * 1024,
+        "last owned child retains only its region"
+    );
+    drop(local);
+    assert_eq!(root.used(), 0);
+}
+
 fn policy() -> LocalNetworkAccess {
     LocalNetworkAccess {
         enabled: true,
@@ -386,6 +414,7 @@ impl FrontendFactory for FakeFactory {
         &self,
         routes: Vec<String>,
         authority: Arc<DeliveryAuthority>,
+        buffers: Arc<dyn RelayBufferAllocator>,
     ) -> io::Result<FakeOwner> {
         self.0.starts.fetch_add(1, SeqCst);
         if self.0.fail_start.load(SeqCst) {
@@ -402,7 +431,8 @@ impl FrontendFactory for FakeFactory {
             authority,
             peer: *self.0.peer.lock().unwrap(),
         });
-        let mut forwarder = Forwarder::new(authority);
+        let mut forwarder =
+            Forwarder::new(authority, buffers).map_err(|_| io::Error::other("test budget full"))?;
         let (input, mut packets) = mpsc::channel::<Vec<u8>>(16);
         let (output, replies) = mpsc::channel(256);
         *self.0.endpoints.lock().unwrap() = Some(Endpoints {
@@ -685,7 +715,11 @@ async fn route_reconciliation_joins_before_replacement_and_ignores_condition_and
 #[tokio::test]
 async fn outstanding_release_blocks_replacement_and_connect_until_a_later_event_retry() {
     let control = Arc::new(Control::default());
-    let mut delivery = Delivery::new(FakeFactory(control.clone()), authority());
+    let mut delivery = Delivery::new(
+        FakeFactory(control.clone()),
+        authority(),
+        DeliveryBuffers::new().local,
+    );
     delivery
         .maintain(&policy(), TargetState::Unsecured, true)
         .await;
@@ -731,7 +765,11 @@ async fn outstanding_release_blocks_replacement_and_connect_until_a_later_event_
 async fn cancelled_or_failed_readiness_retains_the_recovery_owner() {
     let control = Arc::new(Control::default());
     control.hold_ready.store(true, SeqCst);
-    let mut delivery = Delivery::new(FakeFactory(control.clone()), authority());
+    let mut delivery = Delivery::new(
+        FakeFactory(control.clone()),
+        authority(),
+        DeliveryBuffers::new().local,
+    );
     assert!(
         tokio::time::timeout(
             Duration::from_millis(30),
@@ -777,7 +815,11 @@ async fn cancelled_or_failed_readiness_retains_the_recovery_owner() {
 #[tokio::test]
 async fn external_change_can_recover_failure_before_the_owner_notification_is_selected() {
     let control = Arc::new(Control::default());
-    let mut delivery = Delivery::new(FakeFactory(control.clone()), authority());
+    let mut delivery = Delivery::new(
+        FakeFactory(control.clone()),
+        authority(),
+        DeliveryBuffers::new().local,
+    );
     delivery
         .maintain(&policy(), TargetState::Unsecured, true)
         .await;
@@ -1012,7 +1054,11 @@ async fn observer_unavailable_keeps_announcements_and_denies_delivery() {
             Ok(())
         }),
     ));
-    let mut delivery = Delivery::new(FakeFactory(control.clone()), authority.clone());
+    let mut delivery = Delivery::new(
+        FakeFactory(control.clone()),
+        authority.clone(),
+        DeliveryBuffers::new().local,
+    );
     delivery
         .maintain(&policy(), TargetState::Unsecured, true)
         .await;
@@ -1206,7 +1252,11 @@ async fn permission_and_network_changes_revalidate_without_replacing_announcemen
     let control = Arc::new(Control::default());
     let authority = authority();
     let mut updates = authority.subscribe();
-    let mut delivery = Delivery::new(FakeFactory(control.clone()), authority.clone());
+    let mut delivery = Delivery::new(
+        FakeFactory(control.clone()),
+        authority.clone(),
+        DeliveryBuffers::new().local,
+    );
     authority.update(&policy(), Some(observation()));
     delivery
         .maintain(&policy(), TargetState::Unsecured, true)
