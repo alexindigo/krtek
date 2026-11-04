@@ -6157,6 +6157,7 @@ dependencies = [
  "gotatun",
  "log",
  "smoltcp",
+ "talpid-types",
  "tokio",
  "tokio-util 0.7.18",
  "zerocopy",

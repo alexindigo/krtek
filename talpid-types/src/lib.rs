@@ -2,6 +2,7 @@
 pub mod android;
 pub mod local_network;
 pub mod net;
+pub mod relay_flow;
 pub mod tunnel;
 
 #[cfg(target_os = "windows")]
