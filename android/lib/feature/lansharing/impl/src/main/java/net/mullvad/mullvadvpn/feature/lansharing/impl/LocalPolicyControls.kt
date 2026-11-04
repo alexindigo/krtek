@@ -208,7 +208,13 @@ internal fun LocalNetworkSharingUiState.forwardingMessage(): Int? =
     when (status?.forwarding) {
         null -> null
         ForwardingAvailability.NotAvailable -> R.string.local_access_forwarding_unavailable
-        ForwardingAvailability.Off -> R.string.local_access_forwarding_off
+        ForwardingAvailability.Off ->
+            when {
+                !policy.enabled -> R.string.local_access_forwarding_off
+                policy.rules.isEmpty() -> R.string.local_access_forwarding_add_rule
+                policy.rules.none { it.enabled } -> R.string.local_access_forwarding_enable_rule
+                else -> R.string.local_access_forwarding_off_pending
+            }
         ForwardingAvailability.Active -> R.string.local_access_forwarding_active
         ForwardingAvailability.PausedWhileConnected -> R.string.local_access_forwarding_paused
         ForwardingAvailability.Failed -> R.string.local_access_forwarding_failed

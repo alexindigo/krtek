@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="local_access_connected_title">Sharing while connected</string>
-    <string name="local_access_connected_warning">This warning applies only to the connected
-    bypass, not to local network rules below.</string>
+    <string name="local_network_sharing_info">Use local file sharing, printing, media streaming and
+    device discovery while connected to Mullvad.</string>
+    <string name="local_network_sharing_info_block_connections_warning">
+    <b>This connected bypass is incompatible with \"Block connections without VPN\".</b>\u0020This
+    does not apply to local network rules below.</string>
+    <string name="local_network_sharing_info2">
+    <b>It can reduce your anonymity</b>\u0020by making your device visible to others. Avoid it on
+    public or untrusted networks.</string>
     <string name="local_access_connected_details">The connected bypass allows local multicast and
     broadcast traffic, and traffic to and from private IP ranges, to bypass the Mullvad
     tunnel.</string>
@@ -16,10 +22,10 @@
     available in this version yet.</string>
     <string name="local_access_forwarding_unavailable">Local forwarding is not available in this
     version yet.</string>
-    <string name="local_access_delivery_confirmation">While Mullvad is disconnected, only the
-    addresses in enabled rules go through %1$s. %1$s delivers traffic only when a rule’s conditions
-    are met. Android handles everything else as it would without %1$s: other connections stay
-    blocked with “Block connections without VPN” on, and go out normally with it off.</string>
+    <string name="local_access_delivery_confirmation">While Mullvad is disconnected, only addresses
+    in enabled rules go through %1$s.\n\nDelivery requires the rule\'s conditions to be
+    met.\n\nAndroid handles other connections: blocked with \"Block connections without VPN\" on,
+    sent normally with it off.</string>
     <string name="local_access_forwarding_active">Local rules are ready. Traffic is delivered only
     when a rule’s conditions are met.</string>
     <string name="local_access_forwarding_paused">Local delivery is paused while Mullvad is
@@ -27,7 +33,11 @@
     <string name="local_access_forwarding_failed">Local delivery could not start. Change a rule or
     reconnect Mullvad to try again.</string>
     <string name="local_access_forwarding_off">Local delivery is off. Turn on local network rules
-    and enable at least one rule to use it.</string>
+    to use enabled rules.</string>
+    <string name="local_access_forwarding_add_rule">Add a rule to start local delivery.</string>
+    <string name="local_access_forwarding_enable_rule">Enable a rule to start local
+    delivery.</string>
+    <string name="local_access_forwarding_off_pending">Local delivery is off.</string>
     <string name="local_access_forwarding">Forwarding</string>
     <string name="local_access_empty">Add a rule to choose local addresses.</string>
     <string name="local_access_add_rule">Add rule</string>

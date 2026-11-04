@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import net.mullvad.mullvadvpn.lib.model.ConnectedWifi
 import net.mullvad.mullvadvpn.lib.model.ForwardingAvailability
+import net.mullvad.mullvadvpn.lib.model.LocalBypassRule
 import net.mullvad.mullvadvpn.lib.model.LocalNetworkAccess
 import net.mullvad.mullvadvpn.lib.model.LocalNetworkStatus
 import net.mullvad.mullvadvpn.lib.model.LocalRuleInactiveReason
@@ -35,18 +36,70 @@ class LocalForwardingStatusTest {
     }
 
     @Test
-    fun `should show off for empty and disabled rule lists even when rules are on`() {
+    fun `should ask to turn on a disabled policy regardless of saved rules`() {
         val rule = LocalRuleDraft(UUID.randomUUID().toString(), addresses = "10.0.2.2/32").rule()!!
         for (policy in
             listOf(
                 LocalNetworkAccess(),
-                LocalNetworkAccess(enabled = true),
-                LocalNetworkAccess(enabled = true, rules = listOf(rule.copy(enabled = false))),
+                LocalNetworkAccess(rules = listOf(rule)),
+                LocalNetworkAccess(rules = listOf(rule.copy(enabled = false))),
             )) {
             val state = state(ForwardingAvailability.Off).copy(policy = policy)
             assertEquals(R.string.local_access_forwarding_off, state.forwardingMessage())
             assertEquals(R.string.local_access_delivery_confirmation, state.confirmationMessage())
         }
+    }
+
+    @Test
+    fun `should ask to add a rule when the enabled policy is empty`() {
+        val state =
+            state(ForwardingAvailability.Off).copy(policy = LocalNetworkAccess(enabled = true))
+        assertEquals(R.string.local_access_forwarding_add_rule, state.forwardingMessage())
+        assertEquals(R.string.local_access_delivery_confirmation, state.confirmationMessage())
+    }
+
+    @Test
+    fun `should ask to enable a saved rule when all saved rules are disabled`() {
+        val rule = LocalRuleDraft(UUID.randomUUID().toString(), addresses = "10.0.2.2/32").rule()!!
+        val state =
+            state(ForwardingAvailability.Off)
+                .copy(
+                    policy =
+                        LocalNetworkAccess(
+                            enabled = true,
+                            rules = listOf(rule.copy(enabled = false)),
+                        )
+                )
+        assertEquals(R.string.local_access_forwarding_enable_rule, state.forwardingMessage())
+        assertEquals(R.string.local_access_delivery_confirmation, state.confirmationMessage())
+    }
+
+    @Test
+    fun `should not count an enabled editor draft as a saved rule`() {
+        val draft = LocalRuleDraft(UUID.randomUUID().toString(), addresses = "10.0.2.2/32")
+        for ((rules, expected) in
+            listOf(
+                emptyList<LocalBypassRule>() to R.string.local_access_forwarding_add_rule,
+                listOf(draft.rule()!!.copy(enabled = false)) to
+                    R.string.local_access_forwarding_enable_rule,
+            )) {
+            val state =
+                state(ForwardingAvailability.Off)
+                    .copy(
+                        policy = LocalNetworkAccess(enabled = true, rules = rules),
+                        editor = LocalEditorState(draft = draft),
+                    )
+            assertEquals(expected, state.forwardingMessage())
+        }
+    }
+
+    @Test
+    fun `should keep off neutral while an enabled saved rule awaits newer status`() {
+        val rule = LocalRuleDraft(UUID.randomUUID().toString(), addresses = "10.0.2.2/32").rule()!!
+        val state =
+            state(ForwardingAvailability.Off)
+                .copy(policy = LocalNetworkAccess(enabled = true, rules = listOf(rule)))
+        assertEquals(R.string.local_access_forwarding_off_pending, state.forwardingMessage())
     }
 
     @Test
