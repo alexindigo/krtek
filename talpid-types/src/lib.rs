@@ -1,5 +1,6 @@
 #[cfg(target_os = "android")]
 pub mod android;
+pub mod capture_network;
 pub mod local_network;
 pub mod net;
 pub mod relay_flow;

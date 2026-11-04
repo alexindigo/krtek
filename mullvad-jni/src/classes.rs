@@ -6,6 +6,12 @@ pub const LOCAL_NETWORK_CLASSES: &[&str] = &[
     "net/mullvad/talpid/model/LocalPhysicalRoute",
 ];
 
+pub const CAPTURE_NETWORK_CLASSES: &[&str] = &[
+    "java/lang/Integer",
+    "net/mullvad/talpid/model/CaptureNetworkObservation",
+    "net/mullvad/talpid/model/CaptureRoute",
+];
+
 pub const CLASSES: &[&str] = &[
     "java/lang/Boolean",
     "java/net/InetAddress",

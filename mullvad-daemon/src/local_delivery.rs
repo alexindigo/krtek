@@ -411,7 +411,12 @@ mod platform {
             let updates = authority.subscribe();
             let forwarder = Forwarder::new(authority, buffers)
                 .map_err(|_| io::Error::other("Local storage budget full"))?;
-            let owner = FrontendOwner::start(self.0.clone(), routes, forwarder, updates)?;
+            let owner = FrontendOwner::start(
+                self.0.clone(),
+                talpid_tunnel::android_frontend::CaptureConfig::Partial(routes),
+                forwarder,
+                updates,
+            )?;
             let receiver = owner.state();
             Ok(PlatformOwner {
                 owner,

@@ -605,6 +605,25 @@ impl CaptureLease {
     pub fn generation(&self) -> u64 {
         self.generation
     }
+    /// A feed retains this weak revoker, never the capture owner itself.
+    pub fn revoker(&self) -> impl Fn() + Send + Sync + 'static {
+        let inner = Arc::downgrade(&self.inner);
+        let generation = self.generation;
+        move || {
+            if let Some(inner) = inner.upgrade() {
+                let mut state = inner.state.lock().expect("attachment state");
+                if state
+                    .capture
+                    .as_ref()
+                    .is_some_and(|c| c.generation == generation)
+                {
+                    state.retire_capture();
+                }
+                inner.publish(&state);
+                inner.replies.notify_one();
+            }
+        }
+    }
     /// Capture-adapter entry after exact fd/network/config observation. This
     /// consumes the unrepeatable identity token; loss requires joined replacement.
     pub fn bind_observed_identity(
@@ -645,6 +664,20 @@ impl CaptureLease {
             .as_ref()
             .ok_or(AttachmentError::OrdinaryUnready)?;
         enqueue(&self.inner, attempt, bytes, true)
+    }
+    /// Snapshot the exact active attempt for checked Local sink operations.
+    /// The returned capability must not be replaced on a live frontend.
+    pub fn ordinary_attempt(&self) -> Option<RelayAttempt> {
+        let state = self.inner.state.lock().expect("attachment state");
+        if !state
+            .capture
+            .as_ref()
+            .is_some_and(|c| c.generation == self.generation)
+        {
+            return None;
+        }
+        let attempt = state.attempt.as_ref()?.owner.capability();
+        attempt.current().then_some(attempt)
     }
     /// Event-driven, cancellation-safe receive. An empty queue never polls on a
     /// timer; configuration, cancellation and new replies wake the capture owner.

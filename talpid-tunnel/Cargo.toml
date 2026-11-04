@@ -18,10 +18,10 @@ tokio = { workspace = true, features = ["fs", "process", "rt-multi-thread", "net
 
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
 talpid-lan-forwarder = { path = "../talpid-lan-forwarder" }
+talpid-netstack = { path = "../talpid-netstack" }
 nix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dev-dependencies]
-talpid-netstack = { path = "../talpid-netstack" }
 nix = { workspace = true, features = ["socket"] }
 socket2 = { workspace = true }
 smoltcp = { version = "0.13", default-features = false, features = [

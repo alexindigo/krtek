@@ -1,5 +1,5 @@
 #[cfg(target_os = "android")]
-use crate::tun_provider::imp::VpnServiceConfig;
+pub(crate) use crate::tun_provider::imp::VpnServiceConfig;
 use cfg_if::cfg_if;
 use ipnetwork::{IpNetwork, Ipv4Network, Ipv6Network};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
