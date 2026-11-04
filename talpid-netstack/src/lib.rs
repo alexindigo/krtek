@@ -6,6 +6,7 @@
 pub mod buffer_budget;
 pub mod connection_tracker;
 pub mod ip_mux;
+pub mod raw_packet;
 pub mod smoltcp_network;
 
 #[cfg(test)]
