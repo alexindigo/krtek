@@ -10,6 +10,8 @@ pub mod network_interface;
 
 pub mod tun_provider;
 
+pub mod packet_attachment;
+
 #[cfg(any(target_os = "android", target_os = "linux"))]
 pub mod android_frontend;
 use futures::{
