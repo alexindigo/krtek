@@ -4,6 +4,8 @@ use cfg_if::cfg_if;
 use ipnetwork::{IpNetwork, Ipv4Network, Ipv6Network};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
+pub mod transport;
+
 cfg_if! {
     if #[cfg(target_os = "android")] {
         #[path = "android/mod.rs"]

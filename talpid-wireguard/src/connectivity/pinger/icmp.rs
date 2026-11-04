@@ -207,6 +207,58 @@ fn construct_icmpv4_packet_inner(
     true
 }
 
+/// The managed source owns the sole socket and its prepaid backing. A random
+/// attempt secret plus a non-repeating counter identifies only private probes.
+#[cfg(any(target_os = "android", test))]
+pub(crate) struct SmoltcpPinger {
+    socket: talpid_netstack::smoltcp_network::SmoltcpIcmpSocket,
+    gateway: Ipv4Addr,
+    id: u16,
+    secret: [u8; 32],
+    counter: u64,
+}
+
+#[cfg(any(target_os = "android", test))]
+impl SmoltcpPinger {
+    pub(crate) fn new(
+        socket: talpid_netstack::smoltcp_network::SmoltcpIcmpSocket,
+        gateway: Ipv4Addr,
+        id: u16,
+        secret: [u8; 32],
+    ) -> Self {
+        Self {
+            socket,
+            gateway,
+            id,
+            secret,
+            counter: 0,
+        }
+    }
+}
+
+#[cfg(any(target_os = "android", test))]
+#[async_trait::async_trait]
+impl super::Pinger for SmoltcpPinger {
+    async fn send_icmp(&mut self) -> Result<()> {
+        self.counter = self
+            .counter
+            .checked_add(1)
+            .ok_or_else(|| Error::Write(io::ErrorKind::BrokenPipe.into()))?;
+        let mut message = [0u8; 50];
+        message[0] = 8;
+        message[4..6].copy_from_slice(&self.id.to_be_bytes());
+        message[6..8].copy_from_slice(&(self.counter as u16).to_be_bytes());
+        message[8..40].copy_from_slice(&self.secret);
+        message[40..48].copy_from_slice(&self.counter.to_be_bytes());
+        let checksum = internet_checksum::checksum(&message);
+        message[2..4].copy_from_slice(&checksum);
+        self.socket
+            .send_to_v4(&message, self.gateway)
+            .await
+            .map_err(Error::Write)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

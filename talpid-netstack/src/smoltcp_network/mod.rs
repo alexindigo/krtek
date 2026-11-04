@@ -59,6 +59,34 @@ pub fn smoltcp_network(
     SmoltcpIpSend,
     SmoltcpNetworkGuard,
 ) {
+    network(config, None)
+}
+
+/// Create a stack whose task and public handles retain prepaid storage credit.
+/// This does not change the legacy buffers or enable application TCP admission.
+pub fn smoltcp_network_retained(
+    config: SmoltcpNetworkConfig,
+    storage: Arc<dyn talpid_types::relay_flow::RelayBufferReservation>,
+) -> (
+    SmoltcpHandle,
+    SmoltcpIpRecv,
+    SmoltcpIpSend,
+    SmoltcpNetworkGuard,
+) {
+    network(config, Some(storage))
+}
+
+type Storage = Option<Arc<dyn talpid_types::relay_flow::RelayBufferReservation>>;
+
+fn network(
+    config: SmoltcpNetworkConfig,
+    storage: Storage,
+) -> (
+    SmoltcpHandle,
+    SmoltcpIpRecv,
+    SmoltcpIpSend,
+    SmoltcpNetworkGuard,
+) {
     let (to_gotatun_tx, to_gotatun_rx) = mpsc::channel(PACKET_CHANNEL_CAPACITY);
     let (from_gotatun_tx, from_gotatun_rx) = mpsc::channel(PACKET_CHANNEL_CAPACITY);
     let (cmd_tx, cmd_rx) = mpsc::channel(CMD_CHANNEL_CAPACITY);
@@ -69,11 +97,13 @@ pub fn smoltcp_network(
     let ip_recv = SmoltcpIpRecv {
         rx: to_gotatun_rx,
         mtu: mtu_watcher,
+        _storage: storage.clone(),
     };
 
     let ip_send = SmoltcpIpSend {
         tx: from_gotatun_tx,
         notify: notify.clone(),
+        _storage: storage.clone(),
     };
 
     let handle = SmoltcpHandle {
@@ -81,27 +111,49 @@ pub fn smoltcp_network(
         notify: notify.clone(),
         timeout: None,
         log_stats_on_drop: false,
+        storage: storage.clone(),
     };
 
-    let poll_task = tokio::spawn(poll_loop(
-        config,
-        from_gotatun_rx,
-        to_gotatun_tx,
-        cmd_rx,
-        notify,
-    ));
+    let task_storage = storage.clone();
+    let poll_task = tokio::spawn(async move {
+        let _storage = task_storage;
+        poll_loop(config, from_gotatun_rx, to_gotatun_tx, cmd_rx, notify).await;
+    });
 
-    (handle, ip_recv, ip_send, SmoltcpNetworkGuard { poll_task })
+    (
+        handle,
+        ip_recv,
+        ip_send,
+        SmoltcpNetworkGuard {
+            poll_task: Some(poll_task),
+            _storage: storage,
+        },
+    )
 }
 
 /// Guard that aborts the poll loop task when dropped.
 pub struct SmoltcpNetworkGuard {
-    poll_task: JoinHandle<()>,
+    poll_task: Option<JoinHandle<()>>,
+    _storage: Storage,
+}
+
+impl SmoltcpNetworkGuard {
+    /// Abort and join the poll loop. The borrowed handle stays owned by this
+    /// guard if the wait is cancelled; a later call resumes the same join.
+    pub async fn stop(&mut self) {
+        if let Some(task) = &mut self.poll_task {
+            task.abort();
+            let _ = task.await;
+            self.poll_task = None;
+        }
+    }
 }
 
 impl Drop for SmoltcpNetworkGuard {
     fn drop(&mut self) {
-        self.poll_task.abort();
+        if let Some(task) = &self.poll_task {
+            task.abort();
+        }
     }
 }
 
@@ -112,6 +164,7 @@ pub struct SmoltcpHandle {
     notify: Arc<Notify>,
     timeout: Option<Duration>,
     log_stats_on_drop: bool,
+    storage: Storage,
 }
 
 impl SmoltcpHandle {
@@ -166,8 +219,11 @@ impl SmoltcpHandle {
             .await
             .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "poll loop closed"))?;
         self.notify.notify_one();
-        rx.await
-            .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "poll loop dropped"))?
+        let mut socket = rx
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "poll loop dropped"))??;
+        socket.storage = self.storage.clone();
+        Ok(socket)
     }
 }
 
@@ -178,6 +234,7 @@ impl SmoltcpHandle {
 pub struct SmoltcpIpRecv {
     rx: mpsc::Receiver<Packet<Ip>>,
     mtu: MtuWatcher,
+    _storage: Storage,
 }
 
 impl IpRecv for SmoltcpIpRecv {
@@ -205,6 +262,7 @@ impl IpRecv for SmoltcpIpRecv {
 pub struct SmoltcpIpSend {
     tx: mpsc::Sender<Packet<Ip>>,
     notify: Arc<Notify>,
+    _storage: Storage,
 }
 
 impl IpSend for SmoltcpIpSend {
@@ -223,6 +281,52 @@ mod tests {
     use super::*;
     use gotatun::packet::PacketBufPool;
     use std::net::Ipv4Addr;
+
+    #[tokio::test]
+    async fn cancelled_stop_resumes_join_and_retains_credit_until_last_producer() {
+        use crate::buffer_budget::BufferBudget;
+        use talpid_types::relay_flow::RelayBufferAllocator;
+        let budget = BufferBudget::new(8 * 1024 * 1024);
+        let baseline = budget.used();
+        let storage = budget.try_reserve(4 * 1024 * 1024).unwrap();
+        let (handle, receive, send, mut guard) = smoltcp_network_retained(
+            SmoltcpNetworkConfig {
+                ipv4_addr: Ipv4Addr::new(10, 0, 0, 1),
+                ipv6_addr: None,
+                mtu: 1280,
+            },
+            storage,
+        );
+        let socket = handle.icmp_socket(123).await.unwrap();
+        // Abort has been issued, but this current-thread runtime cannot process
+        // the task's cancellation until we yield. Cancel that pending join.
+        {
+            use std::{
+                future::{Future, poll_fn},
+                task::Poll,
+            };
+            let stop = guard.stop();
+            tokio::pin!(stop);
+            poll_fn(|cx| {
+                assert!(stop.as_mut().poll(cx).is_pending());
+                Poll::Ready(())
+            })
+            .await;
+        }
+        assert!(guard.poll_task.is_some());
+        guard.stop().await;
+        assert!(guard.poll_task.is_none());
+        assert!(
+            socket
+                .send_to_v4(&[8; 8], Ipv4Addr::LOCALHOST)
+                .await
+                .is_err()
+        );
+        drop((guard, handle, receive, send));
+        assert_eq!(budget.used(), baseline + 4 * 1024 * 1024);
+        drop(socket);
+        assert_eq!(budget.used(), baseline);
+    }
 
     fn make_network(
         addr: Ipv4Addr,

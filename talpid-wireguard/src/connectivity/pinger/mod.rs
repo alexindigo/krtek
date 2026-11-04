@@ -1,6 +1,8 @@
 mod icmp;
 
 pub use icmp::Error;
+#[cfg(any(target_os = "android", test))]
+pub(crate) use icmp::SmoltcpPinger;
 
 /// Trait for sending ICMP requests to get some traffic from a remote server
 #[async_trait::async_trait]

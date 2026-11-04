@@ -92,6 +92,7 @@ fn broker() -> AttachmentBroker {
     AttachmentBroker::new(
         Arc::new(BufferBudget::new(22 * 1024 * 1024)),
         Arc::new(BufferBudget::new(2 * 1024 * 1024)),
+        Arc::new(BufferBudget::new(8 * 1024 * 1024)),
     )
     .unwrap()
 }
@@ -446,6 +447,7 @@ async fn blocked_raw_output_retains_credit_is_idle_and_responds_to_loss_and_stop
         let broker = AttachmentBroker::new(
             Arc::new(application.clone()),
             Arc::new(BufferBudget::new(2 * 1024 * 1024)),
+            Arc::new(BufferBudget::new(8 * 1024 * 1024)),
         )
         .unwrap();
         let (mut request, config) = managed(&broker);

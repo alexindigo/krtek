@@ -14,12 +14,9 @@ pub mod packet_attachment;
 
 #[cfg(any(target_os = "android", target_os = "linux"))]
 pub mod android_frontend;
-use futures::{
-    SinkExt,
-    channel::{
-        mpsc::UnboundedSender,
-        oneshot::{self, Sender},
-    },
+use futures::channel::{
+    mpsc::UnboundedSender,
+    oneshot::{self, Sender},
 };
 use talpid_routing::RouteManagerHandle;
 use talpid_types::net::{AllowedTunnelTraffic, obfuscation::ObfuscatorConfig};
@@ -67,10 +64,16 @@ impl EventHook {
     }
 
     pub async fn on_event(&mut self, event: TunnelEvent) {
-        let (tx, rx) = oneshot::channel::<()>();
-        if let Ok(()) = self.event_tx.send((event, tx)).await {
-            let _ = rx.await;
+        if let Some(acknowledged) = self.enqueue(event) {
+            let _ = acknowledged.await;
         }
+    }
+
+    /// Queue synchronously so an owner can order publication against revocation.
+    /// Await the acknowledgement only after releasing all authority guards.
+    pub fn enqueue(&self, event: TunnelEvent) -> Option<oneshot::Receiver<()>> {
+        let (tx, rx) = oneshot::channel::<()>();
+        self.event_tx.unbounded_send((event, tx)).ok().map(|()| rx)
     }
 }
 

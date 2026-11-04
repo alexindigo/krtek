@@ -998,6 +998,8 @@ impl Daemon {
             #[cfg(target_os = "android")]
             config.android_context,
             #[cfg(target_os = "android")]
+            None,
+            #[cfg(target_os = "android")]
             connectivity_listener.clone(),
             #[cfg(target_os = "linux")]
             tunnel_state_machine::LinuxNetworkingIdentifiers {

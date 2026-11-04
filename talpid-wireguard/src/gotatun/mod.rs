@@ -8,7 +8,7 @@ use gotatun::{
     device::{Device, DeviceBuilder, DeviceTransports},
     packet::{Ipv4Header, Ipv6Header, UdpHeader, WgData},
     tun::{
-        IpRecv,
+        IpRecv, IpSend, MtuWatcher,
         channel::{TunChannelRx, TunChannelTx},
         tun_async_device::TunDevice as GotaTunDevice,
     },
@@ -31,12 +31,11 @@ use talpid_types::net::{obfuscation::LwoVersion, wireguard::PeerConfig};
 use tun::{AbstractDevice, AsyncDevice};
 
 #[cfg(all(feature = "multihop-pcap", target_os = "linux"))]
-use gotatun::tun::{
-    IpSend,
-    pcap::{PcapSniffer, PcapStream},
-};
+use gotatun::tun::pcap::{PcapSniffer, PcapStream};
 
 mod conversions;
+#[cfg(any(target_os = "android", test))]
+pub(super) mod managed_control;
 mod obfuscation;
 mod source_filter;
 
@@ -45,10 +44,64 @@ pub use obfuscation::{TransportFactory, lwo_timer_params, lwo_version, transport
 use source_filter::SourceFilter;
 
 /// Everything read from the TUN device passes the source filter before it enters the tunnel.
-type TunRx = SourceFilter<GotaTunDevice>;
+type TunRx = SourceFilter<PlaintextReceive>;
 
-type SinglehopDevice = Device<(TransportFactory, GotaTunDevice, TunRx)>;
-type ExitDevice = Device<(UdpChannelFactory, GotaTunDevice, TunRx)>;
+type SinglehopDevice = Device<(TransportFactory, PlaintextSend, TunRx)>;
+type ExitDevice = Device<(UdpChannelFactory, PlaintextSend, TunRx)>;
+
+enum PlaintextSource {
+    Native(GotaTunDevice),
+    #[cfg(any(target_os = "android", test))]
+    Managed(managed_control::PendingManaged),
+}
+enum PlaintextSend {
+    Native(GotaTunDevice),
+    #[cfg(any(target_os = "android", test))]
+    Managed(managed_control::ManagedSend),
+}
+enum PlaintextReceive {
+    Native(GotaTunDevice),
+    #[cfg(any(target_os = "android", test))]
+    Managed(managed_control::ManagedReceive),
+}
+impl IpSend for PlaintextSend {
+    async fn send(
+        &mut self,
+        packet: gotatun::packet::Packet<gotatun::packet::Ip>,
+    ) -> std::io::Result<()> {
+        match self {
+            Self::Native(device) => device.send(packet).await,
+            #[cfg(any(target_os = "android", test))]
+            Self::Managed(device) => device.send(packet).await,
+        }
+    }
+}
+impl IpRecv for PlaintextReceive {
+    async fn recv<'a>(
+        &'a mut self,
+        pool: &mut gotatun::packet::PacketBufPool,
+    ) -> std::io::Result<
+        impl Iterator<Item = gotatun::packet::Packet<gotatun::packet::Ip>> + Send + 'a,
+    > {
+        #[cfg(not(any(target_os = "android", test)))]
+        {
+            let Self::Native(device) = self;
+            device.recv(pool).await
+        }
+        #[cfg(any(target_os = "android", test))]
+        match self {
+            Self::Native(device) => device.recv(pool).await.map(either::Either::Left),
+            Self::Managed(device) => device.recv(pool).await.map(either::Either::Right),
+        }
+    }
+    fn mtu(&self) -> MtuWatcher {
+        match self {
+            Self::Native(device) => device.mtu(),
+            #[cfg(any(target_os = "android", test))]
+            Self::Managed(device) => device.mtu(),
+        }
+    }
+}
 
 #[cfg(not(all(feature = "multihop-pcap", target_os = "linux")))]
 type EntryDevice = Device<(TransportFactory, TunChannelTx, TunChannelRx)>;
@@ -69,31 +122,164 @@ pub struct GotaTun {
 
     /// Name of the tun interface.
     interface_name: String,
+    #[cfg(any(target_os = "android", test))]
+    managed: Option<Arc<managed_control::ManagedControl>>,
+    cleanup: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl GotaTun {
     async fn new(
-        tun_dev: AsyncDevice,
+        source: PlaintextSource,
         bypass: Arc<dyn SocketBypass>,
         obfuscation: Option<RunningObfuscation>,
         config: &Config,
         daita: Option<&DaitaSettings>,
         interface_name: String,
     ) -> Result<Self, TunnelError> {
-        let tun_dev = GotaTunDevice::from_tun_device(tun_dev)
-            .map_err(|e| TunnelError::RecoverableStartWireguardError(Box::new(e)))?;
+        let config = config.clone();
+        let daita = daita.map(|settings| DaitaSettings {
+            client_machines: settings.client_machines.clone(),
+            max_decoy_frac: settings.max_decoy_frac,
+            max_delay_frac: settings.max_delay_frac,
+        });
+        // A cancelled caller detaches this one setup owner, never an in-flight
+        // device/guard join. An unclaimed successful result has joined Drop cleanup.
+        tokio::spawn(async move {
+            Self::new_inner(
+                source,
+                bypass,
+                obfuscation,
+                &config,
+                daita.as_ref(),
+                interface_name,
+            )
+            .await
+        })
+        .await
+        .map_err(|error| TunnelError::FatalStartWireguardError(Box::new(error)))?
+    }
 
+    #[cfg_attr(not(any(target_os = "android", test)), expect(unused_mut))]
+    async fn new_inner(
+        mut source: PlaintextSource,
+        bypass: Arc<dyn SocketBypass>,
+        obfuscation: Option<RunningObfuscation>,
+        config: &Config,
+        daita: Option<&DaitaSettings>,
+        mut interface_name: String,
+    ) -> Result<Self, TunnelError> {
         let obfuscation = obfuscation.map(|obfuscation| {
             obfuscation.with_client_public_key(config.tunnel.private_key.public_key())
         });
-        let devices = create_devices(config, daita, tun_dev, bypass, obfuscation)
-            .await
-            .map_err(TunnelError::GotaTunDevice)?;
+        let mut optimize = true;
+        loop {
+            let (send, receive, managed): (_, _, Option<ManagedOwner>) = match &mut source {
+                PlaintextSource::Native(device) => (
+                    PlaintextSend::Native(device.clone()),
+                    PlaintextReceive::Native(device.clone()),
+                    None,
+                ),
+                #[cfg(any(target_os = "android", test))]
+                PlaintextSource::Managed(pending) => {
+                    let pair = pending
+                        .create(config)
+                        .await
+                        .map_err(|e| TunnelError::FatalStartWireguardError(Box::new(e)))?;
+                    interface_name = pair.owner.interface();
+                    (
+                        PlaintextSend::Managed(pair.send),
+                        PlaintextReceive::Managed(pair.receive),
+                        Some(pair.owner),
+                    )
+                }
+            };
+            #[cfg(not(any(target_os = "android", test)))]
+            let _ = managed;
+            // Keep the lifecycle owner outside the fallible builder: errors and
+            // retry join control work before releasing or requesting a successor.
+            let setup = create_devices(
+                config,
+                daita,
+                send,
+                receive,
+                bypass.clone(),
+                obfuscation.clone(),
+                optimize,
+            )
+            .await;
+            match setup {
+                Ok(devices) => {
+                    #[cfg(any(target_os = "android", test))]
+                    if let Some(owner) = &managed {
+                        owner.installed();
+                    }
+                    return Ok(Self {
+                        interface_name,
+                        devices: Some(devices),
+                        cleanup: None,
+                        #[cfg(any(target_os = "android", test))]
+                        managed,
+                    });
+                }
+                Err(error) => {
+                    #[cfg(any(target_os = "android", test))]
+                    if let Some(owner) = managed {
+                        owner.stop().await;
+                    }
+                    #[cfg(unix)]
+                    if optimize
+                        && matches!(&error, gotatun::device::Error::Bind(e, _) if e.raw_os_error() == Some(nix::errno::Errno::ENOBUFS as i32))
+                    {
+                        optimize = false;
+                        continue;
+                    }
+                    return Err(TunnelError::GotaTunDevice(error));
+                }
+            }
+        }
+    }
 
-        Ok(Self {
-            interface_name,
-            devices: Some(devices),
-        })
+    #[cfg(any(target_os = "android", test))]
+    pub(super) fn managed(&self) -> Option<Arc<managed_control::ManagedControl>> {
+        self.managed.clone()
+    }
+
+    fn begin_cleanup(&mut self) {
+        #[cfg(any(target_os = "android", test))]
+        if let Some(owner) = &self.managed {
+            owner.revoke();
+        }
+        let Some(devices) = self.devices.take() else {
+            return;
+        };
+        #[cfg(any(target_os = "android", test))]
+        let managed = self.managed.take();
+        self.cleanup = Some(tokio::spawn(async move {
+            devices.stop().await;
+            #[cfg(any(target_os = "android", test))]
+            if let Some(owner) = managed {
+                owner.stop().await;
+            }
+        }));
+    }
+
+    async fn shutdown(&mut self) {
+        self.begin_cleanup();
+        if let Some(cleanup) = &mut self.cleanup {
+            let _ = cleanup.await;
+        }
+        self.cleanup = None;
+    }
+}
+
+#[cfg(any(target_os = "android", test))]
+type ManagedOwner = Arc<managed_control::ManagedControl>;
+#[cfg(not(any(target_os = "android", test)))]
+type ManagedOwner = ();
+
+impl Drop for GotaTun {
+    fn drop(&mut self) {
+        self.begin_cleanup();
     }
 }
 
@@ -176,10 +362,16 @@ impl Devices {
 
 /// A tunnel device that is opened for a GotaTun tunnel, see [`start_gotatun`].
 pub struct OpenedTun {
-    device: AsyncDevice,
+    source: OpenedSource,
     interface_name: String,
     #[cfg(target_os = "android")]
     is_new: bool,
+}
+
+enum OpenedSource {
+    Native(AsyncDevice),
+    #[cfg(target_os = "android")]
+    Managed(managed_control::PendingManaged),
 }
 
 impl OpenedTun {
@@ -188,6 +380,11 @@ impl OpenedTun {
     #[cfg(target_os = "android")]
     pub fn is_new(&self) -> bool {
         self.is_new
+    }
+
+    #[cfg(target_os = "android")]
+    pub fn is_managed(&self) -> bool {
+        matches!(self.source, OpenedSource::Managed(_))
     }
 }
 
@@ -208,14 +405,33 @@ pub fn open_tun(
 
         let interface_name = device.deref().tun_name().unwrap();
         Ok(OpenedTun {
-            device,
+            source: OpenedSource::Native(device),
             interface_name,
         })
     }
 
     #[cfg(target_os = "android")]
     {
-        let (tun, fd) = get_tunnel_for_userspace(tun_provider, config)?;
+        let mut provider = tun_provider.lock().unwrap();
+        prepare_android_config(provider.config_mut(), config);
+        let mode = provider.transport();
+        let effective_config = provider.config_mut().clone();
+        drop(provider);
+        use talpid_tunnel::tun_provider::transport::UserspaceTun;
+        let (tun, fd) = match mode.open(
+            effective_config,
+            |_| TunnelError::FatalStartWireguardError(Box::new(managed_control::unavailable())),
+            || get_tunnel_for_userspace(tun_provider, config),
+        )? {
+            UserspaceTun::Managed(source) => {
+                return Ok(OpenedTun {
+                    source: OpenedSource::Managed(managed_control::PendingManaged::new(source)),
+                    interface_name: String::new(),
+                    is_new: false,
+                });
+            }
+            UserspaceTun::Native(native) => native,
+        };
 
         let mut tun_config = tun::Configuration::default();
         tun_config.raw_fd(fd);
@@ -231,7 +447,7 @@ pub fn open_tun(
         let device = tun::AsyncDevice::new(device).unwrap();
         let interface_name = device.deref().tun_name().unwrap();
         Ok(OpenedTun {
-            device,
+            source: OpenedSource::Native(device),
             interface_name,
             is_new: tun.is_new,
         })
@@ -249,8 +465,16 @@ pub async fn start_gotatun(
     log::info!("GotaTun::start_tunnel");
 
     log::trace!("passing tunnel dev to gotatun");
+    let source = match tun.source {
+        OpenedSource::Native(device) => PlaintextSource::Native(
+            GotaTunDevice::from_tun_device(device)
+                .map_err(|e| TunnelError::RecoverableStartWireguardError(Box::new(e)))?,
+        ),
+        #[cfg(target_os = "android")]
+        OpenedSource::Managed(pending) => PlaintextSource::Managed(pending),
+    };
     let gotatun = GotaTun::new(
-        tun.device,
+        source,
         bypass,
         obfuscation,
         config,
@@ -341,13 +565,7 @@ impl Tunnel for GotaTun {
     }
 
     fn stop(mut self: Box<Self>) -> Result<(), TunnelError> {
-        tokio::runtime::Handle::current().block_on(async {
-            // TODO: devices should never be None while this GotaTun instance is running.
-            debug_assert!(self.devices.is_some());
-            if let Some(devices) = self.devices.take() {
-                devices.stop().await;
-            }
-        });
+        tokio::runtime::Handle::current().block_on(self.shutdown());
         Ok(())
     }
 
@@ -391,117 +609,94 @@ impl Tunnel for GotaTun {
 async fn create_devices(
     config: &Config, // TODO: do not include config to reduce confusion
     daita: Option<&DaitaSettings>,
-    tun_dev: GotaTunDevice,
+    send: PlaintextSend,
+    receive: PlaintextReceive,
     bypass: Arc<dyn SocketBypass>,
     obfuscation: Option<RunningObfuscation>,
+    optimize_buffer_size: bool,
 ) -> Result<Devices, gotatun::device::Error> {
-    async fn create_devices_inner(
-        config: &Config, // TODO: do not include config to reduce confusion
-        daita: Option<&DaitaSettings>,
-        tun_dev: GotaTunDevice,
-        bypass: Arc<dyn SocketBypass>,
-        obfuscation: Option<RunningObfuscation>,
-        optimize_buffer_size: bool,
-    ) -> Result<Devices, gotatun::device::Error> {
-        let factory = transport_factory(
-            optimize_buffer_size,
-            obfuscation,
-            config.entry_peer.endpoint,
-            bypass,
-        );
-        // The addresses assigned to the tun device, i.e. the only source addresses we accept
-        // packets from. See [SourceFilter].
-        let source_v4 = config.tunnel_ipv4();
-        let source_v6 = config.tunnel_ipv6();
+    let factory = transport_factory(
+        optimize_buffer_size,
+        obfuscation,
+        config.entry_peer.endpoint,
+        bypass,
+    );
+    // The addresses assigned to the tun device, i.e. the only source addresses we accept
+    // packets from. See [SourceFilter].
+    let source_v4 = config.tunnel_ipv4();
+    let source_v6 = config.tunnel_ipv6();
 
-        let devices = if let Some(exit_peer) = &config.exit_peer {
-            // Multihop setup
+    let devices = if let Some(exit_peer) = &config.exit_peer {
+        // Multihop setup
 
-            // Calculate length of extra headers, assuming no optional header fields (i.e. IP
-            // options)
-            let multihop_overhead = match exit_peer.endpoint.ip() {
-                IpAddr::V4(..) => Ipv4Header::LEN + UdpHeader::LEN + WgData::OVERHEAD,
-                IpAddr::V6(..) => Ipv6Header::LEN + UdpHeader::LEN + WgData::OVERHEAD,
-            };
-
-            let exit_mtu = tun_dev.mtu();
-            let entry_mtu = exit_mtu.increase(multihop_overhead as u16).unwrap(/* TODO: this can happen if tun mtu is max i think*/);
-
-            let (tun_channel_tx, tun_channel_rx, udp_channels) = new_udp_tun_channel(
-                PACKET_CHANNEL_CAPACITY,
-                source_v4.unwrap_or(Ipv4Addr::UNSPECIFIED),
-                source_v6.unwrap_or(Ipv6Addr::UNSPECIFIED),
-                entry_mtu,
-            );
-
-            let tun_rx = SourceFilter::new(tun_dev.clone(), source_v4, source_v6);
-            let exit_device = DeviceBuilder::new()
-                .with_udp(udp_channels)
-                .with_ip_pair(tun_dev, tun_rx)
-                .build()
-                .await?;
-
-            // Hacky way of dumping entry<->exit traffic to a unix socket which wireshark can read.
-            // See docs on wrap_in_pcap_sniffer for an explanation.
-            #[cfg(all(feature = "multihop-pcap", target_os = "linux"))]
-            let (tun_channel_tx, tun_channel_rx) =
-                wrap_in_pcap_sniffer(tun_channel_tx, tun_channel_rx);
-
-            let entry_device = DeviceBuilder::new()
-                .with_udp(factory)
-                .with_ip_pair(tun_channel_tx, tun_channel_rx)
-                .build()
-                .await?;
-            let mut devices = Multihop {
-                entry_device,
-                exit_device,
-            };
-            devices.configure(config, exit_peer, daita).await?;
-            Devices::Multihop(devices)
-        } else {
-            // Singlehop setup
-
-            let tun_rx = SourceFilter::new(tun_dev.clone(), source_v4, source_v6);
-            let device = DeviceBuilder::new()
-                .with_udp(factory)
-                .with_ip_pair(tun_dev, tun_rx)
-                .build()
-                .await?;
-            let mut device = Singlehop { device };
-            device.configure(config, daita).await?;
-            Devices::Singlehop(device)
+        // Calculate length of extra headers, assuming no optional header fields (i.e. IP
+        // options)
+        let multihop_overhead = match exit_peer.endpoint.ip() {
+            IpAddr::V4(..) => Ipv4Header::LEN + UdpHeader::LEN + WgData::OVERHEAD,
+            IpAddr::V6(..) => Ipv6Header::LEN + UdpHeader::LEN + WgData::OVERHEAD,
         };
 
-        Ok(devices)
-    }
+        let exit_mtu = receive.mtu();
+        let entry_mtu = exit_mtu.increase(multihop_overhead as u16).unwrap(/* TODO: this can happen if tun mtu is max i think*/);
 
-    match create_devices_inner(
-        config,
-        daita,
-        tun_dev.clone(),
-        bypass.clone(),
-        obfuscation.clone(),
-        true,
-    )
-    .await
-    {
-        Ok(devices) => Ok(devices),
-        // Empirically, creating devices may fail when binding the UDP socket due to
-        // us wanting to tweak the UDP socket buffer sizes to a larger value than
-        // the OS default (suspected hardware related issues / limitations). In that
-        // case, `os error 55 ("No buffer space available")`  has been observed.
-        //
-        // Try to bind UDP sockets with default buffer sizes.
-        #[cfg(unix)]
-        Err(ref err @ gotatun::device::Error::Bind(ref io_err, _))
-            if let Some(errno) = io_err.raw_os_error()
-                && nix::errno::Errno::from_raw(errno) == nix::errno::Errno::ENOBUFS =>
+        let (tun_channel_tx, tun_channel_rx, udp_channels) = new_udp_tun_channel(
+            PACKET_CHANNEL_CAPACITY,
+            source_v4.unwrap_or(Ipv4Addr::UNSPECIFIED),
+            source_v6.unwrap_or(Ipv6Addr::UNSPECIFIED),
+            entry_mtu,
+        );
+
+        let tun_rx = SourceFilter::new(receive, source_v4, source_v6);
+        let exit_device = DeviceBuilder::new()
+            .with_udp(udp_channels)
+            .with_ip_pair(send, tun_rx)
+            .build()
+            .await?;
+
+        // Hacky way of dumping entry<->exit traffic to a unix socket which wireshark can read.
+        // See docs on wrap_in_pcap_sniffer for an explanation.
+        #[cfg(all(feature = "multihop-pcap", target_os = "linux"))]
+        let (tun_channel_tx, tun_channel_rx) = wrap_in_pcap_sniffer(tun_channel_tx, tun_channel_rx);
+
+        let entry_device = match DeviceBuilder::new()
+            .with_udp(factory)
+            .with_ip_pair(tun_channel_tx, tun_channel_rx)
+            .build()
+            .await
         {
-            log::error!("Failed to bind UDP socket - retrying with default buffer sizes");
-            create_devices_inner(config, daita, tun_dev, bypass, obfuscation, false).await
+            Ok(device) => device,
+            Err(error) => {
+                exit_device.stop().await;
+                return Err(error);
+            }
+        };
+        let mut devices = Multihop {
+            entry_device,
+            exit_device,
+        };
+        if let Err(error) = devices.configure(config, exit_peer, daita).await {
+            devices.stop().await;
+            return Err(error);
         }
-        Err(err) => Err(err),
-    }
+        Devices::Multihop(devices)
+    } else {
+        // Singlehop setup
+
+        let tun_rx = SourceFilter::new(receive, source_v4, source_v6);
+        let device = DeviceBuilder::new()
+            .with_udp(factory)
+            .with_ip_pair(send, tun_rx)
+            .build()
+            .await?;
+        let mut device = Singlehop { device };
+        if let Err(error) = device.configure(config, daita).await {
+            device.stop().await;
+            return Err(error);
+        }
+        Devices::Singlehop(device)
+    };
+
+    Ok(devices)
 }
 
 #[cfg(target_os = "windows")]
@@ -559,7 +754,27 @@ pub fn get_tunnel_for_userspace(
     let mut last_error = None;
     let mut tun_provider = tun_provider.lock().unwrap();
 
-    let tun_config = tun_provider.config_mut();
+    prepare_android_config(tun_provider.config_mut(), config);
+    const MAX_PREPARE_TUN_ATTEMPTS: usize = 4;
+    for _ in 1..=MAX_PREPARE_TUN_ATTEMPTS {
+        let tunnel_device = tun_provider
+            .open_tun()
+            .map_err(TunnelError::SetupTunnelDevice)?;
+        match nix::unistd::dup(&tunnel_device) {
+            Ok(fd) => return Ok((tunnel_device, fd.into_raw_fd())),
+            Err(error @ (nix::errno::Errno::EBADFD | nix::errno::Errno::EBADF)) => {
+                last_error = Some(error)
+            }
+            Err(error) => return Err(TunnelError::FdDuplicationError(error)),
+        }
+    }
+    Err(TunnelError::FdDuplicationError(
+        last_error.expect("collected in loop"),
+    ))
+}
+
+#[cfg(target_os = "android")]
+fn prepare_android_config(tun_config: &mut tun_provider::TunConfig, config: &Config) {
     tun_config.addresses = config.tunnel.addresses.clone();
     tun_config.ipv4_gateway = config.ipv4_gateway;
     tun_config.ipv6_gateway = config.ipv6_gateway;
@@ -575,26 +790,6 @@ pub fn get_tunnel_for_userspace(
     } else {
         vec!["0.0.0.0/0".parse().unwrap()]
     };
-
-    const MAX_PREPARE_TUN_ATTEMPTS: usize = 4;
-
-    for _ in 1..=MAX_PREPARE_TUN_ATTEMPTS {
-        let tunnel_device = tun_provider
-            .open_tun()
-            .map_err(TunnelError::SetupTunnelDevice)?;
-
-        match nix::unistd::dup(&tunnel_device) {
-            Ok(fd) => return Ok((tunnel_device, fd.into_raw_fd())),
-            #[cfg(not(target_os = "macos"))]
-            Err(error @ nix::errno::Errno::EBADFD) => last_error = Some(error),
-            Err(error @ nix::errno::Errno::EBADF) => last_error = Some(error),
-            Err(error) => return Err(TunnelError::FdDuplicationError(error)),
-        }
-    }
-
-    Err(TunnelError::FdDuplicationError(
-        last_error.expect("Should be collected in loop"),
-    ))
 }
 
 /// Wrap `ip_send` and `ip_recv` in [PcapSniffer]s for use with Wireshark.

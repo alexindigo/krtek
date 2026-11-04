@@ -131,8 +131,11 @@ impl ConnectingState {
                         shared_values.prepare_tun_config(false);
                         if retry_attempt > 0
                             && retry_attempt.is_multiple_of(MAX_ATTEMPTS_WITH_SAME_TUN)
-                            && let Err(error) =
-                                shared_values.tun_provider.lock().unwrap().open_tun_forced()
+                            && let Err(error) = shared_values
+                                .tun_provider
+                                .lock()
+                                .unwrap()
+                                .reconfigure_tun(true)
                         {
                             log::error!(
                                 "{}",

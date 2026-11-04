@@ -10,6 +10,7 @@ license.workspace = true
 async-trait = { workspace = true }
 byteorder = "1"
 futures = { workspace = true }
+either = { workspace = true }
 gotatun = { workspace = true, features = ["daita", "device", "tun"] }
 internet-checksum = "0.2"
 ipnetwork = { workspace = true }
@@ -21,6 +22,7 @@ socket2 = { workspace = true, features = ["all"] }
 surge-ping = { workspace = true }
 talpid-error.workspace = true
 talpid-net = { path = "../talpid-net" }
+talpid-netstack = { path = "../talpid-netstack" }
 talpid-routing = { path = "../talpid-routing" }
 talpid-tunnel = { path = "../talpid-tunnel" }
 talpid-tunnel-config-client = { path = "../talpid-tunnel-config-client" }
@@ -34,6 +36,7 @@ tunnel-obfuscation = { path = "../tunnel-obfuscation", features = ["gotatun"] }
 [dev-dependencies]
 insta = { workspace = true }
 proptest = { workspace = true }
+smoltcp = { version = "0.13", default-features = false, features = ["medium-ip", "proto-ipv4", "socket-tcp", "std"] }
 tokio = { workspace = true, features = ["test-util"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

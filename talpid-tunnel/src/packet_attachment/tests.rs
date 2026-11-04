@@ -35,9 +35,12 @@ impl Fixture {
         let application = root.reserve(22 * 1024 * 1024).unwrap().region().unwrap();
         let capture = root.reserve(2 * 1024 * 1024).unwrap().region().unwrap();
         let control = root.reserve(8 * 1024 * 1024).unwrap().region().unwrap();
-        let broker =
-            AttachmentBroker::new(Arc::new(application.clone()), Arc::new(capture.clone()))
-                .unwrap();
+        let broker = AttachmentBroker::new(
+            Arc::new(application.clone()),
+            Arc::new(capture.clone()),
+            Arc::new(control.clone()),
+        )
+        .unwrap();
         broker.set_mode(AttachmentMode::ManagedRequired).unwrap();
         Self {
             broker,

@@ -175,6 +175,7 @@ struct Inner {
     replies: Notify,
     application: Arc<dyn RelayBufferAllocator>,
     capture: Arc<dyn RelayBufferAllocator>,
+    control: Arc<dyn RelayBufferAllocator>,
     _storage: Arc<dyn RelayBufferReservation>,
 }
 
@@ -238,6 +239,7 @@ impl AttachmentBroker {
     pub fn new(
         application: Arc<dyn RelayBufferAllocator>,
         capture: Arc<dyn RelayBufferAllocator>,
+        control: Arc<dyn RelayBufferAllocator>,
     ) -> Result<Self, AttachmentError> {
         let storage = capture.try_reserve(8192)?;
         let state = State {
@@ -257,6 +259,7 @@ impl AttachmentBroker {
                 replies: Notify::new(),
                 application,
                 capture,
+                control,
                 _storage: storage,
             }),
         })
@@ -271,6 +274,14 @@ impl AttachmentBroker {
     }
     pub fn changes(&self) -> watch::Receiver<BrokerSnapshot> {
         self.inner.changes.subscribe()
+    }
+
+    /// Retained runtime regions, never fresh per-attempt roots.
+    pub fn control_buffers(&self) -> Arc<dyn RelayBufferAllocator> {
+        self.inner.control.clone()
+    }
+    pub fn application_buffers(&self) -> Arc<dyn RelayBufferAllocator> {
+        self.inner.application.clone()
     }
 
     pub fn set_mode(&self, mode: AttachmentMode) -> Result<(), AttachmentError> {
@@ -520,6 +531,18 @@ impl AttachmentBroker {
         self.inner.publish(&state);
         self.inner.replies.notify_one();
     }
+
+    /// Provider-side reconfiguration in the selected managed mode. Platform
+    /// descriptor release remains the capture actor's joined responsibility.
+    pub fn retire_transport(&self) {
+        let mut state = self.inner.state.lock().expect("attachment state");
+        state.retire_capture();
+        if let Some(request) = state.request.take() {
+            request.status.send_replace(RequestStatus::Cancelled);
+        }
+        self.inner.publish(&state);
+        self.inner.replies.notify_one();
+    }
 }
 
 impl CaptureReceipt {
@@ -754,6 +777,10 @@ fn enqueue(
 }
 
 impl AttemptControl {
+    /// Private control may run while ordinary authority is still Pending.
+    pub fn live(&self) -> bool {
+        !*self.attempt.cancelled.borrow()
+    }
     pub fn capability(&self) -> RelayAttempt {
         self.attempt.owner.capability()
     }

@@ -88,11 +88,16 @@ pub struct AndroidTunProvider {
     object: GlobalRef,
     config: TunConfig,
     current_tunnel: TunnelCache,
+    attachment: Option<crate::packet_attachment::AttachmentBroker>,
 }
 
 impl AndroidTunProvider {
     /// Create a new AndroidTunProvider interfacing with Android's VpnService.
-    pub fn new(context: AndroidContext, config: TunConfig) -> Self {
+    pub fn new(
+        context: AndroidContext,
+        config: TunConfig,
+        attachment: Option<crate::packet_attachment::AttachmentBroker>,
+    ) -> Self {
         let env = JnixEnv::from(
             context
                 .jvm
@@ -107,6 +112,7 @@ impl AndroidTunProvider {
             object: context.vpn_service,
             config,
             current_tunnel: None,
+            attachment,
         }
     }
 
@@ -114,6 +120,22 @@ impl AndroidTunProvider {
     /// take effect.
     pub fn config_mut(&mut self) -> &mut TunConfig {
         &mut self.config
+    }
+
+    pub fn transport(&self) -> super::transport::TransportMode {
+        super::transport::TransportMode::selected(self.attachment.as_ref())
+    }
+
+    /// Retire only transport/config ownership in managed mode. The daemon owns
+    /// joined capture teardown and changes selection only after old TSM teardown.
+    pub fn reconfigure_tun(&mut self, forced: bool) -> Result<(), Error> {
+        self.transport().reconfigure(forced, |forced| {
+            if forced {
+                self.open_tun_forced().map(|_| ())
+            } else {
+                self.open_tun().map(|_| ())
+            }
+        })
     }
 
     /// Returns an open tunnel with the current configuration, if a tunnel already exists with the
@@ -192,6 +214,10 @@ impl AndroidTunProvider {
 
     /// Close currently active tunnel device.
     pub fn close_tun(&mut self) {
+        self.transport().close(|| self.close_native_tun());
+    }
+
+    fn close_native_tun(&mut self) {
         let result = self.call_method("closeTun", "()V", JavaType::Primitive(Primitive::Void), &[]);
 
         let error = match result {
