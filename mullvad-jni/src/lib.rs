@@ -2,6 +2,7 @@
 
 mod api;
 mod classes;
+mod local_network;
 mod problem_report;
 
 use jnix::{
@@ -75,6 +76,7 @@ struct DaemonContext {
     runtime: tokio::runtime::Runtime,
     daemon_command_tx: DaemonCommandSender,
     running_daemon: tokio::task::JoinHandle<()>,
+    local_network_registration: Option<local_network::LocalNetworkRegistration>,
 }
 
 /// Spawn Mullvad daemon. There can only be a single instance, which must be shut down using
@@ -120,11 +122,13 @@ pub extern "system" fn Java_net_mullvad_mullvadvpn_app_service_MullvadDaemon_ini
 
     let android_context = ok_or_throw!(&env, create_android_context(&env, vpn_service));
     log::info!("Created Android Context");
+    let local_network_registration =
+        local_network::LocalNetworkRegistration::attach(&env, &android_context);
 
     let api_endpoint = api::api_endpoint_from_java(&env, api_endpoint);
 
     log::info!("Starting daemon");
-    let daemon = ok_or_throw!(
+    let mut daemon = ok_or_throw!(
         &env,
         start(
             android_context,
@@ -136,6 +140,7 @@ pub extern "system" fn Java_net_mullvad_mullvadvpn_app_service_MullvadDaemon_ini
         )
     );
 
+    daemon.local_network_registration = Some(local_network_registration);
     *ctx = Some(daemon);
 }
 
@@ -216,6 +221,7 @@ fn spawn_daemon(
         runtime,
         daemon_command_tx,
         running_daemon,
+        local_network_registration: None,
     })
 }
 
@@ -269,6 +275,7 @@ fn create_android_context(
         vpn_service: env
             .new_global_ref(vpn_service)
             .map_err(Error::CreateGlobalReference)?,
+        local_network: local_network::new_feed(),
     })
 }
 

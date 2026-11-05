@@ -16,6 +16,8 @@ use talpid_types::net::GenericTunnelOptions;
 
 mod dns;
 
+pub mod local_network_access;
+
 /// Top level settings that can be controlled by the user. (i.e. not metadata or purely internal items)
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub enum SettingsKey {
@@ -25,6 +27,7 @@ pub enum SettingsKey {
     ApiAccessMethods,
     UpdateDefaultLocation,
     AllowLan,
+    LocalNetworkAccess,
     #[cfg(not(target_os = "android"))]
     LockdownMode,
     AutoConnect,
@@ -122,6 +125,9 @@ pub struct Settings {
     pub update_default_location: bool,
     /// If the daemon should allow communication with private (LAN) networks.
     pub allow_lan: bool,
+    /// Explicit local-network rules, independent of the legacy LAN switch.
+    #[serde(default)]
+    pub local_network_access: local_network_access::LocalNetworkAccess,
     /// Extra level of kill switch. When this setting is on, the disconnected state will block
     /// the firewall to not allow any traffic in or out.
     #[cfg(not(target_os = "android"))]
@@ -262,6 +268,7 @@ impl Default for Settings {
             custom_lists: CustomListsSettings::default(),
             api_access_methods: access_method::Settings::default(),
             allow_lan: false,
+            local_network_access: local_network_access::LocalNetworkAccess::default(),
             #[cfg(not(target_os = "android"))]
             lockdown_mode: false,
             auto_connect: false,

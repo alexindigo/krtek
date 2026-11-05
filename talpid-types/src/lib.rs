@@ -1,5 +1,6 @@
 #[cfg(target_os = "android")]
 pub mod android;
+pub mod local_network;
 pub mod net;
 pub mod tunnel;
 

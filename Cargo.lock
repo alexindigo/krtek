@@ -3835,6 +3835,7 @@ dependencies = [
  "log",
  "mullvad-version",
  "serde",
+ "serde_json",
  "talpid-types",
  "thiserror 2.0.19",
  "uuid",
@@ -6252,6 +6253,7 @@ dependencies = [
  "serde",
  "shadowsocks-crypto",
  "thiserror 2.0.19",
+ "tokio",
  "x25519-dalek",
  "zeroize",
 ]

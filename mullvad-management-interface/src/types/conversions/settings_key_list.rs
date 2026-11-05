@@ -10,6 +10,7 @@ impl From<mullvad_types::settings::SettingsKey> for proto::SettingsKey {
             mullvad_types::settings::SettingsKey::ApiAccessMethods => ApiAccessMethods,
             mullvad_types::settings::SettingsKey::UpdateDefaultLocation => UpdateDefaultLocation,
             mullvad_types::settings::SettingsKey::AllowLan => AllowLan,
+            mullvad_types::settings::SettingsKey::LocalNetworkAccess => LocalNetworkAccess,
             #[cfg(not(target_os = "android"))]
             mullvad_types::settings::SettingsKey::LockdownMode => LockdownModeKey,
             mullvad_types::settings::SettingsKey::AutoConnect => AutoConnect,
@@ -30,6 +31,7 @@ impl TryFrom<proto::SettingsKey> for mullvad_types::settings::SettingsKey {
         Ok(match key {
             proto::SettingsKey::RelaySettings => Self::RelaySettings,
             proto::SettingsKey::AllowLan => Self::AllowLan,
+            proto::SettingsKey::LocalNetworkAccess => Self::LocalNetworkAccess,
             #[cfg(not(target_os = "android"))]
             proto::SettingsKey::LockdownModeKey => Self::LockdownMode,
             #[cfg(target_os = "android")]

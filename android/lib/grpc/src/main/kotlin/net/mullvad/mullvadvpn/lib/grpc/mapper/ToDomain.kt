@@ -371,6 +371,9 @@ internal fun Settings.toDomain(): ModelSettings =
         obfuscationSettings = obfuscation_settings!!.toDomain(),
         customLists = custom_lists?.custom_lists?.map { it.toDomain() }.orEmpty(),
         allowLan = allow_lan,
+        localNetworkAccess =
+            local_network_access?.toDomain()
+                ?: net.mullvad.mullvadvpn.lib.model.LocalNetworkAccess(),
         tunnelOptions = tunnel_options!!.toDomain(),
         relayOverrides = relay_overrides.map { it.toDomain() },
         showBetaReleases = show_beta_releases,

@@ -252,6 +252,17 @@ impl ManagementService for ManagementServiceImpl {
             .map(|settings| Response::new(types::Settings::from(&settings)))
     }
 
+    async fn get_local_network_status(
+        &self,
+        _: Request<()>,
+    ) -> ServiceResult<types::LocalNetworkStatus> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command_to_daemon(DaemonCommand::GetLocalNetworkStatus(tx))?;
+        self.wait_for_result(rx)
+            .await
+            .map(|status| Response::new(types::LocalNetworkStatus::from(&status)))
+    }
+
     async fn reset_settings(&self, request: Request<types::SettingsKeyList>) -> ServiceResult<()> {
         let preserved = SettingsKeyList::try_from(request.into_inner())?;
         log::debug!("reset_settings");
@@ -266,6 +277,23 @@ impl ManagementService for ManagementServiceImpl {
         log::debug!("set_allow_lan({})", allow_lan);
         let (tx, rx) = oneshot::channel();
         self.send_command_to_daemon(DaemonCommand::SetAllowLan(tx, allow_lan))?;
+        self.wait_for_result(rx).await??;
+        Ok(Response::new(()))
+    }
+
+    async fn set_local_network_access(
+        &self,
+        request: Request<types::LocalNetworkPolicyUpdate>,
+    ) -> ServiceResult<()> {
+        let update = request.into_inner();
+        let policy = update
+            .policy
+            .ok_or_else(|| Status::invalid_argument("missing local network policy"))?
+            .try_into()?;
+        let expected = update.expected.map(TryInto::try_into).transpose()?;
+        log::debug!("set_local_network_access");
+        let (tx, rx) = oneshot::channel();
+        self.send_command_to_daemon(DaemonCommand::SetLocalNetworkAccess(tx, policy, expected))?;
         self.wait_for_result(rx).await??;
         Ok(Response::new(()))
     }
@@ -1468,6 +1496,14 @@ pub struct ManagementInterfaceEventBroadcaster {
 }
 
 impl ManagementInterfaceEventBroadcaster {
+    pub(crate) fn notify_local_network_status(
+        &self,
+        status: mullvad_types::settings::local_network_access::status::LocalNetworkStatus,
+    ) {
+        self.notify(types::DaemonEvent {
+            event: Some(daemon_event::Event::LocalNetworkStatus((&status).into())),
+        });
+    }
     fn notify(&self, value: types::DaemonEvent) {
         let mut subscriptions = self.subscriptions.lock().unwrap();
         subscriptions.retain(|tx| tx.send(Ok(value.clone())).is_ok());

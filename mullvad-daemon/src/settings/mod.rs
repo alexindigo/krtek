@@ -1,3 +1,4 @@
+use mullvad_types::settings::local_network_access::{LocalNetworkAccess, PolicyError};
 use mullvad_types::{
     access_method::Error as ApiAccessMethodError,
     custom_list::Error as CustomListError,
@@ -18,6 +19,9 @@ use tokio::{
 };
 
 pub mod patch;
+
+#[cfg(test)]
+mod local_network_access_tests;
 
 const SETTINGS_FILE: &str = "settings.json";
 
@@ -64,6 +68,15 @@ impl From<Error> for mullvad_management_interface::Status {
             Error::UpdateFailed(err) if err.downcast_ref::<ApiAccessMethodError>().is_some() => {
                 let api_access_method_err = *err.downcast::<ApiAccessMethodError>().unwrap();
                 handle_api_access_method_error(api_access_method_err)
+            }
+            Error::UpdateFailed(err) if err.downcast_ref::<PolicyError>().is_some() => {
+                let error = *err.downcast::<PolicyError>().unwrap();
+                let code = if error == PolicyError::Conflict {
+                    Code::Aborted
+                } else {
+                    Code::InvalidArgument
+                };
+                Status::new(code, error.to_string())
             }
             Error::SerializeError(..)
             | Error::ParseError(..)
@@ -303,6 +316,9 @@ impl SettingsPersister {
                     self.settings.update_default_location = old_settings.update_default_location
                 }
                 SettingsKey::AllowLan => self.settings.allow_lan = old_settings.allow_lan,
+                SettingsKey::LocalNetworkAccess => {
+                    self.settings.local_network_access = old_settings.local_network_access.clone()
+                }
                 #[cfg(not(target_os = "android"))]
                 SettingsKey::LockdownMode => {
                     self.settings.lockdown_mode = old_settings.lockdown_mode
@@ -460,6 +476,28 @@ impl SettingsPersister {
         Ok(true)
     }
 
+    /// Replace the policy atomically, optionally requiring the caller's last
+    /// observed value. Persistence and notification use the ordinary settings path.
+    pub async fn set_local_network_access(
+        &mut self,
+        mut policy: LocalNetworkAccess,
+        expected: Option<LocalNetworkAccess>,
+    ) -> Result<MadeChanges, Error> {
+        self.try_update(move |settings| {
+            if expected
+                .as_ref()
+                .is_some_and(|expected| expected != &settings.local_network_access)
+            {
+                return Err(PolicyError::Conflict);
+            }
+            policy.validate()?;
+            policy.deduplicate();
+            settings.local_network_access = policy;
+            Ok(())
+        })
+        .await
+    }
+
     /// Return a compact summary of important settings
     pub fn summary(&self) -> SettingsSummary<'_> {
         SettingsSummary {
@@ -550,6 +588,13 @@ impl Display for SettingsSummary<'_> {
             bool_to_label(self.settings.allow_lan),
             self.settings.tunnel_options.wireguard.quantum_resistant,
             self.settings.obfuscation_settings.selected_obfuscation,
+        )?;
+
+        write!(
+            f,
+            ", local network: {}, local rules: {}",
+            bool_to_label(self.settings.local_network_access.enabled),
+            self.settings.local_network_access.rules.len(),
         )?;
 
         // Print DNS options

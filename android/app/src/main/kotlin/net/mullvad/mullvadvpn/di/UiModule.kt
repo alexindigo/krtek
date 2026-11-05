@@ -398,7 +398,7 @@ val uiModule = module {
     viewModel { VoucherDialogViewModel(get(), get()) }
     viewModel { params -> VpnSettingsViewModel(navArgs = params.get(), get(), get(), get(), get()) }
     viewModel { params -> AntiCensorshipSettingsViewModel(isModal = params.get(), get()) }
-    viewModel { params -> LocalNetworkSharingViewModel(isModal = params.get(), get()) }
+    viewModel { params -> LocalNetworkSharingViewModel(isModal = params.get(), get(), get()) }
     viewModel { params ->
         WelcomeViewModel(
             accountRepository = get(),

@@ -1,3 +1,11 @@
+/// Optional feature classes are preloaded inside its non-fatal registration boundary.
+pub const LOCAL_NETWORK_CLASSES: &[&str] = &[
+    "net/mullvad/talpid/model/LocalNetworkSnapshot",
+    "net/mullvad/talpid/model/LocalPhysicalNetwork",
+    "net/mullvad/talpid/model/LocalPhysicalAddress",
+    "net/mullvad/talpid/model/LocalPhysicalRoute",
+];
+
 pub const CLASSES: &[&str] = &[
     "java/lang/Boolean",
     "java/net/InetAddress",

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="local_access_title">Local network rules</string>
+    <string name="local_access_scope_help">Save local addresses, optionally for a specific
+    Wi-Fi.</string>
+    <string name="local_access_enable">Enable local network rules</string>
+    <string name="local_access_enable_title">Enable local network rules?</string>
+    <string name="local_access_confirmation">Rules are saved now. Local forwarding is not available
+    in this version yet.</string>
+    <string name="local_access_forwarding_unavailable">Local forwarding is not available in this
+    version yet.</string>
+    <string name="local_access_empty">Add a rule to choose local addresses.</string>
+    <string name="local_access_add_rule">Add rule</string>
+    <string name="local_access_edit_rule">Edit rule</string>
+    <string name="local_access_edit">Edit</string>
+    <string name="local_access_delete">Delete</string>
+    <string name="local_access_delete_title">Delete rule?</string>
+    <string name="local_access_unnamed">Unnamed rule</string>
+    <string name="local_access_any_network">Any Wi-Fi or wired network</string>
+    <string name="local_access_wifi">Wi-Fi: %s</string>
+    <string name="local_access_name">Name</string>
+    <string name="local_access_addresses">Local addresses</string>
+    <string name="local_access_addresses_help">Use local ranges such as 192.168.1.0/24. Separate
+    ranges with commas.</string>
+    <string name="local_access_wifi_names">Wi-Fi names (optional)</string>
+    <string name="local_access_wifi_name">Wi-Fi name</string>
+    <string name="local_access_add_wifi">Add Wi-Fi name</string>
+    <string name="local_access_remove_wifi">Remove Wi-Fi name</string>
+    <string name="local_access_wifi_help">Match names exactly, including spaces. Leave empty for
+    any network.</string>
+    <string name="local_access_rule_enabled">Enable rule</string>
+    <string name="local_access_save">Save rule</string>
+    <string name="local_access_invalid_rule">Check the name, local addresses and Wi-Fi
+    names.</string>
+    <string name="local_access_canonical_suggestion">Use %s instead.</string>
+    <string name="local_access_conflict">This list changed. Review and save again.</string>
+    <string name="local_access_save_failed">Could not save the rules. Try again.</string>
+    <string name="local_access_discard_title">Discard changes?</string>
+    <string name="local_access_discard">Discard</string>
+    <string name="local_access_keep_editing">Keep editing</string>
+    <string name="local_access_conditions_met">Conditions met</string>
+    <string name="local_access_policy_off">Local network rules are off</string>
+    <string name="local_access_rule_off">Rule is off</string>
+    <string name="local_access_local_missing">Needs local network access</string>
+    <string name="local_access_fine_missing">Needs precise location access</string>
+    <string name="local_access_background_missing">Needs location access all the time</string>
+    <string name="local_access_location_off">Turn on Location</string>
+    <string name="local_access_no_network">No matching local network</string>
+    <string name="local_access_waiting_details">Waiting for network details</string>
+    <string name="local_access_different_wifi">Connected to a different Wi-Fi</string>
+    <string name="local_access_wifi_unknown">Wi-Fi name is unavailable</string>
+    <string name="local_access_multiple_networks">More than one network matches</string>
+    <string name="local_access_observer_unavailable">Local network status is unavailable</string>
+    <string name="local_access_waiting_status">Waiting for rule status</string>
+    <string name="local_access_connected_wifi">Use connected Wi-Fi</string>
+    <string name="local_access_wifi_location_off">Turn on Location to read the Wi-Fi name.</string>
+    <string name="local_access_not_on_wifi">Not connected to Wi-Fi</string>
+    <string name="local_access_multiple_wifi">More than one Wi-Fi is connected</string>
+    <string name="local_access_waiting_wifi">Waiting for the Wi-Fi name</string>
+    <string name="local_access_wifi_limit">Remove a Wi-Fi name before adding another.</string>
+    <string name="local_access_retry">Retry access</string>
+    <string name="local_access_fine_title">Allow precise location?</string>
+    <string name="local_access_fine_help">Android needs precise location access to read Wi-Fi
+    names. %s uses the name only to check your rules.</string>
+    <string name="local_access_background_title">Allow location all the time?</string>
+    <string name="local_access_background_help">Choose Allow all the time so Wi-Fi rules can be
+    checked while %s is in the background.</string>
+    <string name="local_access_continue">Continue</string>
+    <string name="local_access_approximate">Choose precise location so Android can share Wi-Fi
+    names.</string>
+    <string name="local_access_settings_unavailable">Could not open Android settings. Try
+    again.</string>
+    <string name="local_access_app_settings">Open app settings</string>
+    <string name="local_access_location_settings">Open Location settings</string>
+</resources>

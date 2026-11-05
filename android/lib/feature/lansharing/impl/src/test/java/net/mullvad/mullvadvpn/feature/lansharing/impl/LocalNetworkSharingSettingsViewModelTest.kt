@@ -1,5 +1,6 @@
 package net.mullvad.mullvadvpn.feature.lansharing.impl
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
 import io.mockk.every
@@ -12,6 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import net.mullvad.mullvadvpn.lib.common.Lc
 import net.mullvad.mullvadvpn.lib.common.test.TestCoroutineRule
+import net.mullvad.mullvadvpn.lib.model.LocalNetworkAccess
+import net.mullvad.mullvadvpn.lib.model.LocalNetworkStatus
 import net.mullvad.mullvadvpn.lib.model.Settings
 import net.mullvad.mullvadvpn.lib.repository.SettingsRepository
 import org.junit.jupiter.api.AfterEach
@@ -33,11 +36,14 @@ class LocalNetworkSharingSettingsViewModelTest {
     @BeforeEach
     fun setup() {
         every { mockSettingsRepository.settingsUpdates } returns mockSettingsUpdate
+        every { mockSettingsRepository.localNetworkStatus } returns
+            MutableStateFlow<LocalNetworkStatus?>(null)
 
         viewModel =
             LocalNetworkSharingViewModel(
                 isModal = false,
                 settingsRepository = mockSettingsRepository,
+                savedStateHandle = SavedStateHandle(),
             )
     }
 
@@ -59,6 +65,7 @@ class LocalNetworkSharingSettingsViewModelTest {
         val mockSettings: Settings = mockk(relaxed = true)
 
         every { mockSettings.allowLan } returns allowLan
+        every { mockSettings.localNetworkAccess } returns LocalNetworkAccess()
 
         // Act, Assert
         viewModel.uiState.test {
