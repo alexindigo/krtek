@@ -1,7 +1,7 @@
-use super::TunConfig;
+use super::{SOCKS_PROXIES, TunConfig};
 
 pub mod local_network;
-use ipnetwork::{IpNetwork, Ipv4Network};
+use ipnetwork::IpNetwork;
 use jnix::{
     FromJava, IntoJava, JnixEnv,
     jni::{
@@ -10,7 +10,6 @@ use jnix::{
         signature::{JavaType, Primitive},
     },
 };
-use std::net::Ipv4Addr;
 use std::{
     net::IpAddr,
     os::{
@@ -24,11 +23,6 @@ use talpid_routing::Route;
 use talpid_types::net::ipnetwork_sub::IpNetworkSub;
 use talpid_types::net::{ALLOWED_LAN_MULTICAST_NETS, ALLOWED_LAN_NETS};
 use talpid_types::{android::AndroidContext, android::InetNetwork};
-
-/// Socks5 proxies on Mullvad relays can be connected on the range 10.124.0.0/23 if already
-/// connected to another Mullvad relay.
-const SOCKS_PROXIES: IpNetwork =
-    IpNetwork::V4(Ipv4Network::new_checked(Ipv4Addr::new(10, 124, 0, 0), 23).unwrap());
 
 /// Errors that occur while setting up VpnService tunnel.
 #[derive(Debug, thiserror::Error)]
@@ -88,11 +82,16 @@ pub struct AndroidTunProvider {
     object: GlobalRef,
     config: TunConfig,
     current_tunnel: TunnelCache,
+    attachment: Option<crate::packet_attachment::AttachmentBroker>,
 }
 
 impl AndroidTunProvider {
     /// Create a new AndroidTunProvider interfacing with Android's VpnService.
-    pub fn new(context: AndroidContext, config: TunConfig) -> Self {
+    pub fn new(
+        context: AndroidContext,
+        config: TunConfig,
+        attachment: Option<crate::packet_attachment::AttachmentBroker>,
+    ) -> Self {
         let env = JnixEnv::from(
             context
                 .jvm
@@ -107,6 +106,7 @@ impl AndroidTunProvider {
             object: context.vpn_service,
             config,
             current_tunnel: None,
+            attachment,
         }
     }
 
@@ -114,6 +114,22 @@ impl AndroidTunProvider {
     /// take effect.
     pub fn config_mut(&mut self) -> &mut TunConfig {
         &mut self.config
+    }
+
+    pub fn transport(&self) -> super::transport::TransportMode {
+        super::transport::TransportMode::selected(self.attachment.as_ref())
+    }
+
+    /// Retire only transport/config ownership in managed mode. The daemon owns
+    /// joined capture teardown and changes selection only after old TSM teardown.
+    pub fn reconfigure_tun(&mut self, forced: bool) -> Result<(), Error> {
+        self.transport().reconfigure(forced, |forced| {
+            if forced {
+                self.open_tun_forced().map(|_| ())
+            } else {
+                self.open_tun().map(|_| ())
+            }
+        })
     }
 
     /// Returns an open tunnel with the current configuration, if a tunnel already exists with the
@@ -192,6 +208,10 @@ impl AndroidTunProvider {
 
     /// Close currently active tunnel device.
     pub fn close_tun(&mut self) {
+        self.transport().close(|| self.close_native_tun());
+    }
+
+    fn close_native_tun(&mut self) {
         let result = self.call_method("closeTun", "()V", JavaType::Primitive(Primitive::Void), &[]);
 
         let error = match result {

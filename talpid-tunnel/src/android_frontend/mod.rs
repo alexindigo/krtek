@@ -5,7 +5,14 @@
 
 #[cfg(target_os = "android")]
 mod android;
+mod fd_name;
+pub use fd_name::interface_name;
+mod config;
+mod observation;
+pub use config::{CaptureConfig, CaptureDisposition};
+use observation::Observation;
 
+use crate::packet_attachment::AttachmentReply;
 use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use std::{
     io,
@@ -15,7 +22,9 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
-use talpid_lan_forwarder::{Forwarder, LocalAuthority, packet::MAX_PACKET_SIZE};
+use talpid_lan_forwarder::{Forwarder, LocalAuthority};
+use talpid_types::capture_network::{CaptureExpectation, CaptureNetworkFeed};
+use talpid_types::relay_flow::{RelayAttempt, RelayWriteOutcome};
 use tokio::{
     io::{Interest, unix::AsyncFd},
     sync::{oneshot, watch},
@@ -23,7 +32,17 @@ use tokio::{
 };
 
 pub trait FrontendPlatform: Send + Sync + 'static {
-    fn open(&self, routes: &[String]) -> io::Result<OwnedFd>;
+    fn open(&self, generation: i64, config: &CaptureConfig) -> io::Result<OwnedFd>;
+    fn capture_feed(&self) -> Arc<CaptureNetworkFeed>;
+    fn expectation(
+        &self,
+        config: &CaptureConfig,
+        interface: String,
+    ) -> io::Result<CaptureExpectation>;
+    fn interface_name(&self, fd: BorrowedFd<'_>) -> io::Result<String> {
+        interface_name(fd)
+    }
+    fn bind(&self, generation: i64, interface: &str) -> io::Result<bool>;
     /// Release platform ownership after descriptor closure. Must be idempotent:
     /// an error may mean the call never arrived, or that its acknowledgement failed.
     fn closed(&self) -> io::Result<()>;
@@ -50,52 +69,96 @@ impl FrontendOwner {
     /// errors and cancellation, then join `stop` before any replacement or Connect.
     pub fn start<A: LocalAuthority>(
         platform: Arc<dyn FrontendPlatform>,
-        routes: Vec<String>,
+        config: CaptureConfig,
         mut forwarder: Forwarder<A>,
         revalidate: watch::Receiver<u64>,
     ) -> io::Result<Self> {
-        if routes.is_empty() {
-            return Err(io::ErrorKind::InvalidInput.into());
-        }
+        let mut observation = match &config {
+            CaptureConfig::Partial(routes) if routes.is_empty() => {
+                return Err(io::ErrorKind::InvalidInput.into());
+            }
+            CaptureConfig::Partial(_) => None,
+            CaptureConfig::Secured { .. } => Some(Observation::begin(platform.as_ref(), &config)?),
+        };
+        let generation = match &observation {
+            Some(observation) => observation.generation,
+            None => i64::try_from(
+                talpid_types::relay_flow::RelayCaptureGeneration::fresh()
+                    .map_err(|error| io::Error::other(format!("{error:?}")))?
+                    .get(),
+            )
+            .map_err(io::Error::other)?,
+        };
         let (stop, stopped) = oneshot::channel();
         let (state_tx, state) = watch::channel(FrontendState::Running);
         let (started, ready) = oneshot::channel();
-        let release_pending = Arc::new(AtomicBool::new(false));
+        // Once opening starts a failed JNI acknowledgement can still owe release.
+        // Keep the obligation even when no descriptor was returned to Rust.
+        let release_pending = Arc::new(AtomicBool::new(true));
         let pending = release_pending.clone();
         let task_platform = platform.clone();
         let task = tokio::spawn(async move {
             // The task owns opening, including when readiness is cancelled. Blocking
             // platform work is always joined before the stop acknowledgement.
             let opener = task_platform.clone();
-            let opened = tokio::task::spawn_blocking(move || opener.open(&routes)).await;
-            let mut released = Ok(());
-            let terminal = match opened {
-                Ok(Ok(fd)) => {
-                    pending.store(true, Ordering::Release);
-                    let result = run(fd, &mut forwarder, revalidate, stopped, started).await;
-                    forwarder.close_all().await;
-                    // run returns its descriptor on every exit, after loop teardown.
-                    let (fd, terminal) = result;
-                    drop(fd);
-                    released = task_platform.closed();
-                    if released.is_ok() {
-                        pending.store(false, Ordering::Release);
-                        terminal
-                    } else {
-                        FrontendState::Failed
-                    }
+            let open_config = config.clone();
+            let opened = tokio::task::spawn_blocking(move || {
+                let fd = opener.open(generation, &open_config);
+                let bound = match &fd {
+                    Ok(fd) => match &mut observation {
+                        Some(observation) => {
+                            observation.bind(opener.as_ref(), &open_config, fd.as_fd())
+                        }
+                        None => Ok(()),
+                    },
+                    Err(_) => Ok(()),
+                };
+                (fd, bound, observation)
+            })
+            .await;
+            let (fd, mut terminal, observation) = match opened {
+                Ok((Ok(fd), bound, observation)) => {
+                    let result = run(
+                        fd,
+                        &mut forwarder,
+                        revalidate,
+                        stopped,
+                        started,
+                        (&config, observation.as_ref()),
+                        bound,
+                    )
+                    .await;
+                    (Some(result.0), result.1, observation)
                 }
                 result => {
-                    let error = match result {
-                        Ok(Err(error)) => error,
-                        Err(error) => io::Error::other(error),
-                        Ok(Ok(_)) => unreachable!(),
+                    let (error, observation) = match result {
+                        Ok((Err(error), _, observation)) => (error, observation),
+                        Err(error) => (io::Error::other(error), None),
+                        Ok((Ok(_), _, _)) => unreachable!(),
                     };
                     let _ = started.send(Err(error));
-                    forwarder.close_all().await;
-                    FrontendState::Failed
+                    (None, FrontendState::Failed, observation)
                 }
             };
+            if let Some(observation) = &observation {
+                observation.retire();
+            }
+            forwarder.close_all().await;
+            if terminal == FrontendState::Failed {
+                // Failure revokes promptly, but is not a descriptor/platform
+                // release acknowledgement. Keep this task and fd owned below.
+                state_tx.send_replace(FrontendState::Failed);
+            }
+            if let CaptureConfig::Secured { request, .. } = &config {
+                request.wait_release().await;
+            }
+            drop(fd);
+            let released = task_platform.closed();
+            if released.is_ok() {
+                pending.store(false, Ordering::Release);
+            } else {
+                terminal = FrontendState::Failed;
+            }
             state_tx.send_replace(terminal);
             released
         });
@@ -122,6 +185,11 @@ impl FrontendOwner {
 
     pub fn state(&self) -> watch::Receiver<FrontendState> {
         self.state.clone()
+    }
+
+    pub fn release_failed(&self) -> bool {
+        self.release_pending.load(Ordering::Acquire)
+            && self.task.as_ref().is_none_or(JoinHandle::is_finished)
     }
 
     /// Join physical cleanup and the initial platform release attempt. Cancellation
@@ -170,9 +238,16 @@ async fn run<A: LocalAuthority>(
     fd: OwnedFd,
     forwarder: &mut Forwarder<A>,
     revalidate: watch::Receiver<u64>,
-    stop: oneshot::Receiver<()>,
+    mut stop: oneshot::Receiver<()>,
     started: oneshot::Sender<io::Result<()>>,
+    session: (&CaptureConfig, Option<&Observation>),
+    bound: io::Result<()>,
 ) -> (OwnedFd, FrontendState) {
+    let (config, observation) = session;
+    if let Err(error) = bound {
+        let _ = started.send(Err(error));
+        return (fd, FrontendState::Failed);
+    }
     let flags = fcntl(&fd, FcntlArg::F_GETFL).map(OFlag::from_bits_retain);
     if !matches!(flags, Ok(flags) if flags.contains(OFlag::O_NONBLOCK)) {
         let _ = started.send(Err(io::Error::new(
@@ -185,8 +260,46 @@ async fn run<A: LocalAuthority>(
     // close it before close_all has joined the physical preparations.
     let terminal = match AsyncFd::new(fd.as_fd()) {
         Ok(capture) => {
-            let _ = started.send(Ok(()));
-            drive(&capture, forwarder, revalidate, stop).await
+            // Install the reactor and reserve read progress before issuing a
+            // broker receipt that a transport could use immediately.
+            match forwarder.read_buffer() {
+                Ok(packet) => {
+                    let readiness = match observation {
+                        Some(observation) => {
+                            let mut updates = observation.updates.clone();
+                            observation.wait_ready(&mut updates, &mut stop).await
+                        }
+                        None => Ok(()),
+                    };
+                    match readiness {
+                        Ok(()) => {
+                            let _ = started.send(Ok(()));
+                            drive(
+                                &capture,
+                                forwarder,
+                                revalidate,
+                                stop,
+                                observation.map(|observation| (config, observation)),
+                                packet,
+                            )
+                            .await
+                        }
+                        Err(error) => {
+                            let stopped = error.kind() == io::ErrorKind::Interrupted;
+                            let _ = started.send(Err(error));
+                            if stopped {
+                                FrontendState::Stopped
+                            } else {
+                                FrontendState::Failed
+                            }
+                        }
+                    }
+                }
+                Err(_) => {
+                    let _ = started.send(Err(io::Error::other("Capture read storage unavailable")));
+                    FrontendState::Failed
+                }
+            }
         }
         Err(error) => {
             let _ = started.send(Err(error));
@@ -201,13 +314,41 @@ async fn drive<A: LocalAuthority>(
     forwarder: &mut Forwarder<A>,
     mut revalidate: watch::Receiver<u64>,
     mut stop: oneshot::Receiver<()>,
+    session: Option<(&CaptureConfig, &Observation)>,
+    mut packet: talpid_types::relay_flow::RelayBuffer,
 ) -> FrontendState {
-    let mut packet = vec![0; MAX_PACKET_SIZE];
     let mut updates_open = true;
+    let mut observation_updates = session.map(|(_, o)| o.updates.clone());
+    let mut broker_updates = session.and_then(|(c, _)| match c {
+        CaptureConfig::Secured { broker, .. } => Some(broker.changes()),
+        _ => None,
+    });
+    let lease = session.and_then(|(_, o)| o.lease.as_deref());
+    let mut reply: Option<AttachmentReply> = None;
+    let mut local_attempt: Option<RelayAttempt> = None;
+    let mut raw_first = false;
     loop {
-        let wants_write = forwarder.has_output();
+        if session.is_some_and(|(_, observation)| !observation.current()) {
+            return FrontendState::Failed;
+        }
+        if local_attempt
+            .as_ref()
+            .is_some_and(|attempt| !attempt.current())
+        {
+            return FrontendState::Failed;
+        }
+        if local_attempt.is_none() {
+            local_attempt = lease.and_then(|lease| lease.ordinary_attempt());
+        }
+        let wants_write = (forwarder.has_output() && (lease.is_none() || local_attempt.is_some()))
+            || reply.is_some();
         tokio::select! {
             _ = &mut stop => return FrontendState::Stopped,
+            _ = async { match &mut observation_updates { Some(updates) => { let _ = updates.changed().await; }, None => std::future::pending().await } } => {},
+            _ = async { match &mut broker_updates { Some(updates) => { let _ = updates.changed().await; }, None => std::future::pending().await } } => { forwarder.revalidate(); },
+            result = async { match lease { Some(lease) => lease.reply().await, None => std::future::pending().await } }, if reply.is_none() => {
+                match result { Ok(packet) => reply = Some(packet), Err(_) => return FrontendState::Failed }
+            },
             result = revalidate.changed(), if updates_open => {
                 if result.is_ok() { forwarder.revalidate(); }
                 else { updates_open = false; }
@@ -219,7 +360,10 @@ async fn drive<A: LocalAuthority>(
                 for _ in 0..64 {
                     match ready.try_io(|fd| nix::unistd::read(fd.get_ref(), &mut packet).map_err(io::Error::from)) {
                         Ok(Ok(0)) => return FrontendState::Failed,
-                        Ok(Ok(len)) => forwarder.ingest(&packet[..len]),
+                        Ok(Ok(len)) => {
+                            if local_attempt.is_none() { local_attempt = lease.and_then(|lease| lease.ordinary_attempt()); }
+                            ingest(forwarder, &packet[..len], session, local_attempt.as_ref());
+                        },
                         Ok(Err(error)) if error.kind() == io::ErrorKind::Interrupted => continue,
                         Err(_) => break,
                         Ok(Err(_)) => return FrontendState::Failed,
@@ -231,29 +375,157 @@ async fn drive<A: LocalAuthority>(
                 if ready.is_err() { return FrontendState::Failed; }
             }
         }
+        if session.is_some_and(|(_, observation)| !observation.current()) {
+            return FrontendState::Failed;
+        }
+        if local_attempt.is_none() {
+            local_attempt = lease.and_then(|lease| lease.ordinary_attempt());
+        }
         forwarder.process();
-        if drain_output(capture, forwarder).is_err() {
+        // Rotate priority after actual progress. Blocked/spurious wakes cannot
+        // reset the next class; every owned pending class gets one checked write.
+        let output = match session {
+            Some((_, observation)) => drain_fair(
+                capture,
+                forwarder,
+                observation,
+                local_attempt.as_ref(),
+                &mut reply,
+                &mut raw_first,
+            ),
+            None => drain_output(capture, forwarder),
+        };
+        if output.is_err() {
             return FrontendState::Failed;
         }
     }
+}
+
+fn drain_checked_local<A: LocalAuthority>(
+    capture: &AsyncFd<BorrowedFd<'_>>,
+    forwarder: &mut Forwarder<A>,
+    attempt: Option<&RelayAttempt>,
+) -> io::Result<bool> {
+    let write = |bytes: &[u8]| {
+        capture.try_io(Interest::WRITABLE, |fd| {
+            nix::unistd::write(fd, bytes).map_err(io::Error::from)
+        })
+    };
+    match forwarder.write_output(|bytes| match attempt {
+        Some(attempt) => attempt
+            .with_current(|| write(bytes))
+            .map_err(|_| io::Error::other("Capture attempt retired"))?,
+        None => write(bytes),
+    }) {
+        Ok(written) => Ok(written),
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
+fn ingest<A: LocalAuthority>(
+    forwarder: &mut Forwarder<A>,
+    bytes: &[u8],
+    session: Option<(&CaptureConfig, &Observation)>,
+    attempt: Option<&RelayAttempt>,
+) {
+    let Some((config, observation)) = session else {
+        forwarder.ingest(bytes);
+        return;
+    };
+    let Ok(ip) = talpid_netstack::raw_packet::inspect(bytes) else {
+        return;
+    };
+    if !ip
+        .source()
+        .is_some_and(|ip| observation.sources.contains(ip))
+    {
+        return;
+    }
+    match config {
+        CaptureConfig::Partial(_) => forwarder.ingest(bytes),
+        CaptureConfig::Secured { disposition, .. } => {
+            // Local is paused until the transport's authenticated readiness.
+            if !attempt.is_some_and(RelayAttempt::current) {
+                return;
+            }
+            match ip.destination().map(|ip| disposition(ip)) {
+                Some(CaptureDisposition::Local) => forwarder.ingest(bytes),
+                Some(CaptureDisposition::Relay) => {
+                    let _ = observation
+                        .lease
+                        .as_ref()
+                        .expect("managed lease")
+                        .try_send(bytes);
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+fn drain_reply(
+    capture: &AsyncFd<BorrowedFd<'_>>,
+    reply: &mut Option<AttachmentReply>,
+) -> io::Result<bool> {
+    let Some(packet) = reply.as_mut() else {
+        return Ok(false);
+    };
+    match packet.write(|bytes| {
+        capture.try_io(Interest::WRITABLE, |fd| {
+            nix::unistd::write(fd, bytes).map_err(io::Error::from)
+        })
+    }) {
+        RelayWriteOutcome::Written => {
+            reply.take();
+            Ok(true)
+        }
+        RelayWriteOutcome::Stale => {
+            reply.take();
+            Ok(false)
+        }
+        RelayWriteOutcome::Retry => Ok(false),
+        RelayWriteOutcome::Fatal(error) => Err(error),
+    }
+}
+
+fn drain_fair<A: LocalAuthority>(
+    capture: &AsyncFd<BorrowedFd<'_>>,
+    forwarder: &mut Forwarder<A>,
+    observation: &Observation,
+    local_attempt: Option<&RelayAttempt>,
+    reply: &mut Option<AttachmentReply>,
+    raw_first: &mut bool,
+) -> io::Result<()> {
+    for raw in if *raw_first {
+        [true, false]
+    } else {
+        [false, true]
+    } {
+        let written = if raw {
+            drain_reply(capture, reply)?
+        } else {
+            match local_attempt {
+                None => Ok(false),
+                Some(attempt) => observation
+                    .checked(|| drain_checked_local(capture, forwarder, Some(attempt)))
+                    .unwrap_or_else(|| Err(io::Error::other("Capture lost"))),
+            }?
+        };
+        if written {
+            *raw_first = !raw;
+        }
+    }
+    Ok(())
 }
 
 fn drain_output<A: LocalAuthority>(
     capture: &AsyncFd<BorrowedFd<'_>>,
     forwarder: &mut Forwarder<A>,
 ) -> io::Result<()> {
-    // No borrowed bytes leave this call. Every retry rechecks the grant,
-    // and only an actual syscall WouldBlock clears writable readiness.
     for _ in 0..256 {
-        match forwarder.write_output(|bytes| {
-            capture.try_io(Interest::WRITABLE, |fd| {
-                nix::unistd::write(fd, bytes).map_err(io::Error::from)
-            })
-        }) {
-            Ok(true) => continue,
-            Ok(false) => break,
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
-            Err(error) => return Err(error),
+        if !drain_checked_local(capture, forwarder, None)? {
+            break;
         }
     }
     Ok(())

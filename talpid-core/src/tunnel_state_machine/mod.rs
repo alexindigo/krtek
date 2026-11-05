@@ -148,6 +148,9 @@ pub async fn spawn(
     route_manager: RouteManagerHandle,
     #[cfg(target_os = "windows")] volume_update_rx: mpsc::UnboundedReceiver<()>,
     #[cfg(target_os = "android")] android_context: AndroidContext,
+    #[cfg(target_os = "android")] attachment_broker: Option<
+        talpid_tunnel::packet_attachment::AttachmentBroker,
+    >,
     #[cfg(target_os = "android")] connectivity_listener: ConnectivityListener,
     #[cfg(target_os = "linux")] linux_ids: LinuxNetworkingIdentifiers,
 ) -> Result<TunnelStateMachineHandle, Error> {
@@ -161,6 +164,8 @@ pub async fn spawn(
             #[cfg(target_os = "windows")]
             resource_dir.clone(),
         ),
+        #[cfg(target_os = "android")]
+        attachment_broker,
     );
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -742,7 +747,7 @@ impl SharedTunnelStateValues {
     pub fn restart_tunnel(&self, blocking: bool) -> Result<(), talpid_tunnel::tun_provider::Error> {
         self.prepare_tun_config(blocking);
 
-        match self.tun_provider.lock().unwrap().open_tun() {
+        match self.tun_provider.lock().unwrap().reconfigure_tun(false) {
             Ok(_tun) => Ok(()),
             Err(error) => {
                 log::error!(

@@ -1,8 +1,15 @@
 #[cfg(target_os = "android")]
-use crate::tun_provider::imp::VpnServiceConfig;
+pub(crate) use crate::tun_provider::imp::VpnServiceConfig;
 use cfg_if::cfg_if;
 use ipnetwork::{IpNetwork, Ipv4Network, Ipv6Network};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+pub mod transport;
+
+/// SOCKS5 control destinations on Mullvad relays, retained by LAN subtraction
+/// and reserved from daemon-owned local delivery.
+pub const SOCKS_PROXIES: IpNetwork =
+    IpNetwork::V4(Ipv4Network::new_checked(Ipv4Addr::new(10, 124, 0, 0), 23).unwrap());
 
 cfg_if! {
     if #[cfg(target_os = "android")] {

@@ -12,6 +12,7 @@ import kotlinx.coroutines.withTimeout
 import net.mullvad.mullvadvpn.app.MullvadApplication
 import net.mullvad.mullvadvpn.feature.lansharing.impl.R
 import net.mullvad.mullvadvpn.lib.model.ConnectedWifi
+import net.mullvad.mullvadvpn.lib.model.ForwardingAvailability
 import net.mullvad.mullvadvpn.lib.model.LocalBypassRule
 import net.mullvad.mullvadvpn.lib.model.LocalCidr
 import net.mullvad.mullvadvpn.lib.model.LocalNetworkAccess
@@ -64,38 +65,31 @@ class LocalNetworkStatusInstrumentedTest {
                         listOf(known.ssid),
                     )
                 val configured = LocalNetworkAccess(true, listOf(rule))
-                suspend fun metRuleText(): String {
-                    val state =
-                        withTimeout(10_000) {
-                                repository.localNetworkStatus.filterNotNull().first { status ->
-                                    status.rules.any {
-                                        it.id == rule.id &&
-                                            (it.state == LocalRuleState.ConditionsMet ||
-                                                it.state == LocalRuleState.Forwarding)
-                                    }
+                suspend fun forwardingText(): String {
+                    // Readiness is asynchronous. ConditionsMet can be replaced before rendering.
+                    withTimeout(10_000) {
+                        repository.localNetworkStatus.filterNotNull().first { status ->
+                            status.forwarding == ForwardingAvailability.Active &&
+                                status.rules.any {
+                                    it.id == rule.id && it.state == LocalRuleState.Forwarding
                                 }
-                            }
-                            .rules
-                            .single { it.id == rule.id }
-                            .state
-                    return target.getString(
-                        if (state == LocalRuleState.Forwarding) R.string.local_access_forwarding
-                        else R.string.local_access_conditions_met
-                    )
+                        }
+                    }
+                    return target.getString(R.string.local_access_forwarding)
                 }
                 try {
                     assertTrue(repository.setLocalNetworkAccess(configured, original).isRight())
                     withTimeout(10_000) {
                         repository.settingsUpdates.first { it?.localNetworkAccess == configured }
                     }
-                    driver.requireRenderedText(metRuleText())
+                    driver.requireRenderedText(forwardingText())
                     // Supplemental external fault only. Activity stays visible; no settings
                     // navigation, onResume, Refresh click or status read after the fault.
                     shell("settings put secure location_mode 0")
                     driver.requireRenderedText(target.getString(R.string.local_access_location_off))
                     assertEquals(configured, repository.settingsUpdates.value?.localNetworkAccess)
                     shell("settings put secure location_mode $location")
-                    driver.requireRenderedText(metRuleText())
+                    driver.requireRenderedText(forwardingText())
                     assertEquals(configured, repository.settingsUpdates.value?.localNetworkAccess)
                 } finally {
                     shell("settings put secure location_mode $location")

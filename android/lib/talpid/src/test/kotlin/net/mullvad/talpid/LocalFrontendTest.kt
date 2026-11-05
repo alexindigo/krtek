@@ -5,7 +5,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import net.mullvad.talpid.model.CaptureNetworkObservation
+import net.mullvad.talpid.model.CaptureRoute
 import net.mullvad.talpid.model.CreateTunResult
+import net.mullvad.talpid.model.TunConfig
 import org.junit.jupiter.api.Test
 
 class LocalFrontendTest {
@@ -98,12 +101,70 @@ class LocalFrontendTest {
 
     @Test
     fun `should retain exact frontend JNI signatures`() {
+        for (getter in listOf("getOwnerUid", "getMtu")) {
+            assertEquals(
+                Int::class.javaObjectType,
+                CaptureNetworkObservation::class.java.getDeclaredMethod(getter).returnType,
+            )
+        }
+        assertEquals(
+            Int::class.javaObjectType,
+            CaptureRoute::class.java.getDeclaredMethod("getRouteType").returnType,
+        )
+        assertEquals(
+            Int::class.javaPrimitiveType,
+            CaptureNetworkObservation::class.java.getDeclaredMethod("getApiLevel").returnType,
+        )
         val type = TalpidVpnService::class.java
         assertEquals(
             CreateTunResult::class.java,
-            type.getDeclaredMethod("openLocalFrontend", Array<String>::class.java).returnType,
+            type
+                .getDeclaredMethod(
+                    "openLocalFrontend",
+                    Long::class.javaPrimitiveType,
+                    Array<String>::class.java,
+                )
+                .returnType,
         )
         assertEquals(Void.TYPE, type.getDeclaredMethod("finishLocalFrontend").returnType)
+        assertEquals(
+            CreateTunResult::class.java,
+            type
+                .getDeclaredMethod(
+                    "openSecuredFrontend",
+                    Long::class.javaPrimitiveType,
+                    TunConfig::class.java,
+                )
+                .returnType,
+        )
+        assertEquals(
+            Boolean::class.javaPrimitiveType,
+            type
+                .getDeclaredMethod(
+                    "bindLocalFrontend",
+                    Long::class.javaPrimitiveType,
+                    String::class.java,
+                )
+                .returnType,
+        )
+        for (name in listOf("attachCaptureNetwork", "detachCaptureNetwork")) {
+            assertEquals(
+                Boolean::class.javaPrimitiveType,
+                type.getDeclaredMethod(name, Long::class.javaPrimitiveType).returnType,
+            )
+        }
+        val publication =
+            LocalCaptureNetworkBridge::class
+                .java
+                .getDeclaredMethod(
+                    "published",
+                    Long::class.javaPrimitiveType,
+                    Long::class.javaPrimitiveType,
+                    CaptureNetworkObservation::class.java,
+                )
+        assertEquals(Void.TYPE, publication.returnType)
+        assertTrue(java.lang.reflect.Modifier.isNative(publication.modifiers))
+        assertTrue(java.lang.reflect.Modifier.isStatic(publication.modifiers))
         assertEquals(
             Boolean::class.javaPrimitiveType,
             type.getDeclaredMethod("isLocalFrontendActive").returnType,

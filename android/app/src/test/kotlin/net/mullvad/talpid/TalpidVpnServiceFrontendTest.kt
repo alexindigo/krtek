@@ -72,7 +72,7 @@ class TalpidVpnServiceFrontendTest {
                 arrayOf("fd42::/64"),
                 arrayOf("169.254.0.0/16", "fe80::/10"),
             )) {
-            assertEquals(CreateTunResult.Success(7), service.openLocalFrontend(routes))
+            assertEquals(CreateTunResult.Success(7), service.openLocalFrontend(1, routes))
             expectedRoutes += routes.map {
                 InetAddress.getByName(it.substringBefore('/')) to it.substringAfter('/').toInt()
             }
@@ -92,7 +92,7 @@ class TalpidVpnServiceFrontendTest {
             }
             verify(exactly = 0) { anyConstructed<VpnService.Builder>().allowBypass() }
             assertTrue(service.isLocalFrontendActive())
-            assertEquals(CreateTunResult.EstablishError, service.openLocalFrontend(routes))
+            assertEquals(CreateTunResult.EstablishError, service.openLocalFrontend(1, routes))
             assertEquals(
                 CreateTunResult.EstablishError,
                 service.openTun(TalpidVpnServiceFallbackDnsTest.baseTunConfig),
@@ -121,7 +121,7 @@ class TalpidVpnServiceFrontendTest {
                 arrayOf("localhost/32"),
                 arrayOf("10.0.2.2/24"),
             )) {
-            assertEquals(CreateTunResult.EstablishError, service.openLocalFrontend(routes))
+            assertEquals(CreateTunResult.EstablishError, service.openLocalFrontend(1, routes))
             assertFalse(service.isLocalFrontendActive())
         }
         verify(exactly = 0) { service.prepareVpnSafe() }
@@ -133,7 +133,7 @@ class TalpidVpnServiceFrontendTest {
         every { anyConstructed<VpnService.Builder>().establish() } returns null
         assertEquals(
             CreateTunResult.EstablishError,
-            service.openLocalFrontend(arrayOf("10.0.0.0/8")),
+            service.openLocalFrontend(1, arrayOf("10.0.0.0/8")),
         )
         assertFalse(service.isLocalFrontendActive())
         assertEquals(4, service.prepareLocalSocket(7, 9, 1, false))
@@ -149,7 +149,7 @@ class TalpidVpnServiceFrontendTest {
             opener = thread {
                 attempted.countDown()
                 try {
-                    result.set(service.openLocalFrontend(arrayOf("10.0.2.2/32")))
+                    result.set(service.openLocalFrontend(1, arrayOf("10.0.2.2/32")))
                 } finally {
                     finished.countDown()
                 }
@@ -193,7 +193,7 @@ class TalpidVpnServiceFrontendTest {
             runCurrent()
             assertEquals(
                 CreateTunResult.Success(7),
-                service.openLocalFrontend(arrayOf("10.0.2.2/32")),
+                service.openLocalFrontend(1, arrayOf("10.0.2.2/32")),
             )
             every { service.protect(7) } returns true
             assertEquals(1, service.prepareLocalSocket(7, 9, fixture.sequence - 1, false))

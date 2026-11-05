@@ -11,6 +11,7 @@ bytes = { workspace = true }
 either = { workspace = true }
 gotatun = { workspace = true }
 log = { workspace = true }
+talpid-types = { path = "../talpid-types" }
 smoltcp = { version = "0.13", default-features = false, features = [
   "medium-ip",
   "proto-ipv4",

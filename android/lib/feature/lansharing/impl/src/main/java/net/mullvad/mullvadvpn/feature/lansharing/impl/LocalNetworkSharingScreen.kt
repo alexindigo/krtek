@@ -191,12 +191,12 @@ private fun LocalNetworkSharingContent(
             text =
                 buildAnnotatedString {
                     appendLine(annotatedStringResource(R.string.local_network_sharing_info))
-                    appendLine(
+                    appendLine()
+                    append(
                         annotatedStringResource(
                             R.string.local_network_sharing_info_block_connections_warning
                         )
                     )
-                    append(annotatedStringResource(R.string.local_access_connected_warning))
                     appendLine()
                     appendLine()
                     append(annotatedStringResource(R.string.local_network_sharing_info2))

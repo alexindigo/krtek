@@ -18,6 +18,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
+use talpid_lan_forwarder::packet::MAX_PACKET_SIZE;
 use talpid_lan_forwarder::{Disposition, Flow, Refused, Transport, packet};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -27,6 +28,16 @@ use tokio::{
 
 fn routes() -> Vec<String> {
     vec!["10.0.2.2/32".into(), "fd42::/64".into()]
+}
+
+fn test_forwarder(authority: Arc<Authority>) -> Forwarder<Authority> {
+    Forwarder::new(
+        authority,
+        Arc::new(talpid_netstack::buffer_budget::BufferBudget::new(
+            30 * 1024 * 1024,
+        )),
+    )
+    .unwrap()
 }
 fn pair() -> (OwnedFd, OwnedFd) {
     socketpair(
@@ -46,17 +57,39 @@ struct Platform {
     release_fails: AtomicBool,
     active: AtomicBool,
     descriptor: Mutex<Option<(std::path::PathBuf, std::path::PathBuf)>>,
+    feed: Option<Arc<CaptureNetworkFeed>>,
+    expected: Mutex<Option<CaptureExpectation>>,
+    generation: AtomicU64,
+    manual: AtomicBool,
+    bound_generation: AtomicU64,
+    name_error: AtomicBool,
+    bind_error: AtomicBool,
+    open_error: AtomicBool,
 }
 impl Platform {
     fn new() -> (Arc<Self>, AsyncFd<OwnedFd>) {
         let (fd, peer) = pair();
-        let platform = Arc::new(Self::default());
+        let platform = Arc::new(Self {
+            feed: Some(CaptureNetworkFeed::new(1)),
+            ..Self::default()
+        });
         *platform.next.lock().unwrap() = Some(fd);
         (platform, AsyncFd::new(peer).unwrap())
     }
 }
 impl FrontendPlatform for Platform {
-    fn open(&self, routes: &[String]) -> io::Result<OwnedFd> {
+    fn open(&self, generation: i64, config: &CaptureConfig) -> io::Result<OwnedFd> {
+        assert!(generation > 0);
+        self.generation.store(generation as u64, SeqCst);
+        let routes = match config {
+            CaptureConfig::Partial(routes) => routes.clone(),
+            CaptureConfig::Secured { request, .. } => request
+                .config()
+                .routes
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+        };
         if self.active.swap(true, SeqCst) {
             return Err(io::Error::other("platform still owned"));
         }
@@ -73,7 +106,61 @@ impl FrontendPlatform for Platform {
             .unwrap()
             .push(format!("open:{routes:?}"));
         self.opened.fetch_add(1, SeqCst);
+        if self.open_error.load(SeqCst) {
+            return Err(io::Error::other("open acknowledgement failed"));
+        }
         Ok(fd)
+    }
+    fn capture_feed(&self) -> Arc<CaptureNetworkFeed> {
+        self.feed.clone().unwrap()
+    }
+    fn interface_name(&self, _: BorrowedFd<'_>) -> io::Result<String> {
+        if self.name_error.load(SeqCst) {
+            return Err(io::Error::other("fd name query failed"));
+        }
+        Ok("tun-test".into())
+    }
+    fn expectation(
+        &self,
+        config: &CaptureConfig,
+        interface: String,
+    ) -> io::Result<CaptureExpectation> {
+        let expected = if let Some(config) = config.secured_config() {
+            assert!(!config.allow_lan, "fake uses already effective routes");
+            let routes = config
+                .routes
+                .iter()
+                .map(|network| talpid_types::capture_network::CapturePrefix {
+                    address: network.ip(),
+                    prefix_length: i16::from(network.prefix()),
+                })
+                .collect::<Vec<_>>();
+            CaptureExpectation::requested(
+                interface,
+                1000,
+                33,
+                &config.addresses,
+                &routes,
+                config.dns_servers.as_deref().unwrap(),
+                config.mtu,
+            )
+        } else {
+            panic!("Partial must not query capture observation")
+        }
+        .unwrap();
+        *self.expected.lock().unwrap() = Some(expected.clone());
+        Ok(expected)
+    }
+    fn bind(&self, generation: i64, interface: &str) -> io::Result<bool> {
+        assert_eq!(interface, "tun-test");
+        self.bound_generation.store(generation as u64, SeqCst);
+        if self.bind_error.load(SeqCst) {
+            return Err(io::Error::other("interface binding failed"));
+        }
+        if !self.manual.load(SeqCst) {
+            self.publish(generation, false);
+        }
+        Ok(true)
     }
     fn closed(&self) -> io::Result<()> {
         let descriptor = self.descriptor.lock().unwrap();
@@ -92,6 +179,28 @@ impl FrontendPlatform for Platform {
         Ok(())
     }
 }
+impl Platform {
+    fn publish(&self, generation: i64, lost: bool) -> bool {
+        let expected = self.expected.lock().unwrap().clone().unwrap();
+        self.capture_feed().publish(
+            1,
+            generation,
+            talpid_types::capture_network::CaptureNetworkObservation {
+                network_handle: 0x1234_5678_8765_4321,
+                network: "257".into(),
+                interface_name: expected.interface_name,
+                owner_uid: expected.owner_uid,
+                routes: expected.routes,
+                addresses: expected.addresses,
+                dns_servers: expected.dns_servers,
+                mtu: expected.mtu,
+                fresh: !lost,
+                lost,
+                api_level: expected.api_level,
+            },
+        )
+    }
+}
 // Test convenience only. Production consumers retain the owner before readiness
 // and keep it on errors, rather than discarding the pending-release obligation.
 async fn start<A: LocalAuthority>(
@@ -100,7 +209,8 @@ async fn start<A: LocalAuthority>(
     forwarder: Forwarder<A>,
     updates: watch::Receiver<u64>,
 ) -> io::Result<FrontendOwner> {
-    let mut owner = FrontendOwner::start(platform, routes, forwarder, updates)?;
+    let mut owner =
+        FrontendOwner::start(platform, CaptureConfig::Partial(routes), forwarder, updates)?;
     if let Err(error) = owner.ready().await {
         owner.stop().await?;
         return Err(error);
@@ -206,9 +316,9 @@ fn flow(destination: SocketAddr, transport: Transport, port: u16) -> Flow {
     Flow {
         source: SocketAddr::new(
             if destination.is_ipv6() {
-                "fd00::2".parse().unwrap()
+                "2001:db8::2".parse().unwrap()
             } else {
-                "10.5.0.2".parse().unwrap()
+                "192.0.2.2".parse().unwrap()
             },
             port,
         ),
@@ -416,7 +526,7 @@ async fn tcp_and_udp_nonces_return_through_the_owned_interface() {
         let (platform, peer) = Platform::new();
         let authority = Arc::new(Authority::default());
         let (_tx, rx) = watch::channel(0);
-        let mut owner = start(platform.clone(), routes(), Forwarder::new(authority), rx)
+        let mut owner = start(platform.clone(), routes(), test_forwarder(authority), rx)
             .await
             .unwrap();
         let (tcp, mut accepts, server) = tcp_echo(ipv6).await;
@@ -451,7 +561,7 @@ async fn drop_packets_never_prepare_or_reach_the_peer() {
     let authority = Arc::new(Authority::default());
     authority.drop.store(true, SeqCst);
     let (_tx, rx) = watch::channel(0);
-    let mut owner = start(platform, routes(), Forwarder::new(authority.clone()), rx)
+    let mut owner = start(platform, routes(), test_forwarder(authority.clone()), rx)
         .await
         .unwrap();
     let (address, mut hits, echo) = udp_echo(false).await;
@@ -479,7 +589,7 @@ async fn stop_drop_eof_and_route_replacement_preserve_single_descriptor_ownershi
         start(
             platform.clone(),
             vec![],
-            Forwarder::new(Arc::new(Authority::default())),
+            test_forwarder(Arc::new(Authority::default())),
             rx.clone()
         )
         .await
@@ -489,7 +599,7 @@ async fn stop_drop_eof_and_route_replacement_preserve_single_descriptor_ownershi
     let mut owner = start(
         platform.clone(),
         routes(),
-        Forwarder::new(Arc::new(Authority::default())),
+        test_forwarder(Arc::new(Authority::default())),
         rx.clone(),
     )
     .await
@@ -504,7 +614,7 @@ async fn stop_drop_eof_and_route_replacement_preserve_single_descriptor_ownershi
     let owner = start(
         platform.clone(),
         replacement.clone(),
-        Forwarder::new(Arc::new(Authority::default())),
+        test_forwarder(Arc::new(Authority::default())),
         rx,
     )
     .await
@@ -531,7 +641,7 @@ async fn stop_drop_eof_and_route_replacement_preserve_single_descriptor_ownershi
     let mut owner = start(
         platform.clone(),
         routes(),
-        Forwarder::new(Arc::new(Authority::default())),
+        test_forwarder(Arc::new(Authority::default())),
         rx,
     )
     .await
@@ -554,7 +664,7 @@ async fn observation_loss_revokes_both_protocols_without_replacing_the_interface
     let mut owner = start(
         platform.clone(),
         routes(),
-        Forwarder::new(authority.clone()),
+        test_forwarder(authority.clone()),
         rx,
     )
     .await
@@ -619,8 +729,9 @@ async fn empty_interface_loop_has_no_progress_for_one_real_second() {
     let count = polls.clone();
     let future = tokio::spawn(async move {
         let capture = AsyncFd::new(fd.as_fd()).unwrap();
-        let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
-        let mut driven = Box::pin(drive(&capture, &mut forwarder, rx, stopped));
+        let mut forwarder = test_forwarder(Arc::new(Authority::default()));
+        let packet = forwarder.read_buffer().unwrap();
+        let mut driven = Box::pin(drive(&capture, &mut forwarder, rx, stopped, None, packet));
         poll_fn(move |cx| {
             count.fetch_add(1, SeqCst);
             driven.as_mut().poll(cx)
@@ -636,6 +747,73 @@ async fn empty_interface_loop_has_no_progress_for_one_real_second() {
     };
     let (terminal, ()) = bounded(async { tokio::join!(future, monitor) }).await;
     assert_eq!(terminal.unwrap(), FrontendState::Stopped);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn exhausted_input_is_consumed_without_readiness_spin_then_recovers() {
+    use talpid_netstack::buffer_budget::BufferBudget;
+    let budget = BufferBudget::new(30 * 1024 * 1024);
+    let authority = Arc::new(Authority::default());
+    let mut forwarder = Forwarder::new(authority.clone(), Arc::new(budget.clone())).unwrap();
+    let pressure = budget.reserve(budget.limit() - budget.used()).unwrap();
+    let (fd, peer) = pair();
+    let raw = fd.as_raw_fd();
+    let peer = AsyncFd::new(peer).unwrap();
+    let (_updates, rx) = watch::channel(0);
+    let (stop, stopped) = oneshot::channel();
+    let polls = Arc::new(AtomicUsize::new(0));
+    let count = polls.clone();
+    let future = tokio::spawn(async move {
+        let capture = AsyncFd::new(fd.as_fd()).unwrap();
+        let terminal = {
+            let packet = forwarder.read_buffer().unwrap();
+            let mut driven = Box::pin(drive(&capture, &mut forwarder, rx, stopped, None, packet));
+            poll_fn(move |cx| {
+                count.fetch_add(1, SeqCst);
+                driven.as_mut().poll(cx)
+            })
+            .await
+        };
+        forwarder.close_all().await;
+        terminal
+    });
+    let (address, mut hits, echo) = udp_echo(false).await;
+    let request = flow(address, Transport::Udp, 49000);
+    send(&peer, &udp(request, b"refused input")).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(
+        nix::sys::socket::recv(
+            raw,
+            &mut [0; 64],
+            nix::sys::socket::MsgFlags::MSG_PEEK | nix::sys::socket::MsgFlags::MSG_DONTWAIT
+        ),
+        Err(nix::errno::Errno::EAGAIN),
+        "refused level-triggered input must be consumed"
+    );
+    let before = polls.load(SeqCst);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert_eq!(
+        polls.load(SeqCst),
+        before,
+        "budget refusal installed a progress loop"
+    );
+    assert_eq!(authority.prepares.load(SeqCst), 0);
+    assert!(hits.try_recv().is_err());
+    drop(pressure);
+    send(&peer, &udp(request, b"recovered consumer nonce")).await;
+    let reply = bounded(receive(&peer)).await;
+    assert_eq!(
+        packet::parse(&reply).unwrap().payload,
+        b"recovered consumer nonce"
+    );
+    assert_eq!(
+        bounded(hits.recv()).await.unwrap(),
+        b"recovered consumer nonce"
+    );
+    stop.send(()).unwrap();
+    assert_eq!(bounded(future).await.unwrap(), FrontendState::Stopped);
+    assert_eq!(budget.used(), 0);
+    echo.abort();
 }
 
 async fn blocked_sink(revoke: bool, stop_while_blocked: bool) {
@@ -662,7 +840,7 @@ async fn blocked_sink(revoke: bool, stop_while_blocked: bool) {
     let mut owner = start(
         platform.clone(),
         routes(),
-        Forwarder::new(authority.clone()),
+        test_forwarder(authority.clone()),
         rx,
     )
     .await
@@ -750,7 +928,7 @@ async fn blocking_descriptor_is_closed_before_failed_start_returns() {
         start(
             platform.clone(),
             routes(),
-            Forwarder::new(Arc::new(Authority::default())),
+            test_forwarder(Arc::new(Authority::default())),
             rx
         )
         .await
@@ -795,7 +973,7 @@ async fn physical_preparations_join_before_descriptor_close_and_stop_acknowledge
         ..Authority::default()
     });
     let (_updates, rx) = watch::channel(0);
-    let mut owner = start(platform.clone(), routes(), Forwarder::new(authority), rx)
+    let mut owner = start(platform.clone(), routes(), test_forwarder(authority), rx)
         .await
         .unwrap();
     let (address, mut hits, echo) = udp_echo(false).await;
@@ -827,10 +1005,26 @@ struct PausedPlatform {
     pause: Arc<Pause>,
 }
 impl FrontendPlatform for PausedPlatform {
-    fn open(&self, routes: &[String]) -> io::Result<OwnedFd> {
-        let fd = self.inner.open(routes)?;
+    fn open(&self, generation: i64, config: &CaptureConfig) -> io::Result<OwnedFd> {
+        let fd = self.inner.open(generation, config)?;
         self.pause.enter();
         Ok(fd)
+    }
+    fn capture_feed(&self) -> Arc<CaptureNetworkFeed> {
+        self.inner.capture_feed()
+    }
+    fn expectation(
+        &self,
+        config: &CaptureConfig,
+        interface: String,
+    ) -> io::Result<CaptureExpectation> {
+        self.inner.expectation(config, interface)
+    }
+    fn interface_name(&self, fd: BorrowedFd<'_>) -> io::Result<String> {
+        self.inner.interface_name(fd)
+    }
+    fn bind(&self, generation: i64, interface: &str) -> io::Result<bool> {
+        self.inner.bind(generation, interface)
     }
     fn closed(&self) -> io::Result<()> {
         self.inner.closed()
@@ -850,7 +1044,7 @@ async fn cancelled_start_still_joins_open_and_finishes_the_detached_descriptor()
     let opening = tokio::spawn(start(
         paused,
         routes(),
-        Forwarder::new(Arc::new(Authority::default())),
+        test_forwarder(Arc::new(Authority::default())),
         rx,
     ));
     bounded(pause.entered.notified()).await;
@@ -878,7 +1072,7 @@ async fn actual_wouldblock_clears_cached_writability_and_keeps_the_grant_until_r
     let capture = AsyncFd::new(fd.as_fd()).unwrap();
     let peer = AsyncFd::new(peer).unwrap();
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let (address, mut hits, echo) = udp_echo(false).await;
     forwarder.ingest(&udp(
         flow(address, Transport::Udp, 45000),
@@ -951,8 +1145,8 @@ async fn release_failure_retains_ownership_until_explicit_joined_retry() {
         let (_updates, rx) = watch::channel(0);
         let mut owner = FrontendOwner::start(
             platform.clone(),
-            routes(),
-            Forwarder::new(Arc::new(Authority::default())),
+            CaptureConfig::Partial(routes()),
+            test_forwarder(Arc::new(Authority::default())),
             rx.clone(),
         )
         .unwrap();
@@ -976,7 +1170,7 @@ async fn release_failure_retains_ownership_until_explicit_joined_retry() {
         assert!(owner.stop().await.is_err());
         assert_eq!(platform.closed.load(SeqCst), 1);
         assert!(
-            platform.open(&routes()).is_err(),
+            platform.open(1, &CaptureConfig::Partial(routes())).is_err(),
             "replacement admitted before release"
         );
         let mut connect_acknowledged = false;
@@ -999,7 +1193,7 @@ async fn release_failure_retains_ownership_until_explicit_joined_retry() {
         let mut replacement = start(
             platform.clone(),
             routes(),
-            Forwarder::new(Arc::new(Authority::default())),
+            test_forwarder(Arc::new(Authority::default())),
             rx,
         )
         .await
@@ -1028,8 +1222,8 @@ async fn cancelled_readiness_and_stop_keep_the_recovery_owner() {
             inner: platform.clone(),
             pause: pause.clone(),
         }),
-        routes(),
-        Forwarder::new(Arc::new(Authority::default())),
+        CaptureConfig::Partial(routes()),
+        test_forwarder(Arc::new(Authority::default())),
         rx,
     )
     .unwrap();
@@ -1066,7 +1260,7 @@ async fn fatal_sink_write_joins_physical_work_before_close_release_and_failed_pu
         pause_after: 1,
         ..Authority::default()
     });
-    let mut forwarder = Forwarder::new(authority);
+    let mut forwarder = test_forwarder(authority);
     let (address, mut hits, echo) = udp_echo(false).await;
     forwarder.ingest(&udp(
         flow(address, Transport::Udp, 46000),
@@ -1117,7 +1311,7 @@ async fn fatal_sink_write_joins_physical_work_before_close_release_and_failed_pu
 #[tokio::test]
 async fn short_and_zero_packet_writes_are_fatal_at_the_checked_sink_boundary() {
     for short in [false, true] {
-        let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+        let mut forwarder = test_forwarder(Arc::new(Authority::default()));
         let (address, mut hits, echo) = udp_echo(false).await;
         forwarder.ingest(&udp(
             flow(address, Transport::Udp, 47000),
@@ -1149,3 +1343,6 @@ async fn short_and_zero_packet_writes_are_fatal_at_the_checked_sink_boundary() {
         echo.abort();
     }
 }
+
+#[path = "managed_tests.rs"]
+mod managed;

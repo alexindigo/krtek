@@ -302,7 +302,14 @@ impl SmoltcpStack {
 
     /// Drop ICMP sockets whose handle has been dropped.
     fn reap_icmp(&mut self) {
-        self.active_icmp.retain(|s| !s.send_rx.is_closed());
+        self.active_icmp.retain(|s| {
+            if s.send_rx.is_closed() {
+                self.sockets.remove(s.socket_handle);
+                false
+            } else {
+                true
+            }
+        });
     }
 
     fn handle_cmd(&mut self, cmd: SocketCmd, notify: &Arc<Notify>) {
@@ -394,6 +401,51 @@ mod tests {
     use super::*;
     use gotatun::packet::Ipv4;
     use std::net::Ipv4Addr;
+
+    #[test]
+    fn repeated_icmp_reap_removes_actual_socket_and_preserves_live_sender() {
+        let (tx, mut packets) = mpsc::channel(64);
+        let now = SmoltcpInstant::from_millis(0);
+        let mut stack = SmoltcpStack::new(
+            &SmoltcpNetworkConfig {
+                ipv4_addr: Ipv4Addr::new(10, 0, 0, 1),
+                ipv6_addr: None,
+                mtu: 1280,
+            },
+            now,
+            tx,
+        );
+        let notify = Arc::new(Notify::new());
+        let mut create = |ident| {
+            let (response, mut rx) = oneshot::channel();
+            stack.handle_cmd(SocketCmd::CreateIcmpSocket { ident, response }, &notify);
+            rx.try_recv().unwrap().unwrap()
+        };
+        let live = create(123);
+        let live_handle = stack.active_icmp[0].socket_handle;
+        for ident in 1000..1100 {
+            let (response, mut rx) = oneshot::channel();
+            stack.handle_cmd(SocketCmd::CreateIcmpSocket { ident, response }, &notify);
+            let socket = rx.try_recv().unwrap().unwrap();
+            assert_eq!(stack.sockets.iter().count(), 2);
+            drop(socket);
+            stack.reap_icmp();
+            assert_eq!(stack.sockets.iter().count(), 1);
+        }
+        let socket = stack.sockets.get_mut::<icmp::Socket<'_>>(live_handle);
+        socket
+            .send_slice(
+                &[8, 0, 0, 0, 0, 123, 0, 1],
+                IpAddress::Ipv4(Ipv4Addr::new(10, 0, 0, 2)),
+            )
+            .unwrap();
+        stack.poll(now);
+        let packet = packets.try_recv().unwrap().into_bytes();
+        assert_eq!(&packet[24..28], &[0, 123, 0, 1]);
+        drop(live);
+        stack.reap_icmp();
+        assert_eq!(stack.sockets.iter().count(), 0);
+    }
 
     /// Retransmissions are driven by the timestamps fed to `poll`, not by real
     /// time. With no SYN-ACK arriving, advancing the virtual clock past the RTO

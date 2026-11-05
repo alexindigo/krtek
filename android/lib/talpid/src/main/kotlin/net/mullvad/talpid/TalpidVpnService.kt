@@ -39,6 +39,9 @@ import net.mullvad.talpid.util.UnderlyingConnectivityStatusResolver
 open class TalpidVpnService : LifecycleVpnService() {
     private lateinit var localNetworkWatcher: LocalNetworkWatcher
     private val localFrontendOwnership = LocalFrontendOwnership()
+    private var captureRegistration = 0L
+    private var captureGeneration: Long? = null
+    private var captureObserver: LocalCaptureNetworkObserver? = null
     private var activeTunStatus by
         observable<CreateTunResult?>(null) { _, oldTunStatus, _ ->
             val oldTunFd =
@@ -72,6 +75,7 @@ open class TalpidVpnService : LifecycleVpnService() {
 
     @CallSuper
     override fun onDestroy() {
+        synchronized(this) { invalidateCaptureObservation() }
         localNetworkWatcher.stop()
         super.onDestroy()
     }
@@ -83,21 +87,120 @@ open class TalpidVpnService : LifecycleVpnService() {
     @Suppress("Unused")
     fun detachLocalNetwork(registration: Long): Boolean = localNetworkWatcher.detach(registration)
 
+    @Suppress("Unused")
+    fun attachCaptureNetwork(registration: Long): Boolean =
+        synchronized(this) {
+            if (registration <= 0 || captureRegistration != 0L) return false
+            captureRegistration = registration
+            true
+        }
+
+    @Suppress("Unused")
+    fun detachCaptureNetwork(registration: Long): Boolean =
+        synchronized(this) {
+            if (captureRegistration != registration) return false
+            closeCaptureObservation()
+            captureRegistration = 0
+            true
+        }
+
+    @Suppress("Unused")
+    fun bindLocalFrontend(generation: Long, interfaceName: String): Boolean =
+        synchronized(this) {
+            captureGeneration == generation && captureObserver?.bind(interfaceName) == true
+        }
+
     // Used by JNI. Native receives the sole descriptor; Kotlin retains only ownership state.
     @Suppress("Unused")
-    fun openLocalFrontend(routes: Array<String>): CreateTunResult =
+    fun openLocalFrontend(generation: Long, routes: Array<String>): CreateTunResult =
         synchronized(this) {
             val config = LocalFrontendConfig.parse(routes) ?: return EstablishError
-            if (!localFrontendOwnership.tryFrontend()) return EstablishError
-            val result =
-                try {
-                    createLocalFrontend(config)
-                } catch (_: RuntimeException) {
-                    EstablishError
-                }
-            if (result !is CreateTunResult.Success) localFrontendOwnership.frontendFinished()
-            result
+            openFrontend(generation) { createLocalFrontend(config) }
         }
+
+    /**
+     * Assigned capture uses the normal safe Builder primitives, never synthetic fallback fields.
+     */
+    @Suppress("Unused")
+    fun openSecuredFrontend(generation: Long, config: TunConfig): CreateTunResult =
+        synchronized(this) {
+            if (
+                !supportsCaptureObservation() ||
+                    !config.validSecuredFields() ||
+                    !config.validIpv6Routes()
+            )
+                return EstablishError
+            openFrontend(generation) {
+                either {
+                    prepareVpnSafe().mapLeft { it.toCreateTunError() }.bind()
+                    val builder = Builder()
+                    // Refuse invalid config before establishing. The Native path keeps
+                    // its upstream blocking fallbacks; secured capture must be exact.
+                    builder.configureWith(config).mapLeft { EstablishError }.bind()
+                    builder
+                        .establishSafe()
+                        .mapLeft { EstablishError }
+                        .bind()
+                        .use {
+                            frontendEstablished(it, observeCapture = true)
+                        }
+                }
+                    .merge()
+            }
+        }
+
+    private fun supportsCaptureObservation() = captureRegistration > 0L
+
+    private fun TunConfig.validSecuredFields() =
+        listOf(addresses, routes, dnsServers).all { it.isNotEmpty() } &&
+            addresses.none { it.isAnyLocalAddress || it.isMulticastAddress } &&
+            mtu >= BLOCKING_MTU
+
+    private fun openFrontend(generation: Long, create: () -> CreateTunResult): CreateTunResult {
+        if (generation <= 0 || !localFrontendOwnership.tryFrontend()) return EstablishError
+        captureGeneration = generation
+        val result =
+            try {
+                create()
+            } catch (_: RuntimeException) {
+                EstablishError
+            }
+        if (result !is CreateTunResult.Success) {
+            // No detached fd exists. Keep ownership if callback release fails.
+            closeCaptureObservation()
+            onLocalFrontendChanged(false)
+            captureGeneration = null
+            localFrontendOwnership.frontendFinished()
+        }
+        return result
+    }
+
+    private fun frontendEstablished(
+        descriptor: ParcelFileDescriptor,
+        observeCapture: Boolean,
+    ): CreateTunResult {
+        onLocalFrontendChanged(true)
+        if (observeCapture && captureRegistration > 0) {
+            val observer =
+                LocalCaptureNetworkObserver(
+                    checkNotNull(getSystemService<ConnectivityManager>()),
+                    captureRegistration,
+                    checkNotNull(captureGeneration),
+                )
+            captureObserver = observer
+            observer.start()
+        }
+        return CreateTunResult.Success(descriptor.detachFd())
+    }
+
+    private fun invalidateCaptureObservation() {
+        captureObserver?.invalidate()
+    }
+
+    private fun closeCaptureObservation() {
+        captureObserver?.close()
+        captureObserver = null
+    }
 
     private fun createLocalFrontend(config: LocalFrontendConfig): CreateTunResult = either {
         prepareVpnSafe().mapLeft { it.toCreateTunError() }.bind()
@@ -110,10 +213,7 @@ open class TalpidVpnService : LifecycleVpnService() {
         builder.setBlocking(false)
         builder.setMeteredIfSupported(false)
         val descriptor = builder.establishSafe().mapLeft { EstablishError }.bind()
-        descriptor.use {
-            onLocalFrontendChanged(true)
-            CreateTunResult.Success(it.detachFd())
-        }
+        descriptor.use { frontendEstablished(it, observeCapture = false) }
     }
         .merge()
 
@@ -121,8 +221,10 @@ open class TalpidVpnService : LifecycleVpnService() {
     fun finishLocalFrontend(): Unit =
         synchronized(this) {
             if (localFrontendOwnership.frontendActive) {
-                localFrontendOwnership.frontendFinished()
+                closeCaptureObservation()
                 onLocalFrontendChanged(false)
+                captureGeneration = null
+                localFrontendOwnership.frontendFinished()
             }
         }
 
@@ -155,7 +257,11 @@ open class TalpidVpnService : LifecycleVpnService() {
         }
 
     @CallSuper
-    override fun onRevoke(): Unit = synchronized(this) { localFrontendOwnership.revoke() }
+    override fun onRevoke(): Unit =
+        synchronized(this) {
+            invalidateCaptureObservation()
+            localFrontendOwnership.revoke()
+        }
 
     // Used by JNI
     fun openTun(config: TunConfig): CreateTunResult =

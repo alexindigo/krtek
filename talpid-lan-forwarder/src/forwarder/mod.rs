@@ -21,6 +21,9 @@ use std::{
     task::{Context, Poll, Waker},
     time::Duration,
 };
+use talpid_types::relay_flow::{
+    BUFFER_OVERHEAD, RelayBuffer, RelayBufferAllocator, RelayBufferReservation,
+};
 use tokio::{
     net::{TcpSocket, TcpStream, UdpSocket},
     sync::Notify,
@@ -38,18 +41,25 @@ const STREAM_BUFFER: usize = 4096;
 const CONNECT_LIMIT: Duration = Duration::from_secs(2);
 const IDLE_LIMIT: Duration = Duration::from_secs(60);
 const RETIRED_TCP_LIMIT: Duration = Duration::from_secs(60);
-// Pending datagrams, held SYNs, both output queues, one ingress packet,
-// endpoint rings, receive scratch and conservative task/metadata allowance.
-const STORAGE_CEILING: usize = UDP_FLOWS * HELD_DATAGRAMS * MAX_PACKET_SIZE
-    + TCP_FLOWS * MAX_PACKET_SIZE
-    + 2 * OUTPUT_PACKETS * MAX_PACKET_SIZE
-    + MAX_PACKET_SIZE
-    + TCP_FLOWS * 2 * STREAM_BUFFER
-    + TCP_TOMBSTONES * 256
-    + OUTPUT_PACKETS * 256
-    + MAX_PACKET_SIZE
-    + 8 * 1024 * 1024;
-const _: () = assert!(STORAGE_CEILING <= 128 * 1024 * 1024);
+// Withheld region metadata plus fixed ring/task storage. Count limits remain
+// ceilings; the injected byte budget may refuse admission before a count fills.
+const REGION_METADATA: usize = 512;
+const TASK_METADATA: usize = 16 * 1024;
+
+struct FlowStorage {
+    held: Arc<dyn RelayBufferAllocator>,
+    fixed: Arc<dyn RelayBufferReservation>,
+}
+
+fn region(
+    buffers: &dyn RelayBufferAllocator,
+    bytes: usize,
+) -> Result<Arc<dyn RelayBufferAllocator>, Refused> {
+    buffers
+        .try_reserve(bytes.checked_add(REGION_METADATA).ok_or(Refused::Full)?)
+        .and_then(|charge| charge.allocator())
+        .map_err(|_| Refused::Full)
+}
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Stats {
@@ -108,13 +118,15 @@ struct Pending<G> {
     tcp: Option<Incarnation>,
     grant: G,
     work: Work,
-    held: VecDeque<Vec<u8>>,
+    held: VecDeque<RelayBuffer>,
+    storage: FlowStorage,
     deadline: Instant,
     attempt_revision: u64,
     retried: bool,
     expired: bool,
 }
 struct Tcp<G> {
+    _storage: FlowStorage,
     incarnation: Incarnation,
     finished_at: Option<Instant>,
     grant: G,
@@ -130,11 +142,12 @@ struct Tcp<G> {
 struct Udp<G> {
     grant: G,
     physical: UdpSocket,
-    held: VecDeque<Vec<u8>>,
+    held: VecDeque<RelayBuffer>,
+    storage: FlowStorage,
     last_activity: Instant,
 }
 struct Output<G> {
-    bytes: Vec<u8>,
+    bytes: RelayBuffer,
     // Only protocol resets can outlive a grant. Application data always retains it.
     grant: Option<G>,
     tcp: Option<TcpOutput>,
@@ -218,44 +231,115 @@ enum TcpInput {
 pub struct Forwarder<A: LocalAuthority> {
     authority: Arc<A>,
     stack: Stack,
-    pending: HashMap<Flow, Pending<A::Grant>>,
-    tcp: HashMap<Flow, Tcp<A::Grant>>,
+    pending: HashMap<Flow, Pending<Arc<A::Grant>>>,
+    tcp: HashMap<Flow, Tcp<Arc<A::Grant>>>,
     retired_tcp: Vec<RetiredTcp>,
     next_tcp_id: u64,
-    udp: HashMap<Flow, Udp<A::Grant>>,
-    output: VecDeque<Output<A::Grant>>,
+    udp: HashMap<Flow, Udp<Arc<A::Grant>>>,
+    output: VecDeque<Output<Arc<A::Grant>>>,
     stats: Stats,
     started: Instant,
     revision: u64,
     notify: Arc<Notify>,
     mtu: usize,
+    buffers: Arc<dyn RelayBufferAllocator>,
+    input: Arc<dyn RelayBufferAllocator>,
+    replies: Arc<dyn RelayBufferAllocator>,
+    scratch: RelayBuffer,
+    _metadata: Arc<dyn RelayBufferReservation>,
 }
 
 impl<A: LocalAuthority> Forwarder<A> {
-    pub fn new(authority: Arc<A>) -> Self {
-        Self::with_mtu(authority, 1280)
+    pub fn new(authority: Arc<A>, buffers: Arc<dyn RelayBufferAllocator>) -> Result<Self, Refused> {
+        Self::with_mtu(authority, buffers, 1280)
     }
 
-    pub fn with_mtu(authority: Arc<A>, mtu: usize) -> Self {
+    pub fn with_mtu(
+        authority: Arc<A>,
+        buffers: Arc<dyn RelayBufferAllocator>,
+        mtu: usize,
+    ) -> Result<Self, Refused> {
         assert!(
             (1280..=MAX_PACKET_SIZE).contains(&mtu),
             "frontend MTU outside packet ceiling"
         );
-        Self {
+        // Both queues, one token/encoder peak and a receive scratch are funded
+        // before startup. They cannot compete with newly admitted input bytes.
+        let replies = region(
+            &*buffers,
+            (2 * OUTPUT_PACKETS + 2) * (mtu + BUFFER_OVERHEAD),
+        )?;
+        let input = region(&*buffers, 2 * (MAX_PACKET_SIZE + BUFFER_OVERHEAD))?;
+        let scratch_charge = buffers
+            .try_reserve(MAX_PACKET_SIZE + BUFFER_OVERHEAD)
+            .map_err(|_| Refused::Full)?;
+        let scratch = RelayBuffer::from_reservation(vec![0; MAX_PACKET_SIZE], scratch_charge)
+            .map_err(|_| Refused::Full)?;
+        // Maps, queue slots, tombstones and bounded process worklists are fixed
+        // arenas. Include generic grants and both simultaneously live maps.
+        let metadata_bytes = 64 * 1024
+            // Bounded authority payloads (up to 64 rule UUIDs in a local lease)
+            // and worklists. Queues/tasks share grants, never clone their backing.
+            + 4096 * (TCP_FLOWS + UDP_FLOWS + 2 * OUTPUT_PACKETS)
+            + 4 * TCP_FLOWS * (size_of::<(Flow, Pending<A::Grant>)>() + size_of::<(Flow, Tcp<A::Grant>)>() + size_of::<smoltcp::iface::SocketStorage<'static>>())
+            + 4 * UDP_FLOWS * (size_of::<(Flow, Pending<A::Grant>)>() + size_of::<(Flow, Udp<A::Grant>)>())
+            + TCP_TOMBSTONES * size_of::<RetiredTcp>()
+            + 4 * OUTPUT_PACKETS * size_of::<Output<A::Grant>>();
+        let metadata = buffers
+            .try_reserve(metadata_bytes)
+            .map_err(|_| Refused::Full)?;
+        Ok(Self {
             authority,
-            stack: Stack::new(mtu),
-            pending: HashMap::new(),
-            tcp: HashMap::new(),
-            retired_tcp: Vec::new(),
+            stack: Stack::new(mtu, input.clone(), replies.clone()),
+            pending: HashMap::with_capacity(TCP_FLOWS + UDP_FLOWS),
+            tcp: HashMap::with_capacity(TCP_FLOWS),
+            retired_tcp: Vec::with_capacity(TCP_TOMBSTONES),
             next_tcp_id: 0,
-            udp: HashMap::new(),
-            output: VecDeque::new(),
+            udp: HashMap::with_capacity(UDP_FLOWS),
+            output: VecDeque::with_capacity(OUTPUT_PACKETS),
             stats: Stats::default(),
             started: Instant::now(),
             revision: 0,
             notify: Arc::new(Notify::new()),
             mtu,
-        }
+            buffers,
+            input,
+            replies,
+            scratch,
+            _metadata: metadata,
+        })
+    }
+
+    /// Precharged capture scratch, kept by the frontend through its read loop.
+    pub fn read_buffer(&self) -> Result<RelayBuffer, Refused> {
+        let charge = self
+            .input
+            .try_reserve(MAX_PACKET_SIZE + BUFFER_OVERHEAD)
+            .map_err(|_| Refused::Full)?;
+        RelayBuffer::from_reservation(vec![0; MAX_PACKET_SIZE], charge).map_err(|_| Refused::Full)
+    }
+
+    fn flow_storage(&self, transport: Transport) -> Result<FlowStorage, Refused> {
+        let fixed_bytes = TASK_METADATA
+            + if transport == Transport::Tcp {
+                2 * STREAM_BUFFER
+            } else {
+                0
+            };
+        let slots = if transport == Transport::Tcp {
+            1
+        } else {
+            HELD_DATAGRAMS
+        };
+        // Fixed bounded ingress rings are owned from admission through retirement,
+        // including blocked preparation. Existing flows do not need fresh root
+        // credit merely to accept their next datagram or retransmitted segment.
+        let held = region(
+            &*self.buffers,
+            fixed_bytes + slots * (MAX_PACKET_SIZE + BUFFER_OVERHEAD),
+        )?;
+        let fixed = held.try_reserve(fixed_bytes).map_err(|_| Refused::Full)?;
+        Ok(FlowStorage { held, fixed })
     }
 
     pub fn revalidation_signal(&self) -> Arc<Notify> {
@@ -296,7 +380,12 @@ impl<A: LocalAuthority> Forwarder<A> {
         }
     }
 
-    fn enqueue(&mut self, bytes: Vec<u8>, grant: Option<A::Grant>, tcp: Option<TcpOutput>) {
+    fn enqueue(
+        &mut self,
+        bytes: RelayBuffer,
+        grant: Option<Arc<A::Grant>>,
+        tcp: Option<TcpOutput>,
+    ) {
         if self.output.len() < OUTPUT_PACKETS {
             self.output.push_back(Output { bytes, grant, tcp });
         } else {
@@ -319,7 +408,15 @@ impl<A: LocalAuthority> Forwarder<A> {
     }
 
     fn reset_for(&mut self, bytes: &[u8], owner: Option<(Flow, u64)>) {
+        let Ok(peak) = self.replies.try_reserve(self.mtu + BUFFER_OVERHEAD) else {
+            self.refused(Refused::Full);
+            return;
+        };
         if let Some(reply) = stack::reset(bytes) {
+            let Ok(reply) = RelayBuffer::from_reservation(reply, peak) else {
+                self.refused(Refused::Full);
+                return;
+            };
             self.enqueue(
                 reply,
                 None,
@@ -333,10 +430,12 @@ impl<A: LocalAuthority> Forwarder<A> {
         }
     }
 
-    fn prepare(&self, flow: Flow, grant: &A::Grant) -> Work {
+    fn prepare(&self, flow: Flow, grant: &Arc<A::Grant>, storage: &FlowStorage) -> Work {
         let authority = self.authority.clone();
         let grant = grant.clone();
+        let charge = storage.fixed.clone();
         Work::Preparing(Task::new(tokio::task::spawn_blocking(move || {
+            let _charge = charge;
             if !authority.current(&grant) {
                 return Err(Refused::Stale);
             }
@@ -429,7 +528,10 @@ impl<A: LocalAuthority> Forwarder<A> {
             }
             if flow.transport == Transport::Udp && !pending.expired {
                 if pending.held.len() < HELD_DATAGRAMS {
-                    pending.held.push_back(packet.payload.to_vec());
+                    match RelayBuffer::copy_from(packet.payload, &*pending.storage.held) {
+                        Ok(bytes) => pending.held.push_back(bytes),
+                        Err(_) => self.refused(Refused::Full),
+                    }
                 } else {
                     self.refused(Refused::Full);
                 }
@@ -438,7 +540,10 @@ impl<A: LocalAuthority> Forwarder<A> {
         }
         if let Some(entry) = self.udp.get_mut(&flow) {
             if entry.held.len() < HELD_DATAGRAMS {
-                entry.held.push_back(packet.payload.to_vec());
+                match RelayBuffer::copy_from(packet.payload, &*entry.storage.held) {
+                    Ok(bytes) => entry.held.push_back(bytes),
+                    Err(_) => self.refused(Refused::Full),
+                }
             } else {
                 self.refused(Refused::Full);
             }
@@ -504,7 +609,7 @@ impl<A: LocalAuthority> Forwarder<A> {
             return;
         }
         let grant = match self.authority.authorize(flow) {
-            Ok(grant) => grant,
+            Ok(grant) => Arc::new(grant),
             Err(reason) => {
                 self.refused(reason);
                 if flow.transport == Transport::Tcp && reason != Refused::Stale {
@@ -513,17 +618,33 @@ impl<A: LocalAuthority> Forwarder<A> {
                 return;
             }
         };
-        let work = self.prepare(flow, &grant);
+        let storage = match self.flow_storage(flow.transport) {
+            Ok(storage) => storage,
+            Err(reason) => {
+                self.refused(reason);
+                return;
+            }
+        };
+        let held_bytes = if flow.transport == Transport::Tcp {
+            bytes
+        } else {
+            packet.payload
+        };
+        let held_bytes = match RelayBuffer::copy_from(held_bytes, &*storage.held) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                self.refused(Refused::Full);
+                return;
+            }
+        };
+        let work = self.prepare(flow, &grant, &storage);
         let tcp = tcp_segment.map(|syn| {
             let incarnation = Incarnation::new(self.next_tcp_id, syn);
             self.next_tcp_id += 1;
             incarnation
         });
-        let held = VecDeque::from([if flow.transport == Transport::Tcp {
-            bytes.to_vec()
-        } else {
-            packet.payload.to_vec()
-        }]);
+        let mut held = VecDeque::with_capacity(HELD_DATAGRAMS);
+        held.push_back(held_bytes);
         self.pending.insert(
             flow,
             Pending {
@@ -531,6 +652,7 @@ impl<A: LocalAuthority> Forwarder<A> {
                 grant,
                 work,
                 held,
+                storage,
                 deadline: Instant::now() + CONNECT_LIMIT,
                 attempt_revision: self.revision,
                 retried: false,
@@ -660,7 +782,7 @@ impl<A: LocalAuthority> Forwarder<A> {
         self.tcp.remove(&flow);
     }
 
-    fn graceful_tcp_finished(&self, entry: &Tcp<A::Grant>) -> bool {
+    fn graceful_tcp_finished(&self, entry: &Tcp<Arc<A::Grant>>) -> bool {
         let endpoint = self.stack.sockets.get::<tcp::Socket<'_>>(entry.handle);
         entry.application_eof
             && entry.physical_eof
@@ -702,10 +824,11 @@ impl<A: LocalAuthority> Forwarder<A> {
         self.retired_tcp.push(retired);
     }
 
-    fn retry(&mut self, flow: Flow, mut pending: Pending<A::Grant>) {
+    fn retry(&mut self, flow: Flow, mut pending: Pending<Arc<A::Grant>>) {
         match self.authority.authorize(flow) {
             Ok(grant) => {
-                pending.work = self.prepare(flow, &grant);
+                let grant = Arc::new(grant);
+                pending.work = self.prepare(flow, &grant, &pending.storage);
                 pending.grant = grant;
                 pending.attempt_revision = self.revision;
                 pending.retried = true;
@@ -715,7 +838,7 @@ impl<A: LocalAuthority> Forwarder<A> {
         }
     }
 
-    fn failed_pending(&mut self, flow: Flow, mut pending: Pending<A::Grant>, reason: Refused) {
+    fn failed_pending(&mut self, flow: Flow, mut pending: Pending<Arc<A::Grant>>, reason: Refused) {
         self.refused(reason);
         if flow.transport == Transport::Tcp {
             if reason != Refused::Stale
@@ -785,6 +908,7 @@ impl<A: LocalAuthority> Forwarder<A> {
                                         grant: pending.grant,
                                         physical,
                                         held: pending.held,
+                                        storage: pending.storage,
                                         last_activity: Instant::now(),
                                     },
                                 );
@@ -818,6 +942,7 @@ impl<A: LocalAuthority> Forwarder<A> {
                     self.tcp.insert(
                         flow,
                         Tcp {
+                            _storage: pending.storage,
                             incarnation: pending.tcp.expect("connected TCP identity"),
                             finished_at: None,
                             grant: pending.grant,
@@ -936,7 +1061,6 @@ impl<A: LocalAuthority> Forwarder<A> {
     fn pump_udp(&mut self) {
         let mut received = Vec::new();
         let mut removed = Vec::new();
-        let mut buffer = [0u8; MAX_PACKET_SIZE];
         // Global per-process receive allowance also bounds transient reply storage.
         let mut slots = OUTPUT_PACKETS - self.output.len();
         for (flow, entry) in &mut self.udp {
@@ -957,15 +1081,24 @@ impl<A: LocalAuthority> Forwarder<A> {
                 }
             }
             while slots > 0 && self.authority.current(&entry.grant) {
-                match entry.physical.try_recv(&mut buffer) {
+                let Ok(peak) = self.replies.try_reserve(self.mtu + BUFFER_OVERHEAD) else {
+                    break;
+                };
+                match entry.physical.try_recv(&mut self.scratch) {
                     Ok(n) => {
                         slots -= 1;
                         entry.last_activity = Instant::now();
-                        match packet::udp_reply(*flow, &buffer[..n]) {
-                            Ok(bytes) if bytes.len() <= self.mtu => {
-                                received.push((bytes, entry.grant.clone()))
-                            }
-                            _ => self.stats.oversized_reply += 1,
+                        let header = if flow.source.is_ipv4() { 28 } else { 48 };
+                        if n + header > self.mtu {
+                            self.stats.oversized_reply += 1;
+                            continue;
+                        }
+                        match packet::udp_reply(*flow, &self.scratch[..n]) {
+                            Ok(bytes) => match RelayBuffer::from_reservation(bytes, peak) {
+                                Ok(bytes) => received.push((bytes, entry.grant.clone())),
+                                Err(_) => self.stats.full += 1,
+                            },
+                            Err(_) => self.stats.oversized_reply += 1,
                         }
                     }
                     Err(e) if e.kind() == io::ErrorKind::WouldBlock => break,
@@ -1167,11 +1300,12 @@ impl<A: LocalAuthority> Forwarder<A> {
             }
         }
         self.pending.clear();
+        // Destroy actual ring allocations before returning their flow credit.
+        self.stack = Stack::new(self.mtu, self.input.clone(), self.replies.clone());
         self.tcp.clear();
         self.retired_tcp.clear();
         self.udp.clear();
         self.output.clear();
-        self.stack = Stack::new(self.mtu);
     }
 }
 

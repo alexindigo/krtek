@@ -23,6 +23,38 @@ use tokio::{
     task::JoinHandle,
 };
 
+#[cfg(target_os = "linux")]
+#[path = "connected_tests.rs"]
+mod connected;
+
+#[test]
+fn runtime_regions_share_one_root_and_local_exhaustion_preserves_control() {
+    let pools = DeliveryBuffers::new();
+    let root = pools._root.clone();
+    assert_eq!(root.limit(), 64 * 1024 * 1024);
+    assert_eq!(root.used(), 62 * 1024 * 1024 + 512);
+    let local = pools.local.try_reserve(30 * 1024 * 1024 - 512).unwrap();
+    assert!(pools.local.try_reserve(1).is_err());
+    let application = pools
+        ._application
+        .try_reserve(22 * 1024 * 1024 - 512)
+        .unwrap();
+    let control = pools._control.try_reserve(8 * 1024 * 1024 - 512).unwrap();
+    let capture = pools._capture.try_reserve(2 * 1024 * 1024 - 512).unwrap();
+    assert!(pools._application.try_reserve(1).is_err());
+    assert!(pools._control.try_reserve(1).is_err());
+    assert!(pools._capture.try_reserve(1).is_err());
+    assert_eq!(root.used(), 62 * 1024 * 1024 + 512);
+    drop((pools, application, control, capture));
+    assert_eq!(
+        root.used(),
+        30 * 1024 * 1024,
+        "last owned child retains only its region"
+    );
+    drop(local);
+    assert_eq!(root.used(), 0);
+}
+
 fn policy() -> LocalNetworkAccess {
     LocalNetworkAccess {
         enabled: true,
@@ -93,6 +125,230 @@ fn authority() -> Arc<DeliveryAuthority> {
     Arc::new(DeliveryAuthority::new(&policy(), Arc::new(|_, _| Ok(()))))
 }
 
+fn assigned_config() -> talpid_tunnel::tun_provider::TunConfig {
+    let mut config = talpid_tunnel::tun_provider::blocking_config();
+    config.addresses = vec![
+        "10.64.2.3".parse().unwrap(),
+        "fc00:bbbb:bbbb:bb01::3".parse().unwrap(),
+    ];
+    config.ipv6_gateway = Some("fc00:bbbb:bbbb:bb01::1".parse().unwrap());
+    config.dns_servers = None;
+    config.mtu = 1380;
+    config
+}
+
+#[tokio::test]
+async fn intentional_handover_is_paused_but_an_unacknowledged_release_is_failed() {
+    use crate::local_network::TunnelPhase;
+    let control = Arc::new(Control::default());
+    let mut runtime = make_runtime(None, control.clone());
+    runtime
+        .update(&policy(), TargetState::Unsecured, TunnelPhase::Disconnected)
+        .await;
+    runtime.suspend();
+    // Retiring a broker attempt makes its capture actor terminal. This is the
+    // expected continuation of deliberate teardown, not a new owner failure.
+    control
+        .state
+        .lock()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .send_replace(OwnerState::Failed);
+    runtime.owner_changed(&policy(), TargetState::Secured, TunnelPhase::Disconnecting);
+    assert_eq!(
+        runtime.status().forwarding,
+        ForwardingAvailability::PausedWhileConnected
+    );
+    control.fail_release.store(true, SeqCst);
+    assert!(runtime.stop().await.is_err());
+    runtime.owner_changed(&policy(), TargetState::Secured, TunnelPhase::Disconnected);
+    assert_eq!(runtime.status().forwarding, ForwardingAvailability::Failed);
+    control.fail_release.store(false, SeqCst);
+    runtime.stop().await.unwrap();
+    assert!(!runtime.has_owner());
+}
+
+fn broker() -> AttachmentBroker {
+    let pools = DeliveryBuffers::new();
+    let broker = AttachmentBroker::new(pools._application, pools._capture, pools._control).unwrap();
+    broker.set_mode(AttachmentMode::ManagedRequired).unwrap();
+    broker
+}
+
+#[tokio::test]
+async fn assigned_sources_and_capture_identity_are_required_at_prepare_and_output() {
+    let count = Arc::new(AtomicUsize::new(0));
+    let prepares = count.clone();
+    let authority = DeliveryAuthority::new(
+        &policy(),
+        Arc::new(move |_, _| {
+            prepares.fetch_add(1, SeqCst);
+            Ok(())
+        }),
+    );
+    authority.update(&policy(), Some(observation()));
+    let old_partial = authority.authorize(flow(Transport::Udp, 40100)).unwrap();
+    authority.install(CaptureAuthority::partial());
+    assert!(
+        !authority.current(&old_partial),
+        "equal-source replacement revokes an old grant"
+    );
+    let broker = broker();
+    let config = assigned_config();
+    let mut request = broker.request_capture(config.clone()).unwrap();
+    let pending = broker.pending_request().unwrap();
+    authority.install(
+        DeliveryConfig::Secured {
+            broker: broker.clone(),
+            request: pending.clone(),
+        }
+        .authority(),
+    );
+    let mut assigned = flow(Transport::Udp, 40101);
+    assigned.source.set_ip(config.addresses[0]);
+    assert!(authority.authorize(assigned).is_err());
+    let lease = broker.open_capture(Some(&pending)).unwrap();
+    let sources = talpid_types::relay_flow::RelaySources {
+        ipv4: Some("10.64.2.3".parse().unwrap()),
+        ipv6: Some("fc00:bbbb:bbbb:bb01::3".parse().unwrap()),
+    };
+    let receipt = lease
+        .bind_observed_identity("tun-owned", 101_u64 << 32, sources, config.mtu)
+        .unwrap();
+    broker.acknowledge(&pending, &receipt).unwrap();
+    assert_eq!(
+        request.configured().await.unwrap().generation(),
+        receipt.generation()
+    );
+    let pair = broker.acquire(&receipt).unwrap();
+    assert!(
+        authority.authorize(assigned).is_err(),
+        "capture receipt is not ordinary readiness"
+    );
+    pair.control.activate().unwrap();
+    authority.endpoint(false);
+    assert!(
+        authority.authorize(assigned).is_err(),
+        "ready attempt alone is not Connected"
+    );
+    authority.endpoint(true);
+    let grant = authority.authorize(assigned).unwrap();
+    assert_eq!(grant.generation, Some(receipt.generation()));
+    assert!(authority.authorize(flow(Transport::Udp, 40102)).is_err());
+    assigned.source.set_ip(config.addresses[1]);
+    assert!(authority.authorize(assigned).is_ok());
+    let socket = socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None).unwrap();
+    authority.prepare(&socket, &grant).unwrap();
+    assert_eq!(count.load(SeqCst), 1);
+    // A broad local rule never captures the VPN gateway or SOCKS control range.
+    let mut broad = policy();
+    broad.rules[0].cidrs = vec!["10.0.0.0/8".parse().unwrap()];
+    authority.update(&broad, Some(observation()));
+    for destination in ["10.64.0.1", "10.124.0.5"] {
+        assert_eq!(
+            authority.disposition(destination.parse().unwrap()),
+            Disposition::Drop
+        );
+    }
+    assert_eq!(
+        authority.disposition("10.0.2.2".parse().unwrap()),
+        Disposition::Local
+    );
+    authority.update(&policy(), None);
+    assert!(!authority.current(&grant));
+    assert!(
+        pair.control.current(),
+        "physical observer loss cannot retire raw VPN"
+    );
+    authority.update(&policy(), Some(observation()));
+    assert!(authority.current(&grant));
+    lease.retire();
+    assert!(!authority.current(&grant));
+    assert_eq!(authority.prepare(&socket, &grant), Err(Refused::Stale));
+    assert_eq!(count.load(SeqCst), 1);
+    authority.install(CaptureAuthority::partial());
+    assert!(!authority.current(&grant));
+    assert!(authority.authorize(flow(Transport::Udp, 40103)).is_ok());
+}
+
+#[tokio::test]
+async fn connected_status_requires_the_current_capture_and_activated_attempt() {
+    use crate::local_network::TunnelPhase;
+    let control = Arc::new(Control::default());
+    let mut runtime = make_runtime(None, control.clone());
+    let broker = runtime.broker();
+    broker.set_mode(AttachmentMode::ManagedRequired).unwrap();
+    let mut request = broker.request_capture(assigned_config()).unwrap();
+    let pending = broker.pending_request().unwrap();
+    runtime
+        .update(&policy(), TargetState::Secured, TunnelPhase::Connecting)
+        .await;
+    assert_eq!(
+        runtime.status().forwarding,
+        ForwardingAvailability::PausedWhileConnected
+    );
+    let capture = broker.open_capture(Some(&pending)).unwrap();
+    let receipt = capture
+        .bind_observed_identity(
+            "tun-owned",
+            102_u64 << 32,
+            talpid_types::relay_flow::RelaySources {
+                ipv4: Some("10.64.2.3".parse().unwrap()),
+                ipv6: Some("fc00:bbbb:bbbb:bb01::3".parse().unwrap()),
+            },
+            1380,
+        )
+        .unwrap();
+    broker.acknowledge(&pending, &receipt).unwrap();
+    request.configured().await.unwrap();
+    let pair = broker.acquire(&receipt).unwrap();
+    runtime.owner_changed(&policy(), TargetState::Secured, TunnelPhase::Connected);
+    assert_eq!(
+        runtime.status().forwarding,
+        ForwardingAvailability::PausedWhileConnected
+    );
+    pair.control.activate().unwrap();
+    for target in [TargetState::Unsecured, TargetState::Secured] {
+        for phase in [
+            TunnelPhase::Disconnected,
+            TunnelPhase::Connecting,
+            TunnelPhase::Connected,
+            TunnelPhase::Disconnecting,
+            TunnelPhase::Error,
+        ] {
+            runtime.owner_changed(&policy(), target, phase);
+            let expected = if target == TargetState::Secured && phase == TunnelPhase::Connected {
+                ForwardingAvailability::Active
+            } else if target == TargetState::Unsecured && phase == TunnelPhase::Disconnected {
+                // A managed owner cannot certify the Partial endpoint.
+                ForwardingAvailability::PausedWhileConnected
+            } else {
+                ForwardingAvailability::PausedWhileConnected
+            };
+            assert_eq!(
+                runtime.status().forwarding,
+                expected,
+                "{target:?} {phase:?}"
+            );
+        }
+    }
+    capture.retire();
+    runtime.owner_changed(&policy(), TargetState::Secured, TunnelPhase::Connected);
+    assert_eq!(
+        runtime.status().forwarding,
+        ForwardingAvailability::PausedWhileConnected
+    );
+    runtime.owner_changed(
+        &LocalNetworkAccess::default(),
+        TargetState::Secured,
+        TunnelPhase::Connected,
+    );
+    assert_eq!(runtime.status().forwarding, ForwardingAvailability::Off);
+    request.transport_joined();
+    runtime.stop().await.unwrap();
+}
+
 async fn bounded<T>(future: impl Future<Output = T>) -> T {
     tokio::time::timeout(Duration::from_secs(5), future)
         .await
@@ -124,20 +380,22 @@ fn lifecycle_and_availability_cover_every_target_tunnel_rule_and_owner_combinati
                                     NotAvailable
                                 } else if !on || !routes {
                                     Off
-                                } else if target == TargetState::Secured || !disconnected {
-                                    PausedWhileConnected
-                                } else if owner == Some(OwnerState::Running) && !failed {
+                                } else if failed || owner == Some(OwnerState::Failed) {
+                                    Failed
+                                } else if owner == Some(OwnerState::Running)
+                                    && target == TargetState::Unsecured
+                                    && disconnected
+                                {
                                     Active
                                 } else {
-                                    Failed
+                                    PausedWhileConnected
                                 };
                                 assert_eq!(
                                     availability(
                                         supported,
                                         on,
                                         routes,
-                                        target,
-                                        disconnected,
+                                        target == TargetState::Unsecured && disconnected,
                                         owner,
                                         failed
                                     ),
@@ -351,20 +609,20 @@ struct LoopbackAuthority {
     peer: Option<(SocketAddr, SocketAddr)>,
 }
 impl LocalAuthority for LoopbackAuthority {
-    type Grant = NetworkLease;
+    type Grant = DeliveryGrant;
     fn disposition(&self, destination: IpAddr) -> Disposition {
         self.authority.disposition(destination)
     }
-    fn authorize(&self, flow: Flow) -> Result<NetworkLease, Refused> {
+    fn authorize(&self, flow: Flow) -> Result<DeliveryGrant, Refused> {
         self.authority.authorize(flow)
     }
-    fn prepare(&self, socket: &socket2::Socket, grant: &NetworkLease) -> Result<(), Refused> {
+    fn prepare(&self, socket: &socket2::Socket, grant: &DeliveryGrant) -> Result<(), Refused> {
         self.authority.prepare(socket, grant)
     }
-    fn current(&self, grant: &NetworkLease) -> bool {
+    fn current(&self, grant: &DeliveryGrant) -> bool {
         self.authority.current(grant)
     }
-    fn physical_destination(&self, grant: &NetworkLease, flow: Flow) -> SocketAddr {
+    fn physical_destination(&self, grant: &DeliveryGrant, flow: Flow) -> SocketAddr {
         self.peer
             .map(|(tcp, udp)| {
                 if flow.transport == Transport::Tcp {
@@ -384,8 +642,9 @@ impl FrontendFactory for FakeFactory {
     }
     fn start(
         &self,
-        routes: Vec<String>,
+        config: DeliveryConfig,
         authority: Arc<DeliveryAuthority>,
+        buffers: Arc<dyn RelayBufferAllocator>,
     ) -> io::Result<FakeOwner> {
         self.0.starts.fetch_add(1, SeqCst);
         if self.0.fail_start.load(SeqCst) {
@@ -393,6 +652,15 @@ impl FrontendFactory for FakeFactory {
         }
         assert!(!self.0.active.swap(true, SeqCst), "overlapping owners");
         self.0.history.lock().unwrap().push("start".into());
+        let routes = match &config {
+            DeliveryConfig::Partial(routes) => routes.clone(),
+            DeliveryConfig::Secured { request, .. } => request
+                .config()
+                .routes
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+        };
         self.0.routes.lock().unwrap().push(routes);
         let (state, receiver) = watch::channel(OwnerState::Running);
         *self.0.state.lock().unwrap() = Some(state);
@@ -402,7 +670,8 @@ impl FrontendFactory for FakeFactory {
             authority,
             peer: *self.0.peer.lock().unwrap(),
         });
-        let mut forwarder = Forwarder::new(authority);
+        let mut forwarder = Forwarder::with_mtu(authority, buffers, usize::from(config.mtu()))
+            .map_err(|_| io::Error::other("test budget full"))?;
         let (input, mut packets) = mpsc::channel::<Vec<u8>>(16);
         let (output, replies) = mpsc::channel(256);
         *self.0.endpoints.lock().unwrap() = Some(Endpoints {
@@ -509,6 +778,10 @@ impl DeliveryOwner for FakeOwner {
     }
     fn state(&self) -> OwnerState {
         *self.receiver.borrow()
+    }
+    fn release_failed(&self) -> bool {
+        self.release_pending
+            || (self.state() == OwnerState::Failed && self.control.fail_release.load(SeqCst))
     }
     async fn changed(&mut self) {
         if self.open {
@@ -685,7 +958,11 @@ async fn route_reconciliation_joins_before_replacement_and_ignores_condition_and
 #[tokio::test]
 async fn outstanding_release_blocks_replacement_and_connect_until_a_later_event_retry() {
     let control = Arc::new(Control::default());
-    let mut delivery = Delivery::new(FakeFactory(control.clone()), authority());
+    let mut delivery = Delivery::new(
+        FakeFactory(control.clone()),
+        authority(),
+        DeliveryBuffers::new().local,
+    );
     delivery
         .maintain(&policy(), TargetState::Unsecured, true)
         .await;
@@ -731,19 +1008,25 @@ async fn outstanding_release_blocks_replacement_and_connect_until_a_later_event_
 async fn cancelled_or_failed_readiness_retains_the_recovery_owner() {
     let control = Arc::new(Control::default());
     control.hold_ready.store(true, SeqCst);
-    let mut delivery = Delivery::new(FakeFactory(control.clone()), authority());
+    let mut delivery = Delivery::new(
+        FakeFactory(control.clone()),
+        authority(),
+        DeliveryBuffers::new().local,
+    );
     assert!(
-        tokio::time::timeout(
-            Duration::from_millis(30),
-            delivery.maintain(&policy(), TargetState::Unsecured, true)
-        )
+        tokio::time::timeout(Duration::from_millis(30), async {
+            delivery
+                .maintain(&policy(), TargetState::Unsecured, true)
+                .await;
+            delivery.changed().await;
+        })
         .await
         .is_err()
     );
     assert!(delivery.has_owner());
     assert_eq!(
         delivery.availability(&policy(), TargetState::Unsecured, true),
-        ForwardingAvailability::Failed
+        ForwardingAvailability::PausedWhileConnected
     );
     control.fail_release.store(true, SeqCst);
     assert!(delivery.stop().await.is_err());
@@ -777,7 +1060,11 @@ async fn cancelled_or_failed_readiness_retains_the_recovery_owner() {
 #[tokio::test]
 async fn external_change_can_recover_failure_before_the_owner_notification_is_selected() {
     let control = Arc::new(Control::default());
-    let mut delivery = Delivery::new(FakeFactory(control.clone()), authority());
+    let mut delivery = Delivery::new(
+        FakeFactory(control.clone()),
+        authority(),
+        DeliveryBuffers::new().local,
+    );
     delivery
         .maintain(&policy(), TargetState::Unsecured, true)
         .await;
@@ -1012,7 +1299,11 @@ async fn observer_unavailable_keeps_announcements_and_denies_delivery() {
             Ok(())
         }),
     ));
-    let mut delivery = Delivery::new(FakeFactory(control.clone()), authority.clone());
+    let mut delivery = Delivery::new(
+        FakeFactory(control.clone()),
+        authority.clone(),
+        DeliveryBuffers::new().local,
+    );
     delivery
         .maintain(&policy(), TargetState::Unsecured, true)
         .await;
@@ -1206,7 +1497,11 @@ async fn permission_and_network_changes_revalidate_without_replacing_announcemen
     let control = Arc::new(Control::default());
     let authority = authority();
     let mut updates = authority.subscribe();
-    let mut delivery = Delivery::new(FakeFactory(control.clone()), authority.clone());
+    let mut delivery = Delivery::new(
+        FakeFactory(control.clone()),
+        authority.clone(),
+        DeliveryBuffers::new().local,
+    );
     authority.update(&policy(), Some(observation()));
     delivery
         .maintain(&policy(), TargetState::Unsecured, true)

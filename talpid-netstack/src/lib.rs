@@ -3,9 +3,14 @@
 //! [`smoltcp_network`] provides a network stack whose traffic is exchanged with a GotaTun device as
 //! IP packets, and [`ip_mux`] lets that traffic share a device with the traffic of a TUN device.
 
+pub mod buffer_budget;
 pub mod connection_tracker;
 pub mod ip_mux;
+pub mod raw_packet;
 pub mod smoltcp_network;
+
+#[cfg(test)]
+mod relay_ownership_tests;
 
 /// Minimal IPv4 TCP packet with the given addresses, ports, and flags.
 #[cfg(test)]

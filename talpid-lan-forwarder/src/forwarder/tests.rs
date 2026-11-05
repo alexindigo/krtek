@@ -10,6 +10,16 @@ use std::sync::{
 };
 use tokio::net::TcpListener;
 
+fn test_forwarder(authority: Arc<Authority>) -> Forwarder<Authority> {
+    Forwarder::new(
+        authority,
+        Arc::new(talpid_netstack::buffer_budget::BufferBudget::new(
+            128 * 1024 * 1024,
+        )),
+    )
+    .unwrap()
+}
+
 // Test-only convenience consumer. Production can only write through the checked
 // callback, keeping the grant inside the forwarder even across WouldBlock.
 impl Forwarder<Authority> {
@@ -175,7 +185,10 @@ struct App {
 }
 impl App {
     fn new(flow: Flow) -> Self {
-        let mut stack = Stack::new(1280);
+        let budget = Arc::new(talpid_netstack::buffer_budget::BufferBudget::new(
+            128 * 1024 * 1024,
+        ));
+        let mut stack = Stack::new(1280, budget.clone(), budget);
         let mut socket = tcp::Socket::new(
             tcp::SocketBuffer::new(vec![0; STREAM_BUFFER]),
             tcp::SocketBuffer::new(vec![0; STREAM_BUFFER]),
@@ -261,7 +274,7 @@ async fn tcp_echo(ipv6: bool) {
         all
     });
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let mut app = App::new(flow);
     app.until(&mut forwarder, |app, _| app.socket().can_send())
         .await;
@@ -312,6 +325,211 @@ async fn ipv6_tcp_nonce_reaches_application() {
     tcp_echo(true).await;
 }
 
+#[tokio::test]
+async fn full_local_region_preserves_existing_tcp_udp_consumers_in_both_families() {
+    use talpid_netstack::buffer_budget::BufferBudget;
+    for ipv6 in [false, true] {
+        let root = BufferBudget::new(64 * 1024 * 1024);
+        let local = root.reserve(30 * 1024 * 1024).unwrap().region().unwrap();
+        let control = root.reserve(8 * 1024 * 1024).unwrap().region().unwrap();
+        let authority = Arc::new(Authority::default());
+        let mut forwarder = Forwarder::new(authority.clone(), Arc::new(local.clone())).unwrap();
+        let baseline = local.used();
+        assert!(
+            baseline < 8 * 1024 * 1024,
+            "startup is MTU-sized, not a maximum-packet arena per output slot"
+        );
+        let listener = TcpListener::bind(loopback(ipv6)).await.unwrap();
+        let tcp_flow = target(listener.local_addr().unwrap(), Transport::Tcp);
+        let peer = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut bytes = [0; 1024];
+            loop {
+                let n = read(&stream, &mut bytes).await;
+                if n == 0 {
+                    break;
+                }
+                write(&stream, &bytes[..n]).await;
+            }
+        });
+        let mut app = App::new(tcp_flow);
+        app.until(&mut forwarder, |app, _| app.socket().can_send())
+            .await;
+        let udp = UdpSocket::bind(loopback(ipv6)).await.unwrap();
+        let udp_flow = target(udp.local_addr().unwrap(), Transport::Udp);
+        forwarder.ingest(&udp_packet(udp_flow, b"admit udp"));
+        until(&mut forwarder, settled).await;
+        let mut bytes = [0; 256];
+        let (n, address) = udp.recv_from(&mut bytes).await.unwrap();
+        assert_eq!(&bytes[..n], b"admit udp");
+        let pressure = local.reserve(local.limit() - local.used()).unwrap();
+        assert_eq!(local.used(), local.limit());
+        let preparations = authority.preparations.load(Ordering::SeqCst);
+        for transport in [Transport::Tcp, Transport::Udp] {
+            let mut refused_flow = if transport == Transport::Tcp {
+                tcp_flow
+            } else {
+                udp_flow
+            };
+            refused_flow.source.set_port(50001);
+            forwarder.ingest(&if transport == Transport::Tcp {
+                syn(refused_flow)
+            } else {
+                udp_packet(refused_flow, b"must not arrive")
+            });
+            assert!(!forwarder.pending.contains_key(&refused_flow));
+        }
+        assert_eq!(authority.preparations.load(Ordering::SeqCst), preparations);
+        let nonce: Vec<_> = (0..STREAM_BUFFER * 3 + 17)
+            .map(|n| (n % 251) as u8)
+            .collect();
+        let (mut sent, mut received) = (0, Vec::new());
+        app.until(&mut forwarder, |app, _| {
+            if sent < nonce.len() && app.socket().can_send() {
+                sent += app.socket().send_slice(&nonce[sent..]).unwrap();
+            }
+            while app.socket().can_recv() {
+                let n = app.socket().recv_slice(&mut bytes).unwrap();
+                received.extend_from_slice(&bytes[..n]);
+            }
+            received.len() == nonce.len()
+        })
+        .await;
+        assert_eq!(
+            received, nonce,
+            "existing TCP consumer under full input budget"
+        );
+        forwarder.ingest(&udp_packet(udp_flow, b"udp under full budget"));
+        until(&mut forwarder, settled).await;
+        let (n, from) = udp.recv_from(&mut bytes).await.unwrap();
+        assert_eq!(from, address);
+        assert_eq!(&bytes[..n], b"udp under full budget");
+        udp.send_to(&bytes[..n], from).await.unwrap();
+        until(&mut forwarder, Forwarder::has_output).await;
+        let reply = forwarder.next_output().unwrap();
+        assert_eq!(
+            packet::parse(&reply).unwrap().payload,
+            b"udp under full budget"
+        );
+        assert_eq!(control.used(), 0);
+        let private = control.reserve(4096).unwrap();
+        drop(private);
+        assert_eq!(local.used(), local.limit());
+        drop(pressure);
+        forwarder.close_all().await;
+        assert_eq!(local.used(), baseline);
+        drop(forwarder);
+        assert_eq!(local.used(), 0);
+        tokio::time::timeout(Duration::from_secs(2), peer)
+            .await
+            .unwrap()
+            .unwrap();
+        drop((local, control));
+        assert_eq!(root.used(), 0);
+    }
+}
+
+#[tokio::test]
+async fn budget_refusal_has_no_real_time_progress_loop_and_recovers() {
+    use talpid_netstack::buffer_budget::BufferBudget;
+    let budget = BufferBudget::new(30 * 1024 * 1024);
+    let authority = Arc::new(Authority::default());
+    let mut forwarder = Forwarder::new(authority.clone(), Arc::new(budget.clone())).unwrap();
+    let pressure = budget.reserve(budget.limit() - budget.used()).unwrap();
+    let peer = UdpSocket::bind(loopback(false)).await.unwrap();
+    let flow = target(peer.local_addr().unwrap(), Transport::Udp);
+    forwarder.ingest(&udp_packet(flow, b"refused"));
+    assert_eq!(authority.preparations.load(Ordering::SeqCst), 0);
+    assert!(
+        tokio::time::timeout(Duration::from_secs(1), forwarder.wait())
+            .await
+            .is_err()
+    );
+    assert!(forwarder.pending.is_empty() && forwarder.udp.is_empty());
+    drop(pressure);
+    forwarder.ingest(&udp_packet(flow, b"recovered nonce"));
+    until(&mut forwarder, settled).await;
+    let mut bytes = [0; 64];
+    let (n, address) = peer.recv_from(&mut bytes).await.unwrap();
+    assert_eq!(&bytes[..n], b"recovered nonce");
+    peer.send_to(&bytes[..n], address).await.unwrap();
+    until(&mut forwarder, Forwarder::has_output).await;
+    assert_eq!(
+        packet::parse(&forwarder.next_output().unwrap())
+            .unwrap()
+            .payload,
+        b"recovered nonce"
+    );
+    forwarder.close_all().await;
+    drop(forwarder);
+    assert_eq!(budget.used(), 0);
+}
+
+#[tokio::test]
+async fn expired_and_cancelled_preparation_keeps_credit_until_join() {
+    use talpid_netstack::buffer_budget::BufferBudget;
+    let budget = BufferBudget::new(30 * 1024 * 1024);
+    let authority = Arc::new(Authority::default());
+    let mut forwarder = Forwarder::new(authority.clone(), Arc::new(budget.clone())).unwrap();
+    let baseline = budget.used();
+    let held = authority.hold();
+    forwarder.ingest(&udp_packet(flow(false, Transport::Udp), b"pending"));
+    prepare_started(&authority, 1).await;
+    let charged = budget.used();
+    assert!(charged > baseline);
+    forwarder.pending.values_mut().next().unwrap().deadline = Instant::now();
+    forwarder.process();
+    assert_eq!(budget.used(), charged);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), forwarder.close_all())
+            .await
+            .is_err()
+    );
+    assert_eq!(budget.used(), charged);
+    assert_eq!(forwarder.stats().udp_flows, 1);
+    drop(held);
+    forwarder.close_all().await;
+    assert_eq!(budget.used(), baseline);
+    drop(forwarder);
+    assert_eq!(budget.used(), 0);
+}
+
+#[tokio::test]
+async fn blocked_output_retains_storage_until_revoked_discard() {
+    use talpid_netstack::buffer_budget::BufferBudget;
+    let budget = BufferBudget::new(30 * 1024 * 1024);
+    let authority = Arc::new(Authority::default());
+    let mut forwarder = Forwarder::new(authority.clone(), Arc::new(budget.clone())).unwrap();
+    let peer = UdpSocket::bind(loopback(false)).await.unwrap();
+    let flow = target(peer.local_addr().unwrap(), Transport::Udp);
+    forwarder.ingest(&udp_packet(flow, b"queued nonce"));
+    until(&mut forwarder, settled).await;
+    let mut bytes = [0; 64];
+    let (n, address) = peer.recv_from(&mut bytes).await.unwrap();
+    peer.send_to(&bytes[..n], address).await.unwrap();
+    until(&mut forwarder, Forwarder::has_output).await;
+    let all = (2 * OUTPUT_PACKETS + 2) * (forwarder.mtu + BUFFER_OVERHEAD);
+    assert!(forwarder.replies.try_reserve(all).is_err());
+    assert_eq!(
+        forwarder
+            .write_output(|_| Err(io::ErrorKind::WouldBlock.into()))
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::WouldBlock
+    );
+    assert!(forwarder.replies.try_reserve(all).is_err());
+    authority.revoked.store(true, Ordering::SeqCst);
+    assert!(
+        !forwarder
+            .write_output(|_| panic!("revoked payload reached consumer"))
+            .unwrap()
+    );
+    drop(forwarder.replies.try_reserve(all).unwrap());
+    forwarder.close_all().await;
+    drop(forwarder);
+    assert_eq!(budget.used(), 0);
+}
+
 // Keep a genuine application TCP state machine, but translate its wire sequence
 // space so reuse and wraparound are deterministic, independent of the RNG seed.
 struct IncarnationApp {
@@ -350,7 +568,7 @@ impl IncarnationApp {
                 tcp.seq_number().0.wrapping_add(shift),
             ));
             tcp.fill_checksum(&source, &destination);
-            self.sent.push(bytes.clone());
+            self.sent.push(bytes.to_vec());
             forwarder.ingest(&bytes);
         }
     }
@@ -500,7 +718,7 @@ async fn time_wait_overlap(ipv6: bool) {
         );
     });
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let mut a = IncarnationApp::new(flow, i32::MAX - 16);
     a.echo_eof(&mut forwarder, first).await;
     let old = forwarder.retired_tcp[0];
@@ -586,7 +804,7 @@ async fn time_wait_rejected_ack(ipv6: bool) {
             .shutdown(Shutdown::Write)
             .unwrap();
     });
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     let mut app = IncarnationApp::new(flow, -32);
     app.ingress(&mut forwarder);
     until(&mut forwarder, |f| {
@@ -676,7 +894,7 @@ async fn same_tuple_incarnations(ipv6: bool) {
         );
     });
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let mut a = IncarnationApp::new(flow, -16); // data and FIN cross u32::MAX
     a.echo_eof(&mut forwarder, a_nonce).await;
     assert!(!forwarder.tcp.contains_key(&flow));
@@ -731,7 +949,7 @@ async fn same_tuple_incarnations(ipv6: bool) {
     );
     assert!(forwarder.retired_tcp.is_empty());
     forwarder.output.push_front(Output {
-        bytes: terminal.last().unwrap().clone(),
+        bytes: RelayBuffer::copy_from(terminal.last().unwrap(), &*forwarder.replies).unwrap(),
         grant: None,
         tcp: Some(TcpOutput {
             flow,
@@ -782,7 +1000,7 @@ async fn finished_incarnation_replacement(ipv6: bool) {
     let listener = TcpListener::bind(loopback(ipv6)).await.unwrap();
     let flow = target(listener.local_addr().unwrap(), Transport::Tcp);
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let a_nonce = b"A peer-first closing nonce";
     let b_nonce = b"B after blocked final ACK";
     let peer = tokio::spawn(async move {
@@ -837,7 +1055,7 @@ async fn finished_incarnation_replacement(ipv6: bool) {
         .front()
         .expect("finished A still owns final ACK")
         .bytes
-        .clone();
+        .to_vec();
     let old_owner = forwarder.output.front().unwrap().tcp.unwrap();
     assert_eq!(
         forwarder
@@ -846,7 +1064,10 @@ async fn finished_incarnation_replacement(ipv6: bool) {
             .kind(),
         io::ErrorKind::WouldBlock
     );
-    assert_eq!(forwarder.output.front().unwrap().bytes, final_output);
+    assert_eq!(
+        forwarder.output.front().unwrap().bytes.as_slice(),
+        final_output
+    );
     let mut b = IncarnationApp::new(flow, forwarder.tcp[&flow].incarnation.application_next.0);
     b.ingress(&mut forwarder);
     assert_eq!(
@@ -858,7 +1079,7 @@ async fn finished_incarnation_replacement(ipv6: bool) {
         !forwarder
             .output
             .iter()
-            .any(|output| output.bytes == final_output),
+            .any(|output| output.bytes.as_slice() == final_output),
         "replacement retained A output"
     );
     for packet in &a.sent {
@@ -869,8 +1090,8 @@ async fn finished_incarnation_replacement(ipv6: bool) {
     // Even a delayed A FIN callback cannot inherit B's grant or acknowledge B's
     // FIN. Use the actual old identity at this private owner boundary.
     forwarder.output.push_front(Output {
-        bytes: final_output,
-        grant: Some(()),
+        bytes: RelayBuffer::copy_from(&final_output, &*forwarder.replies).unwrap(),
+        grant: Some(Arc::new(())),
         tcp: Some(TcpOutput {
             fin: true,
             ..old_owner
@@ -926,7 +1147,7 @@ async fn same_tuple_budget(ipv6: bool) {
         );
     });
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let mut original = Vec::new();
     for index in 0..TCP_TOMBSTONES {
         let mut app = IncarnationApp::new(flow, (index as i32) * 1_000_000);
@@ -1003,7 +1224,7 @@ async fn incarnation_expiry(ipv6: bool) {
         listener
     });
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let mut app = IncarnationApp::new(flow, -8);
     app.echo_eof(&mut forwarder, nonce).await;
     let _listener = peer.await.unwrap();
@@ -1056,7 +1277,7 @@ async fn incarnation_revoke_blocked_reply(ipv6: bool) {
     let listener = TcpListener::bind(loopback(ipv6)).await.unwrap();
     let flow = target(listener.local_addr().unwrap(), Transport::Tcp);
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let mut app = IncarnationApp::new(flow, -32);
     app.until(&mut forwarder, |app, _| app.app.socket().can_send())
         .await;
@@ -1145,7 +1366,7 @@ async fn physical_reply_then_reset(ipv6: bool) {
             .unwrap();
         drop(stream);
     });
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     let mut app = App::new(flow);
     app.until(&mut forwarder, |app, _| app.socket().can_send())
         .await;
@@ -1203,7 +1424,7 @@ async fn physical_reply_then_reset(ipv6: bool) {
     assert_eq!(&peek[..n], nonce);
     forwarder.process();
     assert!(forwarder.tcp.is_empty() && forwarder.retired_tcp.is_empty());
-    let head = forwarder.output.front().unwrap().bytes.clone();
+    let head = forwarder.output.front().unwrap().bytes.to_vec();
     assert_eq!(
         forwarder
             .write_output(|_| Err(io::ErrorKind::WouldBlock.into()))
@@ -1211,7 +1432,7 @@ async fn physical_reply_then_reset(ipv6: bool) {
             .kind(),
         io::ErrorKind::WouldBlock
     );
-    assert_eq!(forwarder.output.front().unwrap().bytes, head);
+    assert_eq!(forwarder.output.front().unwrap().bytes.as_slice(), head);
     let mut resets = 0;
     while let Some(bytes) = forwarder.next_output() {
         let packet = packet::parse(&bytes).unwrap();
@@ -1266,7 +1487,7 @@ async fn consumer_app_first_echo_then_close(ipv6: bool, echo_after_fin: bool) {
             .shutdown(Shutdown::Write)
             .unwrap();
     });
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     let mut app = App::new(flow);
     app.until(&mut forwarder, |app, _| app.socket().can_send())
         .await;
@@ -1438,7 +1659,7 @@ async fn echoed_tcp_eof(
 }
 
 async fn graceful_tcp_eof_and_late_segments(ipv6: bool) {
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     let (flow, terminal_segments) = echoed_tcp_eof(ipv6, &mut forwarder, 49152).await;
     assert!(!forwarder.tcp.contains_key(&flow));
     // Re-deliver the actual final ACK/FIN after the flow has finished. These
@@ -1492,7 +1713,7 @@ async fn ipv6_graceful_tcp_reply_reaches_clean_eof_and_late_segments_are_not_res
 #[tokio::test]
 async fn retired_tcp_deadline_is_fixed_and_wait_expires_it_without_polling() {
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let (flow, terminal) = echoed_tcp_eof(false, &mut forwarder, 49152).await;
     let deadline = forwarder
         .retired_tcp
@@ -1564,7 +1785,7 @@ async fn retired_tcp_deadline_is_fixed_and_wait_expires_it_without_polling() {
 #[tokio::test]
 async fn terminal_tuple_budget_is_reserved_and_full_admission_never_evicts() {
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let mut first = None;
     for index in 0..TCP_TOMBSTONES {
         // Distinct application ports keep tuples unique even if the kernel
@@ -1605,7 +1826,7 @@ async fn terminal_tuple_budget_is_reserved_and_full_admission_never_evicts() {
 async fn fin_delivery_under_sink_backpressure(ipv6: bool) {
     let listener = TcpListener::bind(loopback(ipv6)).await.unwrap();
     let flow = target(listener.local_addr().unwrap(), Transport::Tcp);
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     let mut app = App::new(flow);
     app.until(&mut forwarder, |app, _| app.socket().can_send())
         .await;
@@ -1642,7 +1863,7 @@ async fn fin_delivery_under_sink_backpressure(ipv6: bool) {
                     .tcp
                     .is_some_and(|tcp| tcp.fin);
                 if fin && !blocked_fin {
-                    let head = forwarder.output.front().unwrap().bytes.clone();
+                    let head = forwarder.output.front().unwrap().bytes.to_vec();
                     assert_eq!(
                         forwarder
                             .write_output(|_| Err(io::ErrorKind::WouldBlock.into()))
@@ -1651,7 +1872,7 @@ async fn fin_delivery_under_sink_backpressure(ipv6: bool) {
                         io::ErrorKind::WouldBlock,
                     );
                     forwarder.process();
-                    assert_eq!(forwarder.output.front().unwrap().bytes, head);
+                    assert_eq!(forwarder.output.front().unwrap().bytes.as_slice(), head);
                     assert!(!forwarder.tcp[&flow].fin_delivered);
                     assert!(!forwarder.retired_tcp.iter().any(|entry| entry.flow == flow));
                     blocked_fin = true;
@@ -1709,7 +1930,7 @@ async fn graceful_fin_is_not_retired_until_checked_sink_delivery_in_both_familie
 async fn udp_echo(ipv6: bool) {
     let peer = UdpSocket::bind(loopback(ipv6)).await.unwrap();
     let flow = target(peer.local_addr().unwrap(), Transport::Udp);
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     let nonce = b"krtek UDP consumer nonce";
     forwarder.ingest(&udp_packet(flow, nonce));
     let echo = tokio::spawn(async move {
@@ -1739,7 +1960,7 @@ async fn ipv6_udp_nonce_reaches_application() {
 #[tokio::test]
 async fn drop_never_authorizes_and_denied_local_never_prepares() {
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let bytes = syn(flow(false, Transport::Tcp));
     authority.drop.store(true, Ordering::SeqCst);
     forwarder.ingest(&bytes);
@@ -1767,7 +1988,7 @@ async fn prepare_failure_never_connects_and_answers_reset() {
     let flow = target(listener.local_addr().unwrap(), Transport::Tcp);
     let authority = Arc::new(Authority::default());
     authority.results([Err(Refused::PreparationFailed)]);
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     forwarder.ingest(&syn(flow));
     until(&mut forwarder, settled).await;
     assert_eq!(forwarder.stats().preparation_failed, 1);
@@ -1799,7 +2020,7 @@ async fn revocation_resets_tcp_removes_udp_and_suppresses_queued_data() {
     let listener = TcpListener::bind(loopback(false)).await.unwrap();
     let peer = UdpSocket::bind(loopback(false)).await.unwrap();
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let mut app = App::new(target(listener.local_addr().unwrap(), Transport::Tcp));
     app.until(&mut forwarder, |app, _| app.socket().can_send())
         .await;
@@ -1844,7 +2065,7 @@ async fn revocation_resets_tcp_removes_udp_and_suppresses_queued_data() {
 #[tokio::test]
 async fn fixed_flow_ceilings_refuse_without_evicting_earlier_flows() {
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let listener = TcpListener::bind(loopback(false)).await.unwrap();
     let mut app = App::new(target(listener.local_addr().unwrap(), Transport::Tcp));
     app.until(&mut forwarder, |app, _| app.socket().can_send())
@@ -1941,7 +2162,7 @@ async fn fixed_flow_ceilings_refuse_without_evicting_earlier_flows() {
 #[tokio::test]
 async fn malformed_fragments_icmp_and_checksums_never_authorize() {
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let mut bytes = syn(flow(false, Transport::Tcp));
     forwarder.ingest(&bytes[..10]);
     bytes[8] ^= 1;
@@ -1970,7 +2191,7 @@ async fn malformed_fragments_icmp_and_checksums_never_authorize() {
 
 #[tokio::test]
 async fn empty_forwarder_has_no_tick_for_one_real_second() {
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     let started = std::time::Instant::now();
     assert!(
         tokio::time::timeout(Duration::from_secs(1), forwarder.wait())
@@ -1984,7 +2205,7 @@ async fn empty_forwarder_has_no_tick_for_one_real_second() {
 #[tokio::test]
 async fn idle_udp_expires_at_its_real_deadline() {
     let peer = UdpSocket::bind(loopback(false)).await.unwrap();
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     forwarder.ingest(&udp_packet(
         target(peer.local_addr().unwrap(), Transport::Udp),
         b"idle",
@@ -2008,7 +2229,7 @@ async fn idle_udp_expires_at_its_real_deadline() {
 #[tokio::test]
 async fn oversized_udp_reply_is_counted_and_not_output() {
     let peer = UdpSocket::bind(loopback(false)).await.unwrap();
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     forwarder.ingest(&udp_packet(
         target(peer.local_addr().unwrap(), Transport::Udp),
         b"large",
@@ -2031,7 +2252,7 @@ async fn stale_tcp_prepare_is_silent_and_retransmitted_syn_reauthorizes() {
     let flow = target(listener.local_addr().unwrap(), Transport::Tcp);
     let authority = Arc::new(Authority::default());
     authority.results([Err(Refused::Stale), Ok(())]);
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     forwarder.ingest(&syn(flow));
     until(&mut forwarder, |f| f.pending.is_empty()).await;
     assert!(forwarder.next_output().is_none());
@@ -2049,7 +2270,7 @@ async fn pending_udp_holds_four_datagrams_in_order_and_drops_fifth() {
     let flow = target(peer.local_addr().unwrap(), Transport::Udp);
     let authority = Arc::new(Authority::default());
     let _hold = authority.hold();
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     for n in 0..5 {
         forwarder.ingest(&udp_packet(flow, &[n]));
     }
@@ -2087,7 +2308,7 @@ async fn stale_udp(second_stale: bool, update_before_completion: bool) {
         },
     ]);
     let _hold = authority.hold();
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     forwarder.ingest(&udp_packet(flow, b"single attempt nonce"));
     prepare_started(&authority, 1).await;
     if update_before_completion {
@@ -2144,7 +2365,7 @@ async fn stale_udp_without_update_expires_at_original_two_second_limit() {
     let flow = target(peer.local_addr().unwrap(), Transport::Udp);
     let authority = Arc::new(Authority::default());
     authority.results([Err(Refused::Stale)]);
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     forwarder.ingest(&udp_packet(flow, b"held"));
     until(&mut forwarder, |f| {
         f.pending
@@ -2164,7 +2385,7 @@ async fn stale_udp_without_update_expires_at_original_two_second_limit() {
 
 #[tokio::test]
 async fn notification_wakes_an_empty_owner() {
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     let signal = forwarder.revalidation_signal();
     signal.notify_one();
     tokio::time::timeout(Duration::from_secs(1), forwarder.wait())
@@ -2175,7 +2396,7 @@ async fn notification_wakes_an_empty_owner() {
 
 #[tokio::test]
 async fn unknown_tcp_segments_reset_but_resets_never_answer_resets() {
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     let flow = flow(false, Transport::Tcp);
     forwarder.ingest(&tcp_packet(
         flow,
@@ -2209,7 +2430,7 @@ async fn expired_blocking_prepare_retains_its_slot_and_cannot_deliver() {
     let flow = target(peer.local_addr().unwrap(), Transport::Udp);
     let authority = Arc::new(Authority::default());
     let _hold = authority.hold();
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     forwarder.ingest(&udp_packet(flow, b"expired pending nonce"));
     prepare_started(&authority, 1).await;
     tokio::time::pause();
@@ -2239,7 +2460,7 @@ async fn expired_blocking_prepare_retains_its_slot_and_cannot_deliver() {
 async fn cancelled_close_all_keeps_prepares_owned_until_joined() {
     let authority = Arc::new(Authority::default());
     let _hold = authority.hold();
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     forwarder.ingest(&syn(flow(false, Transport::Tcp)));
     prepare_started(&authority, 1).await;
     assert!(
@@ -2264,7 +2485,7 @@ async fn cancelled_close_all_keeps_prepares_owned_until_joined() {
 async fn refused_syn_output_queue_is_bounded_and_recovers_after_dequeue() {
     let authority = Arc::new(Authority::default());
     authority.deny.store(true, Ordering::SeqCst);
-    let mut forwarder = Forwarder::new(authority);
+    let mut forwarder = test_forwarder(authority);
     let syn = syn(flow(false, Transport::Tcp));
     for _ in 0..=OUTPUT_PACKETS {
         forwarder.ingest(&syn);
@@ -2282,7 +2503,7 @@ async fn failed_physical_tcp_connect_resets_application() {
     let listener = TcpListener::bind(loopback(false)).await.unwrap();
     let flow = target(listener.local_addr().unwrap(), Transport::Tcp);
     drop(listener);
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     forwarder.ingest(&syn(flow));
     until(&mut forwarder, settled).await;
     assert_eq!(forwarder.stats().tcp_flows, 0);
@@ -2302,7 +2523,7 @@ async fn application_reset_cancels_held_syn_without_a_physical_connect() {
     let flow = target(listener.local_addr().unwrap(), Transport::Tcp);
     let authority = Arc::new(Authority::default());
     let _hold = authority.hold();
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let opening = syn(flow);
     let next = stack::segment(&opening).unwrap().end;
     forwarder.ingest(&opening);
@@ -2324,7 +2545,7 @@ async fn application_reset_cancels_held_syn_without_a_physical_connect() {
 async fn application_reset_aborts_the_physical_tcp_socket() {
     let listener = TcpListener::bind(loopback(false)).await.unwrap();
     let flow = target(listener.local_addr().unwrap(), Transport::Tcp);
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     let mut app = App::new(flow);
     app.until(&mut forwarder, |app, _| app.socket().can_send())
         .await;
@@ -2351,7 +2572,7 @@ async fn application_reset_aborts_the_physical_tcp_socket() {
 async fn physical_tcp_reset_reaches_the_application() {
     let listener = TcpListener::bind(loopback(false)).await.unwrap();
     let flow = target(listener.local_addr().unwrap(), Transport::Tcp);
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     let mut app = App::new(flow);
     app.until(&mut forwarder, |app, _| app.socket().can_send())
         .await;
@@ -2399,7 +2620,7 @@ async fn half_close_with_blocked_write(ipv6: bool, peer_first: bool) {
         .set_recv_buffer_size(4096)
         .unwrap();
     let flow = target(listener.local_addr().unwrap(), Transport::Tcp);
-    let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+    let mut forwarder = test_forwarder(Arc::new(Authority::default()));
     let mut app = App::new(flow);
     app.until(&mut forwarder, |app, _| app.socket().can_send())
         .await;
@@ -2483,7 +2704,7 @@ async fn application_first_half_close_drains_before_physical_eof_under_backpress
 async fn blocked_output_backlog_does_not_wake_internal_wait() {
     let authority = Arc::new(Authority::default());
     authority.deny.store(true, Ordering::SeqCst);
-    let mut forwarder = Forwarder::new(authority);
+    let mut forwarder = test_forwarder(authority);
     for _ in 0..4 {
         forwarder.ingest(&syn(flow(false, Transport::Tcp)));
     }
@@ -2516,7 +2737,7 @@ async fn refused_syn_cannot_leave_a_listener_to_claim_another_tuple() {
     for ipv6 in [false, true] {
         let listener = TcpListener::bind(loopback(ipv6)).await.unwrap();
         let flow = target(listener.local_addr().unwrap(), Transport::Tcp);
-        let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+        let mut forwarder = test_forwarder(Arc::new(Authority::default()));
         // Zero MSS is wire-valid and even TcpRepr-valid, but socket-tcp refuses it.
         let invalid = option_syn(flow, [2, 4, 0, 0]);
         assert!(packet::parse(&invalid).is_ok());
@@ -2553,7 +2774,7 @@ async fn refused_syn_cannot_leave_a_listener_to_claim_another_tuple() {
 async fn invalid_syn_wire_representations_never_prepare() {
     for ipv6 in [false, true] {
         let authority = Arc::new(Authority::default());
-        let mut forwarder = Forwarder::new(authority.clone());
+        let mut forwarder = test_forwarder(authority.clone());
         let flow = flow(ipv6, Transport::Tcp);
         let zero_port = Flow {
             source: std::net::SocketAddr::new(flow.source.ip(), 0),
@@ -2592,7 +2813,7 @@ async fn concurrent_tcp_tuples_at_one_destination_keep_physical_ownership() {
             source: std::net::SocketAddr::new(first.source.ip(), first.source.port() + 1),
             ..first
         };
-        let mut forwarder = Forwarder::new(Arc::new(Authority::default()));
+        let mut forwarder = test_forwarder(Arc::new(Authority::default()));
         // Admit both held SYNs before either connect completes.
         let mut apps = [(first, App::new(first)), (second, App::new(second))];
         for (_, app) in &mut apps {
@@ -2696,7 +2917,7 @@ enum SinkCommand {
 
 async fn sink_backpressure(revoke: bool, stop_while_blocked: bool) {
     let authority = Arc::new(Authority::default());
-    let mut forwarder = Forwarder::new(authority.clone());
+    let mut forwarder = test_forwarder(authority.clone());
     let peer = UdpSocket::bind(loopback(false)).await.unwrap();
     let flow = target(peer.local_addr().unwrap(), Transport::Udp);
     forwarder.ingest(&udp_packet(flow, b"request"));

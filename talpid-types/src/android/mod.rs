@@ -16,6 +16,7 @@ pub struct AndroidContext {
     pub jvm: Arc<JavaVM>,
     pub vpn_service: GlobalRef,
     pub local_network: Arc<local_network::LocalNetworkFeed>,
+    pub capture_network: Arc<crate::capture_network::CaptureNetworkFeed>,
 }
 
 /// A Java-compatible variant of [IpNetwork]

@@ -62,6 +62,12 @@ impl CancelReceiver {
     fn closed(&self) -> bool {
         self.closed.load(Ordering::SeqCst)
     }
+    #[cfg(any(target_os = "android", test))]
+    pub(crate) async fn cancelled(&mut self) {
+        if !self.closed() {
+            let _ = self.rx.recv().await;
+        }
+    }
 }
 
 impl Clone for CancelReceiver {
@@ -74,6 +80,10 @@ impl Clone for CancelReceiver {
 }
 
 impl CancelToken {
+    #[cfg(any(target_os = "android", test))]
+    pub(crate) fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::SeqCst)
+    }
     pub fn new() -> (Self, CancelReceiver) {
         let (tx, rx) = broadcast::channel(1);
         let closed = Arc::new(AtomicBool::new(false));
@@ -102,6 +112,24 @@ pub fn establish_timeout(retry_attempt: u32) -> Duration {
 }
 
 impl Check {
+    #[cfg(any(target_os = "android", test))]
+    pub(crate) fn cancellation(&self) -> CancelReceiver {
+        self.cancel_receiver.clone()
+    }
+    #[cfg(any(target_os = "android", test))]
+    pub(crate) fn new_with_smoltcp(
+        pinger: pinger::SmoltcpPinger,
+        retry_attempt: u32,
+        cancel_receiver: CancelReceiver,
+    ) -> Self {
+        Self {
+            conn_state: ConnState::new(Instant::now(), Default::default()),
+            ping_state: PingState::new_with(Box::new(pinger)),
+            retry_attempt,
+            cancel_receiver,
+        }
+    }
+
     pub fn new(
         addr: Ipv4Addr,
         #[cfg(any(target_os = "macos", target_os = "linux"))] interface: String,
@@ -141,6 +169,9 @@ impl Check {
         &mut self,
         tunnel_handle: &dyn Tunnel,
     ) -> Result<bool, Error> {
+        if self.should_shut_down() {
+            return Ok(false);
+        }
         // Send initial ping to prod WireGuard into connecting.
         // Failing to do so might be indicative of another firewall blocking pings.
         // If all traffic is blocked, the inner connectivity check will fail.

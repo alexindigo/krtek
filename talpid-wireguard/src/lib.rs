@@ -486,28 +486,23 @@ impl WireguardMonitor {
         let obfuscation = obfuscator.as_ref().map(Obfuscator::obfuscation).cloned();
 
         let (cancel_token, cancel_receiver) = connectivity::CancelToken::new();
-        let mut connectivity_monitor = connectivity::Check::new(
-            config.ipv4_gateway,
-            args.retry_attempt,
-            cancel_receiver.clone(),
-        )
-        .map_err(Error::ConnectivityMonitorError)?;
-
         // Nothing reads from the tunnel device until GotaTun is started, so traffic is held back in
         // it until ephemeral peers have been negotiated.
         let tun = gotatun::open_tun(&config, args.tun_provider.clone())?;
         let is_new_tun = tun.is_new();
+        let managed_setup = tun.is_managed();
+        let connection_cancel = cancel_token.clone();
         let route_manager = args.route_manager;
         let tun_provider = Arc::clone(&args.tun_provider);
 
         let tunnel = Arc::new(AsyncMutex::new(None));
-        let mut event_hook = args.event_hook;
+        let event_hook = args.event_hook;
         let monitor = WireguardMonitor {
             runtime: args.runtime.clone(),
             tunnel: Arc::clone(&tunnel),
             event_hook: event_hook.clone(),
             close_msg_receiver: close_obfs_listener,
-            pinger_stop_sender: cancel_token,
+            pinger_stop_sender: cancel_token.clone(),
         };
 
         let tunnel_fut = async move {
@@ -525,6 +520,13 @@ impl WireguardMonitor {
                 None
             };
 
+            // Negotiation uses upstream's bounded temporary-device protocol and
+            // joined release. Managed cancellation must not start another device
+            // after that bounded step finishes.
+            if managed_setup && connection_cancel.is_closed() {
+                return Err(CloseMsg::Stop);
+            }
+
             let gotatun = gotatun::start_gotatun(
                 tun,
                 &config,
@@ -535,7 +537,27 @@ impl WireguardMonitor {
             .await
             .map_err(CloseMsg::SetupError)?;
             let iface_name = gotatun.get_interface_name();
+            let managed = gotatun.managed();
             *tunnel.lock().await = Some(Box::new(gotatun) as TunnelType);
+            // Construct the pinger only after its actual source/socket exists.
+            let mut connectivity_monitor = match &managed {
+                Some(owner) => connectivity::Check::new_with_smoltcp(
+                    owner.pinger().map_err(|error| {
+                        CloseMsg::SetupError(Error::TunnelError(
+                            TunnelError::FatalStartWireguardError(Box::new(error)),
+                        ))
+                    })?,
+                    args.retry_attempt,
+                    cancel_receiver,
+                ),
+                None => connectivity::Check::new(
+                    config.ipv4_gateway,
+                    args.retry_attempt,
+                    cancel_receiver,
+                )
+                .map_err(Error::ConnectivityMonitorError)
+                .map_err(CloseMsg::SetupError)?,
+            };
 
             // Negotiating ephemeral peers does not depend on the routes, but the connectivity
             // check does.
@@ -553,43 +575,50 @@ impl WireguardMonitor {
                     })?;
             }
 
-            {
+            let metadata = tunnel_metadata(iface_name, &config);
+            let acknowledged = {
                 let lock = tunnel.lock().await;
-                let borrowed_tun = lock.as_ref().expect("The tunnel was dropped unexpectedly");
-                match connectivity_monitor
-                    .establish_connectivity(borrowed_tun.as_ref())
-                    .await
-                {
-                    Ok(true) => Ok(()),
-                    Ok(false) => {
-                        log::warn!("Timeout while checking tunnel connection");
-                        Err(CloseMsg::PingErr)
+                establish_and_activate(
+                    &mut connectivity_monitor,
+                    lock.as_ref().expect("installed tunnel").as_ref(),
+                    managed.as_deref(),
+                    async {
+                        Obfuscator::multiplexer_committed_to(obfuscator)
+                            .await
+                            .map_err(CloseMsg::SetupError)
+                    },
+                    |selected_obfuscation| {
+                        event_hook.enqueue(TunnelEvent::Up {
+                            metadata,
+                            selected_obfuscation,
+                        })
+                    },
+                )
+                .await?
+            };
+            if let Some(acknowledged) = acknowledged {
+                if let Some(owner) = &managed {
+                    let mut cancellation = connectivity_monitor.cancellation();
+                    tokio::select! { biased;
+                        _ = owner.cancelled() => return Err(CloseMsg::PingErr),
+                        _ = cancellation.cancelled() => return Err(CloseMsg::Stop),
+                        _ = acknowledged => {},
                     }
-                    Err(error) => {
-                        log::error!(
-                            "{}",
-                            error.display_chain_with_msg("Failed to check tunnel connection")
-                        );
-                        Err(CloseMsg::PingErr)
-                    }
-                }?;
+                } else {
+                    let _ = acknowledged.await;
+                }
             }
 
-            let metadata = tunnel_metadata(iface_name, &config);
-            let selected_obfuscation = Obfuscator::multiplexer_committed_to(obfuscator)
-                .await
-                .map_err(CloseMsg::SetupError)?;
-            event_hook
-                .on_event(TunnelEvent::Up {
-                    metadata,
-                    selected_obfuscation,
-                })
-                .await;
-
-            if let Err(error) = connectivity::Monitor::init(connectivity_monitor)
-                .run(Arc::downgrade(&tunnel))
-                .await
-            {
+            let connectivity_monitor = connectivity::Monitor::init(connectivity_monitor);
+            let run = connectivity_monitor.run(Arc::downgrade(&tunnel));
+            let result = match &managed {
+                Some(owner) => tokio::select! { biased;
+                    _ = owner.cancelled() => return Err(CloseMsg::PingErr),
+                    result = run => result,
+                },
+                None => run.await,
+            };
+            if let Err(error) = result {
                 log::error!(
                     "{}",
                     error.display_chain_with_msg("Connectivity monitor failed")
@@ -600,18 +629,24 @@ impl WireguardMonitor {
         };
 
         let close_sender = close_obfs_sender.clone();
+        let setup_cancel = cancel_token.clone();
         let monitor_handle = tokio::spawn(async move {
             // This is safe to unwrap because the future resolves to `Result<Infallible, E>`.
             let close_msg = tunnel_fut.await.unwrap_err();
-            let _ = close_sender.send(close_msg);
+            let _ = close_sender.send(if setup_cancel.is_closed() {
+                CloseMsg::Stop
+            } else {
+                close_msg
+            });
         });
 
-        tokio::spawn(async move {
-            if args.tunnel_close_rx.await.is_ok() {
-                monitor_handle.abort();
-                let _ = close_obfs_sender.send(CloseMsg::Stop);
-            }
-        });
+        tokio::spawn(close_android_monitor(
+            managed_setup,
+            args.tunnel_close_rx,
+            cancel_token,
+            monitor_handle,
+            close_obfs_sender,
+        ));
 
         Ok(monitor)
     }
@@ -1003,6 +1038,82 @@ impl WireguardMonitor {
             route.with_mtu(mtu)
         }
     }
+}
+
+/// Native keeps upstream's prompt abort even during ephemeral negotiation.
+/// Only Managed retains a setup owner through bounded/cancellable steps and joins.
+#[cfg(any(target_os = "android", test))]
+async fn close_android_monitor(
+    managed: bool,
+    close: futures::channel::oneshot::Receiver<()>,
+    cancellation: connectivity::CancelToken,
+    monitor: tokio::task::JoinHandle<()>,
+    events: sync_mpsc::Sender<CloseMsg>,
+) {
+    if close.await.is_ok() {
+        if managed {
+            cancellation.close();
+            let _ = monitor.await;
+        } else {
+            monitor.abort();
+        }
+        let _ = events.send(CloseMsg::Stop);
+    }
+}
+
+/// The production setup conjunction, shared by the Android monitor and real
+/// crypto tests. A source owner exists only after installing both raw halves.
+/// Cancellation/receipt loss wins over a previously successful peer-stat check.
+#[cfg(any(target_os = "android", test))]
+async fn establish_and_activate<T, R>(
+    check: &mut connectivity::Check,
+    tunnel: &dyn Tunnel,
+    managed: Option<&gotatun::managed_control::ManagedControl>,
+    final_setup: impl std::future::Future<Output = std::result::Result<T, CloseMsg>>,
+    publish: impl FnOnce(T) -> R,
+) -> std::result::Result<R, CloseMsg> {
+    let mut cancellation = check.cancellation();
+    let setup = async {
+        let connected = check
+            .establish_connectivity(tunnel)
+            .await
+            .map_err(|_| CloseMsg::PingErr)?;
+        if !connected || check.should_shut_down() {
+            return Err(CloseMsg::PingErr);
+        }
+        // The first private probe drives obfuscator commitment. Waiting for it
+        // before Check would deadlock an otherwise idle native/managed tunnel.
+        let result = final_setup.await?;
+        if check.should_shut_down() {
+            return Err(CloseMsg::PingErr);
+        }
+        if let Some(owner) = managed {
+            owner.activate().map_err(|_| CloseMsg::PingErr)?;
+            // Queue Up under the same exact authority as packet writes. A loss
+            // after activation but before publication must refuse the enqueue.
+            return owner
+                .publish(|| publish(result))
+                .map_err(|_| CloseMsg::PingErr);
+        }
+        Ok(publish(result))
+    };
+    let result = match managed {
+        Some(owner) => tokio::select! { biased;
+            _ = owner.cancelled() => Err(CloseMsg::PingErr),
+            _ = cancellation.cancelled() => Err(CloseMsg::PingErr),
+            result = setup => result,
+        },
+        None => tokio::select! { biased;
+            _ = cancellation.cancelled() => Err(CloseMsg::PingErr),
+            result = setup => result,
+        },
+    };
+    if result.is_err()
+        && let Some(owner) = managed
+    {
+        owner.revoke();
+    }
+    result
 }
 
 // TODO: Should `TunnelMetadata` be constructed by each Tunnel implementation instead?
