@@ -24,10 +24,9 @@
     <string name="all_locations">Alle steder</string>
     <string name="all_providers">Alle leverandører</string>
     <string name="always">Alltid</string>
-    <string name="always_on_vpn_error_notification_content">Kunne ikke starte tunneltilkobling. Deaktiver VPN som alltid er på, for <b>%1$s</b> før du bruker Mullvad VPN.</string>
+    <string name="always_on_vpn_error_notification_content">Kunne ikke starte tunneltilkobling. Deaktiver VPN som alltid er på, for <b>%1$s</b> før du bruker Krtek.</string>
     <string name="always_on_vpn_error_notification_title">VPN som alltid er på, er tilordnet %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Etter å ha oppdatert en VPN-app på Android 16, kan enhetene havne i en tilstand der VPN-appene ikke lenger får tilgang til internett.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Start enheten på nytt og prøv å koble til igjen. Hvis dette ikke fungerer, kan du skrive en e-post til %1$s på svensk eller engelsk.</string>
     <string name="android_16_upgrade_warning_message">Android 16 har en kjent feil. Start enheten på nytt og prøv igjen. For å finne ut mer,</string>
     <string name="android_16_upgrade_warning_title">Får du ikke koblet til?</string>
     <string name="anti_censorship">Antisensur</string>
@@ -50,7 +49,7 @@
     <string name="app_name_notes">Merknader</string>
     <string name="app_name_weather">Vær</string>
     <string name="appearance">Utseende</string>
-    <string name="appearance_description">Endre tittelen og ikonet for Mullvad VPN-appen på Android-enheten din. Dette vil ikke endre ikonet for varsler knyttet til Mullvad VPN.</string>
+    <string name="appearance_description">Endre tittelen og ikonet for Krtek-appen på Android-enheten din. Dette vil ikke endre ikonet for varsler knyttet til Krtek.</string>
     <string name="appearance_description_warning"><b>Merk:</b> Appen lukkes automatisk og må åpnes manuelt igjen etter at du har valgt et nytt ikon og en ny tittel. Dette vil ikke ha innvirkning VPN-tilkoblingen din.</string>
     <string name="appearance_description_warning_restart">Hvis ikonet og tittelen fortsatt ikke er endret etter at appen er lukket, kan du prøve å starte enheten på nytt.</string>
     <string name="apply">Angi</string>
@@ -60,7 +59,7 @@
     <string name="authentication">Autentisering</string>
     <string name="auto_connect_and_lockdown_mode">Automatisk tilkobling og låsemodus</string>
     <string name="auto_connect_and_lockdown_mode_footer">Sørger for at enheten alltid er på VPN-tunnelen.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. Etter at du har klikket på «Gå til VPN-innstillinger»-knappen nedenfor, trykker du på tannhjulet ved siden av navnet «Mullvad VPN».</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. Etter at du har klikket på «Gå til VPN-innstillinger»-knappen nedenfor, trykker du på tannhjulet ved siden av navnet «Krtek».</string>
     <string name="auto_connect_carousel_first_slide_top_text">Du finner innstillingene for automatisk tilkobling og låsemodus i Androids systeminnstillinger. Følg denne veiledningen for å aktivere én eller begge.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. For å aktivere «Automatisk tilkobling» klikker du på bryteren ved siden av «VPN alltid på».</string>
     <string name="auto_connect_carousel_second_slide_top_text">Automatisk tilkobling heter «Alltid-på-VPN» i Androids systeminnstillinger og sørger for at du alltid er tilkoblet VPN-tunnelen og automatisk tilkobling etter omstart.</string>
@@ -96,7 +95,6 @@
     <string name="collapse">Skjul</string>
     <string name="confirm_ipv6_dns">IPv6 DNS-serveren fungerer ikke med mindre du aktiverer «IPv6» under VPN-innstillinger.</string>
     <string name="confirm_local_dns">Den lokale DNS-serveren fungerer ikke med mindre du aktiverer «Deling av lokalt nettverk» under VPN-innstillinger.</string>
-    <string name="confirm_no_email">Problemrapporten blir nå sendt uten en måte for oss å kontakte deg på. Hvis du ønsker svar på rapporten, må du oppgi en e-postadresse.</string>
     <string name="confirm_removal">Ja, logg ut av enheten</string>
     <string name="congrats">Gratulerer!</string>
     <string name="connect">Koble til</string>
@@ -107,7 +105,7 @@
     <string name="connect_panel_connection_details">Tilkoblingsdetaljer</string>
     <string name="connected">Tilkoblet</string>
     <string name="connecting">Kobler til ...</string>
-    <string name="connecting_to_daemon">Kobler til Mullvads systemtjeneste ...</string>
+    <string name="connecting_to_daemon">Kobler til systemtjenesten for Krtek ...</string>
     <string name="connection_details_in">Inngående</string>
     <string name="connection_details_out">Utgående</string>
     <string name="cont">Fortsett</string>
@@ -215,7 +213,6 @@
     <string name="edit_list">Endre liste</string>
     <string name="edit_lists">Endre lister</string>
     <string name="edit_locations">Endre plasseringer</string>
-    <string name="edit_message">Rediger melding</string>
     <string name="edit_method">Endre metode</string>
     <string name="edit_name">Endre navn</string>
     <string name="enable">Aktiver</string>
@@ -248,8 +245,6 @@
     <string name="failed_to_fetch_devices">Kunne ikke hente listen over enheter</string>
     <string name="failed_to_load_products">Kunne ikke laste opp produkter. Prøv på nytt</string>
     <string name="failed_to_remove_device">Kunne ikke fjerne enhet</string>
-    <string name="failed_to_send">Kunne ikke sende</string>
-    <string name="failed_to_send_details">Hvis du avslutter skjemaet og prøver igjen senere, vil informasjonen du allerede har lagt inn fortsatt være der.</string>
     <string name="failed_to_set_current_test_error">Kunne ikke angi til gjeldende – API ikke tilgjengelig</string>
     <string name="failed_to_set_current_unknown_error">Kunne ikke angi til gjeldende – ukjent årsak</string>
     <string name="faqs_and_guides">Ofte stilte spørsmål og veiledninger</string>
@@ -275,10 +270,6 @@
     <string name="import_overrides_import">Importer</string>
     <string name="import_overrides_text_title">Importer via tekst</string>
     <string name="in_app_products_unavailable">Produkter i appen er ikke tilgjengelige. Sørg for at du har den nyeste versjonen av Google Play.</string>
-    <string name="include_account_token_checkbox_text">Inkluder kontotokenet mitt for raskere hjelp med betaling eller problemer knyttet til kontoen</string>
-    <string name="include_account_token_warning_message_first">Når du legger ved kontotokenet ditt, kobles denne rapporten til kontoen din. Det hjelper oss med å løse problemet ditt raskere. Alle rapporter slettes automatisk etter en bestemt tid.</string>
-    <string name="include_account_token_warning_message_second">Du finner mer informasjon i %1$s.</string>
-    <string name="include_account_token_warning_title">Dette påvirker din anonymitet</string>
     <string name="info">Info</string>
     <string name="internet">Internett</string>
     <string name="invalid_address_blank_warning">Skriv inn en IP-adresse</string>
@@ -294,7 +285,7 @@
     <string name="ipv6_unavailable">Kunne ikke konfigurere IPv6. Deaktiver den i appen eller aktiver den på enheten din.</string>
     <string name="is_offline">Enheten er frakoblet. Tunnelen vil koble til automatisk når enheten er tilkoblet internett igjen.</string>
     <string name="language">Språk</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Kunne ikke starte tunneltilkobling. Deaktiver VPN som alltid er på, før du bruker Mullvad VPN.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Kunne ikke starte tunneltilkobling. Deaktiver VPN som alltid er på, før du bruker Krtek.</string>
     <string name="legacy_always_on_vpn_error_notification_title">VPN som alltid er på, er tilordnet en annen VPN</string>
     <string name="less_than_a_day_left">Mindre enn én dag igjen på denne kontoen</string>
     <string name="less_than_one_day">mindre enn én dag</string>
@@ -371,7 +362,6 @@
     <string name="next">Neste</string>
     <string name="next_with_icon">Neste %1$s</string>
     <string name="no_custom_lists_available">Ingen tilgjengelige egendefinerte lister</string>
-    <string name="no_email_app_available">Ingen app for e-post tilgjengelig på enheten</string>
     <string name="no_internet_connection">Ingen internettforbindelse</string>
     <string name="no_matching_relay">Ingen servere passer til innstillingene dine. Prøv å endre server eller andre innstillinger.</string>
     <string name="no_matching_relay_entry">Ingen inngangsserver passer til innstillingene dine. Prøv å endre server eller andre innstillinger.</string>
@@ -411,8 +401,6 @@
     <string name="port">Port</string>
     <string name="port_x">Port: %1$s</string>
     <string name="privacy_policy_label">Retningslinjer for personvern</string>
-    <string name="privacy_policy_lower_case">retningslinjer for personvern</string>
-    <string name="problem_report_description">For å kunne gi deg god nok hjelp vil loggfilen til appen ligge som vedlegg til meldingen. All data forblir beskyttet og privat gjennom anonymisering før det sendes gjennom en kryptert kanal.</string>
     <string name="providers">Leverandører</string>
     <string name="quantum_resistant_info_first_paragraph">Denne funksjonen gjør WireGuard-tunnelen motstandsdyktig mot potensielle angrep fra kvantemaskiner.</string>
     <string name="quantum_resistant_info_second_paragraph">Det gjøres ved at å utføre en ekstra nøkkelutveksling med en kvantesikker algoritme og kombinere resultatet med WireGuard sin vanlige kryptering. Dette ekstratrinnet bruker omtrent 500 kiB trafikk hver gang det opprettes en ny tunnel.</string>
@@ -435,7 +423,6 @@
     <string name="rented">Leid</string>
     <string name="rented_only">Kun leid</string>
     <string name="report_a_problem">Rapporter et problem</string>
-    <string name="report_problem_message_is_empty">Skriv inn en melding</string>
     <string name="reset_to_default_button">Tilbakestill til standard</string>
     <string name="retry">Prøv på nytt</string>
     <string name="save">Lagre</string>
@@ -443,13 +430,6 @@
     <string name="search_no_matches_for_text">Ingen resultater for «%1$s». Prøv et annet søk</string>
     <string name="search_placeholder">Søk etter ...</string>
     <string name="select_location">Velg plassering</string>
-    <string name="send">Send</string>
-    <string name="send_anyway">Send allikevel</string>
-    <string name="send_email">Send e-post</string>
-    <string name="sending">Sender ...</string>
-    <string name="sent">Sendt</string>
-    <string name="sent_contact">Vi vil kontakte deg på %1$s ved behov</string>
-    <string name="sent_thanks">Takk!</string>
     <string name="separate_filters_title">Separate filtre</string>
     <string name="separate_filters_title_first_paragraph">Det er nå mulig å angi filtre separat for inn- og utgangspunkter.</string>
     <string name="separate_filters_title_second_paragraph">De nåværende filtrene ble brukt på både inn- og utgangsplasseringene.</string>
@@ -527,7 +507,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Koble til et annet nettverk</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Aktiver alle tilgangsmetoder i appen</string>
     <string name="unable_to_reach_api_dialog_message_second">Dette kan skyldes sensur eller nettverksproblemer. Prøv følgende:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Hvis disse trinnene ikke fungerer, kan du sende en e-post til kundestøtten ved å bruke knappen nedenfor. Loggene som er anonymisert, legges automatisk ved.</string>
     <string name="unavailable">Utilgjengelig</string>
     <string name="undo">Angre</string>
     <string name="unsupported_version">VERSJON UTEN STØTTE</string>
@@ -538,8 +517,6 @@
     <string name="uri_browser_app_not_found">Ingen nettleserapp installert. Kunne ikke åpne koblingen.</string>
     <string name="uri_market_app_not_found">Ingen Android-appbutikk installert. Kunne ikke åpne koblingen.</string>
     <string name="use_method">Bruk metode</string>
-    <string name="user_email_hint">E-post (valgfritt)</string>
-    <string name="user_message_hint">For at vi skal kunne hjelpe deg bedre, ber vi deg om å skrive på engelsk eller svensk og fortelle hvilket land du befinner deg i.</string>
     <string name="username">Brukernavn</string>
     <string name="verification_failed_dialog_message">Vi kunne ikke bekrefte ditt siste kjøp. Sjekk internettforbindelsen og prøv på nytt. Hvis problemet vedvarer, kan du kontakte kundestøtten.</string>
     <string name="verifying_api_method">Bekrefter API-metode ...</string>
@@ -562,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">Feil med VPN-tillatelse</string>
     <string name="vpn_settings_not_available">VPN-innstillinger ikke tilgjengelig på enhet</string>
     <string name="warning">Advarsel</string>
-    <string name="we_will_look_into_this">Dette skal vi følge opp.</string>
     <string name="when_needed">Når nødvendig</string>
     <string name="wireguard_custom_port_title">Egendefinert</string>
     <string name="wireguard_mtu_footer">Angi WireGuard MTU-verdi. Verdiområde: %1$d–%2$d.</string>

@@ -9,7 +9,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -17,7 +16,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -37,7 +35,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -139,39 +136,23 @@ fun MullvadTopBar(
         modifier = modifier.testTag(TOP_BAR_TEST_TAG),
         title = {
             if (isIconAndLogoVisible) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.smallPadding),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Icon(
                         painter = painterResource(id = R.drawable.logo_icon),
                         contentDescription = null, // No meaningful user info or action.
                         modifier = Modifier.size(40.dp),
                         tint = Color.Unspecified, // Logo should not be tinted
                     )
-                    // Dynamically show Mullvad VPN Text if it fits, to avoid overlapping icons.
-                    BoxWithConstraints {
-                        val logoTextPainter = painterResource(id = R.drawable.logo_text)
-                        val logoHeight = Dimens.mediumPadding
-                        val logoStartEndPadding = Dimens.smallPadding
-
-                        val shouldShowText =
-                            remember(maxWidth) {
-                                val logoHeightWidthRatio =
-                                    logoTextPainter.intrinsicSize.width /
-                                        logoTextPainter.intrinsicSize.height
-                                val expectedLength = logoHeightWidthRatio * logoHeight.value
-                                maxWidth > (expectedLength + logoStartEndPadding.value * 2).dp
-                            }
-
-                        if (shouldShowText) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.logo_text),
-                                tint = iconTintColor,
-                                contentDescription = null, // No meaningful user info or action.
-                                modifier =
-                                    Modifier.padding(horizontal = logoStartEndPadding)
-                                        .height(logoHeight),
-                            )
-                        }
-                    }
+                    Text(
+                        text = stringResource(id = R.string.app_name),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = iconTintColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         },

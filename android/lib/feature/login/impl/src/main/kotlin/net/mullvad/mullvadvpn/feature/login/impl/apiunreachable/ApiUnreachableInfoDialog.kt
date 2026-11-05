@@ -1,32 +1,27 @@
 package net.mullvad.mullvadvpn.feature.login.impl.apiunreachable
 
-import android.content.ActivityNotFoundException
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import co.touchlab.kermit.Logger
 import net.mullvad.mullvadvpn.core.Navigator
 import net.mullvad.mullvadvpn.feature.login.api.ApiUnreachableInfoDialogResult
 import net.mullvad.mullvadvpn.feature.login.api.ApiUnreachableNavKey
 import net.mullvad.mullvadvpn.feature.login.api.LoginAction
 import net.mullvad.mullvadvpn.lib.common.compose.CollectSideEffectWithLifecycle
-import net.mullvad.mullvadvpn.lib.common.provider.createShareLogFile
+import net.mullvad.mullvadvpn.lib.common.compose.safeOpenUri
+import net.mullvad.mullvadvpn.lib.ui.component.CopyableLink
 import net.mullvad.mullvadvpn.lib.ui.component.dialog.InfoDialog
-import net.mullvad.mullvadvpn.lib.ui.component.textfield.ErrorSupportingText
 import net.mullvad.mullvadvpn.lib.ui.designsystem.PrimaryButton
 import net.mullvad.mullvadvpn.lib.ui.resource.R
 import net.mullvad.mullvadvpn.lib.ui.theme.AppTheme
-import net.mullvad.mullvadvpn.lib.ui.theme.Dimens
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -38,11 +33,10 @@ private fun PreviewApiUnreachableInfoDialog() {
             state =
                 ApiUnreachableUiState(
                     showEnableAllAccessMethodsButton = true,
-                    noEmailAppAvailable = true,
                     loginAction = LoginAction.LOGIN,
                 ),
             onEnableAllApiMethods = {},
-            onSendEmail = {},
+            onOpenIssue = {},
             onDismiss = {},
         )
     }
@@ -52,22 +46,12 @@ private fun PreviewApiUnreachableInfoDialog() {
 fun ApiUnreachableInfo(navArgs: ApiUnreachableNavKey, navigator: Navigator) {
     val viewModel = koinViewModel<ApiUnreachableViewModel> { parametersOf(navArgs) }
 
-    val launcher = rememberLauncherForActivityResult(SendEmail()) {}
-    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     CollectSideEffectWithLifecycle(viewModel.uiSideEffect) { sideEffect ->
         when (sideEffect) {
-            is ApiUnreachableSideEffect.SendEmail -> {
-                val emailData =
-                    EmailData(
-                        to = listOf(sideEffect.address),
-                        subject = sideEffect.subject,
-                        attachment = context.createShareLogFile(sideEffect.logs),
-                    )
-                try {
-                    launcher.launch(emailData)
-                } catch (e: ActivityNotFoundException) {
-                    Logger.e("No email app found", e)
-                    viewModel.noEmailAppAvailable()
+            is ApiUnreachableSideEffect.OpenIssue -> {
+                uriHandler.safeOpenUri(sideEffect.url).onLeft {
+                    viewModel.onBrowserUnavailable(sideEffect.url)
                 }
             }
             is ApiUnreachableSideEffect.EnableAllApiAccessMethods ->
@@ -80,7 +64,7 @@ fun ApiUnreachableInfo(navArgs: ApiUnreachableNavKey, navigator: Navigator) {
     ApiUnreachableInfoDialog(
         state = state,
         onEnableAllApiMethods = viewModel::enableAllApiAccess,
-        onSendEmail = viewModel::sendProblemReportEmail,
+        onOpenIssue = viewModel::openSupportIssue,
         onDismiss = navigator::goBack,
     )
 }
@@ -89,7 +73,7 @@ fun ApiUnreachableInfo(navArgs: ApiUnreachableNavKey, navigator: Navigator) {
 fun ApiUnreachableInfoDialog(
     state: ApiUnreachableUiState,
     onEnableAllApiMethods: () -> Unit,
-    onSendEmail: () -> Unit,
+    onOpenIssue: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     InfoDialog(
@@ -123,7 +107,7 @@ fun ApiUnreachableInfoDialog(
                     }
                 }
             },
-        additionalInfo = stringResource(id = R.string.unable_to_reach_api_dialog_message_third),
+        additionalInfo = stringResource(id = R.string.unable_to_reach_api_github_message),
         showIcon = false,
         confirmButton = {
             Column {
@@ -136,15 +120,10 @@ fun ApiUnreachableInfoDialog(
                 }
                 PrimaryButton(
                     modifier = Modifier.wrapContentHeight().fillMaxWidth(),
-                    text = stringResource(R.string.send_email),
-                    onClick = onSendEmail,
+                    text = stringResource(R.string.report_on_github),
+                    onClick = onOpenIssue,
                 )
-                if (state.noEmailAppAvailable) {
-                    ErrorSupportingText(
-                        stringResource(id = R.string.no_email_app_available),
-                        modifier = Modifier.padding(bottom = Dimens.smallPadding),
-                    )
-                }
+                state.fallbackUrl?.let { CopyableLink(url = it) }
                 PrimaryButton(
                     modifier = Modifier.wrapContentHeight().fillMaxWidth(),
                     text = stringResource(R.string.got_it),

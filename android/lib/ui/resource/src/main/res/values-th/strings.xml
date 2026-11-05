@@ -24,10 +24,9 @@
     <string name="all_locations">ตำแหน่งที่ตั้งทั้งหมด</string>
     <string name="all_providers">ผู้ให้บริการทั้งหมด</string>
     <string name="always">ตลอดเวลา</string>
-    <string name="always_on_vpn_error_notification_content">ไม่สามารถเริ่มการเชื่อมต่ออุโมงค์ได้ โปรดปิดใช้งาน Always-on VPN เป็นเวลา <b>%1$s</b> ก่อนที่จะใช้งาน Mullvad VPN</string>
+    <string name="always_on_vpn_error_notification_content">ไม่สามารถเริ่มการเชื่อมต่ออุโมงค์ได้ โปรดปิดใช้งาน Always-on VPN เป็นเวลา <b>%1$s</b> ก่อนที่จะใช้งาน Krtek</string>
     <string name="always_on_vpn_error_notification_title">VPN เปิดอยู่เสมอ ได้รับการมอบหมายไปยัง %1$s แล้ว</string>
     <string name="android_16_upgrade_warning_dialog_first_message">หลังจากอัปเดตแอป VPN บน Android 16 อุปกรณ์อาจอยู่ในสถานะที่แอป VPN ไม่สามารถเข้าถึงอินเทอร์เน็ตได้อีกต่อไป</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">โปรดรีสตาร์ทอุปกรณ์ของคุณและลองเชื่อมต่ออีกครั้ง หากวิธีนี้ไม่ได้ผล โปรดเขียนอีเมลถึง %1$s เป็นภาษาสวีเดนหรืออังกฤษ</string>
     <string name="android_16_upgrade_warning_message">Android 16 มีปัญหาที่ทราบแล้ว โปรดรีสตาร์ทอุปกรณ์ของคุณแล้วลองอีกครั้ง หากต้องการเรียนรู้เพิ่มเติม</string>
     <string name="android_16_upgrade_warning_title">เชื่อมต่อไม่ได้ใช่ไหม</string>
     <string name="anti_censorship">การป้องกันการเซ็นเซอร์</string>
@@ -50,7 +49,7 @@
     <string name="app_name_notes">หมายเหตุ</string>
     <string name="app_name_weather">สภาพอากาศ</string>
     <string name="appearance">รูปลักษณ์</string>
-    <string name="appearance_description">เปลี่ยนชื่อและไอคอนของแอป Mullvad VPN บนอุปกรณ์ Android ของคุณ การดำเนินการนี้จะไม่เปลี่ยนไอคอนสำหรับการแจ้งเตือนที่เกี่ยวข้องกับ Mullvad VPN</string>
+    <string name="appearance_description">เปลี่ยนชื่อและไอคอนของแอป Krtek บนอุปกรณ์ Android ของคุณ การดำเนินการนี้จะไม่เปลี่ยนไอคอนสำหรับการแจ้งเตือนที่เกี่ยวข้องกับ Krtek</string>
     <string name="appearance_description_warning"><b>ข้อควรระวัง:</b> แอปจะปิดโดยอัตโนมัติและต้องเปิดใหม่ด้วยตนเองหลังจากเลือกไอคอนและชื่อใหม่ การดำเนินการนี้จะไม่ส่งผลต่อการเชื่อมต่อ VPN ของคุณ</string>
     <string name="appearance_description_warning_restart">หากไอคอนและชื่อยังไม่เปลี่ยนหลังจากปิดแอปแล้ว โปรดลองรีสตาร์ทอุปกรณ์</string>
     <string name="apply">ใช้</string>
@@ -60,7 +59,7 @@
     <string name="authentication">การรับรองความถูกต้อง</string>
     <string name="auto_connect_and_lockdown_mode">เชื่อมต่ออัตโนมัติและโหมดล็อกดาวน์</string>
     <string name="auto_connect_and_lockdown_mode_footer">ตรวจสอบให้แน่ใจว่า อุปกรณ์อยู่ในช่องทาง VPN เสมอ</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. หลังจากคลิกปุ่ม \"ไปที่การตั้งค่า VPN\" ที่ด้านล่าง ให้คลิกล้อเฟืองที่อยู่ถัดจากชื่อ \"Mullvad VPN\"</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. หลังจากคลิกปุ่ม \"ไปที่การตั้งค่า VPN\" ที่ด้านล่าง ให้คลิกล้อเฟืองที่อยู่ถัดจากชื่อ \"Krtek\"</string>
     <string name="auto_connect_carousel_first_slide_top_text">การตั้งค่าการเชื่อมต่ออัตโนมัติและโหมดล็อกดาวน์ อยู่ในการตั้งค่าระบบ Android โปรดทำตามคำแนะนำนี้ เพื่อเปิดใช้งานโหมดใดโหมดหนึ่ง หรือทั้งสองโหมด</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. ในการเปิดใช้การเชื่อมต่ออัตโนมัติ ให้คลิกปุ่มเปิด/ปิดที่อยู่ถัดจาก \"VPN เปิดอยู่เสมอ\"</string>
     <string name="auto_connect_carousel_second_slide_top_text">การเชื่อมต่ออัตโนมัติเรียกว่า Always-on VPN ในการตั้งค่าระบบ Android ซึ่งจะช่วยให้คุณมั่นใจได้ว่า คุณเชื่อมต่อกับช่องทาง VPN อย่างต่อเนื่อง และมีการเชื่อมต่ออัตโนมัติหลังจากรีสตาร์ต</string>
@@ -96,7 +95,6 @@
     <string name="collapse">ยุบ</string>
     <string name="confirm_ipv6_dns">เซิร์ฟเวอร์ DNS IPv6 จะไม่ทำงาน เว้นแต่คุณจะเปิดใช้งาน \"IPv6\" ภายใต้การตั้งค่า VPN</string>
     <string name="confirm_local_dns">เซิร์ฟเวอร์ DNS ท้องถิ่นจะไม่ทำงาน เว้นแต่คุณจะเปิดใช้งาน \"การแชร์ในเครือข่ายท้องถิ่น\" ซึ่งอยู่ในส่วนการตั้งค่า VPN</string>
-    <string name="confirm_no_email">คุณกำลังจะส่งรายงานปัญหา โดยไม่มีการระบุวิธีการติดต่อกลับให้กับเรา และคุณจำเป็นต้องป้อนที่อยู่อีเมลของคุณ หากคุณอยากให้เราตอบกลับการรายงานของคุณ</string>
     <string name="confirm_removal">ใช่ นำอุปกรณ์ออกจากระบบ</string>
     <string name="congrats">ยินดีด้วย!</string>
     <string name="connect">เชื่อมต่อ</string>
@@ -107,7 +105,7 @@
     <string name="connect_panel_connection_details">รายละเอียดการเชื่อมต่อ</string>
     <string name="connected">เชื่อมต่อแล้ว</string>
     <string name="connecting">กำลังเชื่อมต่อ...</string>
-    <string name="connecting_to_daemon">กำลังเชื่อมต่อบริการของระบบ Mullvad...</string>
+    <string name="connecting_to_daemon">กำลังเชื่อมต่อบริการของระบบ Krtek...</string>
     <string name="connection_details_in">เข้า</string>
     <string name="connection_details_out">ออก</string>
     <string name="cont">ดำเนินการต่อ</string>
@@ -215,7 +213,6 @@
     <string name="edit_list">แก้ไขรายการ</string>
     <string name="edit_lists">แก้ไขรายการ</string>
     <string name="edit_locations">แก้ไขตำแหน่งที่ตั้ง</string>
-    <string name="edit_message">แก้ไขข้อความ</string>
     <string name="edit_method">แก้ไขวิธี</string>
     <string name="edit_name">แก้ไขชื่อ</string>
     <string name="enable">เปิดใช้งาน</string>
@@ -248,8 +245,6 @@
     <string name="failed_to_fetch_devices">ไม่สามารถดึงรายการอุปกรณ์มาได้</string>
     <string name="failed_to_load_products">ไม่สามารถโหลดผลิตภัณฑ์ได้ โปรดลองอีกครั้ง</string>
     <string name="failed_to_remove_device">ไม่สามารถลบอุปกรณ์ได้</string>
-    <string name="failed_to_send">ไม่สามารถส่งได้</string>
-    <string name="failed_to_send_details">หากคุณออกจากแบบฟอร์มแล้วเข้ามาใหม่ในภายหลัง ข้อมูลที่คุณกรอกไว้จะยังคงอยู่ที่นี่ดังเดิม</string>
     <string name="failed_to_set_current_test_error">ไม่สามารถตั้งค่าเป็นปัจจุบันได้ - ไม่สามารถเข้าถึง API ได้</string>
     <string name="failed_to_set_current_unknown_error">ไม่สามารถตั้งค่าเป็นปัจจุบันได้ - ไม่ทราบสาเหตุ</string>
     <string name="faqs_and_guides">คำถามที่พบบ่อยและคำแนะนำ</string>
@@ -275,10 +270,6 @@
     <string name="import_overrides_import">นำเข้า</string>
     <string name="import_overrides_text_title">นำเข้าผ่านข้อความ</string>
     <string name="in_app_products_unavailable">ผลิตภัณฑ์ในแอปไม่พร้อมใช้งาน โปรดตรวจสอบให้แน่ใจว่าคุณมี Google Play เวอร์ชันล่าสุด</string>
-    <string name="include_account_token_checkbox_text">รวมโทเค็นบัญชีของฉันเพื่อรับความช่วยเหลือเกี่ยวกับการชำระเงิน หรือปัญหาที่เกี่ยวข้องกับบัญชีได้รวดเร็วยิ่งขึ้น</string>
-    <string name="include_account_token_warning_message_first">การแนบโทเค็นบัญชีของคุณจะเชื่อมโยงรายงานนี้เข้ากับบัญชีของคุณ ซึ่งจะช่วยให้เราแก้ไขปัญหาของคุณได้เร็วขึ้น รายงานทั้งหมดจะถูกลบโดยอัตโนมัติหลังจากผ่านไประยะเวลาหนึ่ง</string>
-    <string name="include_account_token_warning_message_second">สำหรับรายละเอียดเพิ่มเติม โปรดดูที่ %1$s ของเรา</string>
-    <string name="include_account_token_warning_title">สิ่งนี้ส่งผลต่อความไม่เปิดเผยตัวตนของคุณ</string>
     <string name="info">ข้อมูล</string>
     <string name="internet">อินเทอร์เน็ต</string>
     <string name="invalid_address_blank_warning">โปรดป้อนที่อยู่ IP</string>
@@ -294,7 +285,7 @@
     <string name="ipv6_unavailable">ไม่สามารถกำหนดค่า IPv6 ได้ โปรดปิดใช้งานรายการนี้ในแอป หรือเปิดใช้งานบนอุปกรณ์ของคุณ</string>
     <string name="is_offline">อุปกรณ์ของคุณออฟไลน์อยู่ อุโมงค์จะเชื่อมต่อโดยอัตโนมัติ หลังจากที่อุปกรณ์ของคุณกลับมาออนไลน์</string>
     <string name="language">ภาษา</string>
-    <string name="legacy_always_on_vpn_error_notification_content">ไม่สามารถเริ่มการเชื่อมต่ออุโมงค์ได้ โปรดปิดใช้งาน VPN เปิดอยู่เสมอ ก่อนที่จะใช้งาน Mullvad VPN</string>
+    <string name="legacy_always_on_vpn_error_notification_content">ไม่สามารถเริ่มการเชื่อมต่ออุโมงค์ได้ โปรดปิดใช้งาน VPN เปิดอยู่เสมอ ก่อนที่จะใช้งาน Krtek</string>
     <string name="legacy_always_on_vpn_error_notification_title">VPN เปิดอยู่เสมอ ได้รับการมอบหมายไปยัง VPN อื่นแล้ว</string>
     <string name="less_than_a_day_left">บัญชีนี้เหลือเวลาไม่ถึงหนึ่งวัน</string>
     <string name="less_than_one_day">น้อยกว่าหนึ่งวัน</string>
@@ -371,7 +362,6 @@
     <string name="next">ถัดไป</string>
     <string name="next_with_icon">ถัดไป %1$s</string>
     <string name="no_custom_lists_available">ไม่มีรายการแบบกำหนดเองที่พร้อมใช้งาน</string>
-    <string name="no_email_app_available">ไม่มีแอปอีเมลบนอุปกรณ์</string>
     <string name="no_internet_connection">ไม่มีการเชื่อมต่ออินเทอร์เน็ต</string>
     <string name="no_matching_relay">ไม่มีเซิร์ฟเวอร์ที่ตรงกับการตั้งค่าของคุณ โปรดลองเปลี่ยนเซิร์ฟเวอร์ หรือการตั้งค่าอื่นๆ</string>
     <string name="no_matching_relay_entry">ไม่มีเซิร์ฟเวอร์รายการที่ตรงกับการตั้งค่าของคุณ ลองเปลี่ยนเซิร์ฟเวอร์หรือการตั้งค่าอื่น</string>
@@ -411,8 +401,6 @@
     <string name="port">พอร์ต</string>
     <string name="port_x">พอร์ต: %1$s</string>
     <string name="privacy_policy_label">นโยบายความเป็นส่วนตัว</string>
-    <string name="privacy_policy_lower_case">นโยบายความเป็นส่วนตัว</string>
-    <string name="problem_report_description">ไฟล์บันทึกล็อกของแอปของคุณจะถูกแนบไปกับข้อความนี้ เพื่อที่เราจะช่วยเหลือคุณได้อย่างมีประสิทธิภาพมากขึ้น ข้อมูลของคุณจะยังคงมีความปลอดภัยและเป็นส่วนตัว เนื่องจากจะไม่มีการระบุตัวตนก่อนส่งข้อมูลผ่านช่องทางที่มีการเข้ารหัส</string>
     <string name="providers">ผู้ให้บริการ</string>
     <string name="quantum_resistant_info_first_paragraph">คุณลักษณะนี้จะช่วยให้ช่องทาง WireGuard สามารถสกัดกั้นการโจมตีที่อาจมาจากคอมพิวเตอร์ควอนตัมได้</string>
     <string name="quantum_resistant_info_second_paragraph">ระบบจะดำเนินการสิ่งนี้ผ่านการแลกเปลี่ยนคีย์เพิ่มเติม โดยการใช้อัลกอริทึมแบบควอนตัมที่ปลอดภัย และผสมผลลัพธ์เข้ากับการเข้ารหัสตามปกติของ WireGuard และขั้นตอนพิเศษนี้ใช้การรับส่งข้อมูลประมาณ 500 kiB ในทุกครั้งที่สร้างช่องทางใหม่</string>
@@ -435,7 +423,6 @@
     <string name="rented">เช่า</string>
     <string name="rented_only">เช่าเท่านั้น</string>
     <string name="report_a_problem">รายงานปัญหา</string>
-    <string name="report_problem_message_is_empty">โปรดป้อนข้อความ</string>
     <string name="reset_to_default_button">รีเซ็ตเป็นค่าเริ่มต้น</string>
     <string name="retry">ลองอีกครั้ง</string>
     <string name="save">บันทึก</string>
@@ -443,13 +430,6 @@
     <string name="search_no_matches_for_text">ไม่พบผลลัพธ์สำหรับ \"%1$s\" โปรดลองใช้คำค้นหาอื่น</string>
     <string name="search_placeholder">ค้นหา…</string>
     <string name="select_location">เลือกตำแหน่งที่ตั้ง</string>
-    <string name="send">ส่ง</string>
-    <string name="send_anyway">ส่งต่อไป</string>
-    <string name="send_email">ส่งอีเมล</string>
-    <string name="sending">กำลังส่ง...</string>
-    <string name="sent">ส่ง</string>
-    <string name="sent_contact">เราจะติดต่อคุณไปทาง %1$s ในกรณีจำเป็น</string>
-    <string name="sent_thanks">ขอบคุณ!</string>
     <string name="separate_filters_title">แยกตัวกรอง</string>
     <string name="separate_filters_title_first_paragraph">ชสามารถตั้งค่าตัวกรองแยกกันสำหรับตำแหน่งขาเข้าและขาออกได้แล้วในขณะนี้</string>
     <string name="separate_filters_title_second_paragraph">ตัวกรองปัจจุบันของคุณถูกนำไปใช้กับทั้งตำแหน่งขาเข้าและขาออก</string>
@@ -527,7 +507,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">เชื่อมต่อกับเครือข่ายอื่น</string>
     <string name="unable_to_reach_api_dialog_message_list_third">เปิดใช้งานวิธีการเข้าถึงทั้งหมดในแอป</string>
     <string name="unable_to_reach_api_dialog_message_second">นี่อาจเกิดจากการเซ็นเซอร์หรือปัญหาเครือข่าย โปรดลอง:</string>
-    <string name="unable_to_reach_api_dialog_message_third">หากขั้นตอนเหล่านี้ไม่ได้ผล โปรดส่งอีเมลถึงฝ่ายสนับสนุนโดยใช้ปุ่มด้านล่าง ระบบจะแนบบันทึกที่ถูกทำให้ไม่ระบุตัวตนโดยอัตโนมัติ</string>
     <string name="unavailable">ไม่พร้อมใช้งาน</string>
     <string name="undo">เลิกทำ</string>
     <string name="unsupported_version">เวอร์ชันที่ไม่รองรับ</string>
@@ -538,8 +517,6 @@
     <string name="uri_browser_app_not_found">ไม่ได้ติดตั้งแอปเบราว์เซอร์ ไม่สามารถเปิดลิงก์ได้</string>
     <string name="uri_market_app_not_found">ไม่มีการติดตั้ง App Store ของ Android ไม่สามารถเปิดลิงก์ได้</string>
     <string name="use_method">ใช้วิธีการ</string>
-    <string name="user_email_hint">อีเมลของคุณ (ไม่บังคับ)</string>
-    <string name="user_message_hint">โปรดเขียนเป็นภาษาอังกฤษหรือสวีเดน พร้อมระบุประเทศต้นทางที่คุณเชื่อมต่อ เพื่อให้รับความช่วยเหลือได้ดียิ่งขึ้น</string>
     <string name="username">ชื่อผู้ใช้</string>
     <string name="verification_failed_dialog_message">เราไม่สามารถตรวจสอบการซื้อล่าสุดของคุณได้ โปรดตรวจสอบการเชื่อมต่ออินเทอร์เน็ตแล้วลองใหม่อีกครั้ง หากปัญหายังคงอยู่ โปรดติดต่อฝ่ายสนับสนุน</string>
     <string name="verifying_api_method">กำลังตรวจสอบยืนยันวิธีการ API...</string>
@@ -562,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">เกิดข้อผิดพลาดในการอนุญาต VPN</string>
     <string name="vpn_settings_not_available">การตั้งค่า VPN ไม่สามารถใช้งานได้บนอุปกรณ์</string>
     <string name="warning">คำเตือน</string>
-    <string name="we_will_look_into_this">เราจะตรวจสอบปัญหานี้</string>
     <string name="when_needed">เมื่อจำเป็น</string>
     <string name="wireguard_custom_port_title">กำหนดเอง</string>
     <string name="wireguard_mtu_footer">ตั้งค่า WireGuard MTU ช่วงที่ถูกต้อง: %1$d - %2$d</string>

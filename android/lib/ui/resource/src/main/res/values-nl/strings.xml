@@ -24,10 +24,9 @@
     <string name="all_locations">Alle locaties</string>
     <string name="all_providers">Alle aanbieders</string>
     <string name="always">Altijd</string>
-    <string name="always_on_vpn_error_notification_content">Kan de tunnelverbinding niet starten. Schakel Altijd-aan VPN uit voor <b>%1$s</b> voordat u Mullvad VPN gebruikt.</string>
+    <string name="always_on_vpn_error_notification_content">Kan de tunnelverbinding niet starten. Schakel Altijd-aan VPN uit voor <b>%1$s</b> voordat u Krtek gebruikt.</string>
     <string name="always_on_vpn_error_notification_title">Altijd-aan VPN toegewezen aan %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Na het bijwerken van een VPN-app in Android 16 kan het apparaat in een toestand raken waarin de VPN-apps het internet niet meer kunnen bereiken.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Start uw apparaat opnieuw op en probeer het opnieuw. Als dat niet werkt, kun u een e-mail schrijven naar %1$s (in het Zweeds of in het Engels).</string>
     <string name="android_16_upgrade_warning_message">Er is een bekend probleem met Android 16. Start uw apparaat opnieuw op en probeer het opnieuw. Voor meer informatie:</string>
     <string name="android_16_upgrade_warning_title">Krijgt u geen verbinding?</string>
     <string name="anti_censorship">Anti-censuur</string>
@@ -50,7 +49,7 @@
     <string name="app_name_notes">Opmerkingen</string>
     <string name="app_name_weather">Weer</string>
     <string name="appearance">Uiterlijk</string>
-    <string name="appearance_description">Wijzig de titel en het pictogram van de Mullvad VPN-app op uw Android-apparaat. Dit wijzigt het pictogram voor Mullvad VPN-gerelateerde meldingen niet.</string>
+    <string name="appearance_description">Wijzig de titel en het pictogram van de Krtek-app op uw Android-apparaat. Dit wijzigt het pictogram voor Krtek-gerelateerde meldingen niet.</string>
     <string name="appearance_description_warning"><b>Let op:</b> de app wordt automatisch gesloten en moet handmatig opnieuw worden geopend na het selecteren van een nieuw pictogram en een nieuwe titel. Dit heeft geen invloed op uw VPN-verbinding.</string>
     <string name="appearance_description_warning_restart">Als het pictogram en de titel nog steeds niet zijn veranderd nadat de app is gesloten, probeer dan het apparaat opnieuw op te starten.</string>
     <string name="apply">Toevoegen</string>
@@ -60,7 +59,7 @@
     <string name="authentication">Authenticatie</string>
     <string name="auto_connect_and_lockdown_mode">Automatisch verbinden en lockdownmodus</string>
     <string name="auto_connect_and_lockdown_mode_footer">Zorg dat het apparaat altijd de VPN-tunnel gebruikt.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. Klik, nadat u op de knop \"Naar VPN-instellingen\" hebt geklikt, op het tandwiel naast de naam \"Mullvad VPN\".</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. Klik, nadat u op de knop \"Naar VPN-instellingen\" hebt geklikt, op het tandwiel naast de naam \"Krtek\".</string>
     <string name="auto_connect_carousel_first_slide_top_text">De instellingen Automatisch verbinden en Lockdownmodus zijn te vinden in de Android-systeeminstellingen, volg deze gids om een of beide in te schakelen.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. Klik om Automatisch verbinden in te schakelen op de schakelaar naast \"Altijd-aan VPN\".</string>
     <string name="auto_connect_carousel_second_slide_top_text">Automatisch verbinden heet Altijd-aan VPN in de Android-systeeminstellingen en zorgt ervoor dat u altijd verbonden bent met de VPN-tunnel en automatisch verbinding maakt na een herstart.</string>
@@ -96,7 +95,6 @@
     <string name="collapse">Samenvouwen</string>
     <string name="confirm_ipv6_dns">De IPv6-DNS-server werkt niet, tenzij u \"IPv6\" inschakelt in de VPN-instellingen.</string>
     <string name="confirm_local_dns">De lokale DNS-server werkt niet, tenzij u \"Delen via lokaal netwerk\" inschakelt bij de VPN-instellingen.</string>
-    <string name="confirm_no_email">U staat op het punt om het probleemrapport te verzenden zonder een contactmethode op te geven. Voer een e-mailadres in als u een antwoord wenst op het rapport.</string>
     <string name="confirm_removal">Ja, apparaat afmelden</string>
     <string name="congrats">Gefeliciteerd!</string>
     <string name="connect">Verbinden</string>
@@ -107,7 +105,7 @@
     <string name="connect_panel_connection_details">Verbindingsgegevens</string>
     <string name="connected">Verbonden</string>
     <string name="connecting">Verbinden ...</string>
-    <string name="connecting_to_daemon">Verbinden met Mullvad-systeemdienst...</string>
+    <string name="connecting_to_daemon">Verbinden met Krtek-systeemdienst...</string>
     <string name="connection_details_in">In</string>
     <string name="connection_details_out">Uit</string>
     <string name="cont">Doorgaan</string>
@@ -215,7 +213,6 @@
     <string name="edit_list">Lijst bewerken</string>
     <string name="edit_lists">Lijsten bewerken</string>
     <string name="edit_locations">Locaties bewerken</string>
-    <string name="edit_message">Bericht bewerken</string>
     <string name="edit_method">Methode bewerken</string>
     <string name="edit_name">Naam bewerken</string>
     <string name="enable">Inschakelen</string>
@@ -248,8 +245,6 @@
     <string name="failed_to_fetch_devices">Ophalen van lijst van apparaten mislukt</string>
     <string name="failed_to_load_products">Kan producten niet laden. Probeer het opnieuw</string>
     <string name="failed_to_remove_device">Verwijderen van apparaat mislukt</string>
-    <string name="failed_to_send">Verzenden mislukt</string>
-    <string name="failed_to_send_details">Als u het formulier verlaat en het later opnieuw probeert, is de reeds ingevoerde informatie er nog.</string>
     <string name="failed_to_set_current_test_error">Instellen als huidige mislukt. API niet bereikbaar</string>
     <string name="failed_to_set_current_unknown_error">Instellen als huidige mislukt. Reden onbekend</string>
     <string name="faqs_and_guides">Veelgestelde vragen en gidsen</string>
@@ -275,10 +270,6 @@
     <string name="import_overrides_import">Importeren</string>
     <string name="import_overrides_text_title">Importeren via tekst</string>
     <string name="in_app_products_unavailable">Producten in de app zijn niet beschikbaar. Controleer dat u de nieuwste versie van Google Play heeft.</string>
-    <string name="include_account_token_checkbox_text">Mijn accounttoken opnemen voor snellere hulp bij problemen rond betalingen of mijn account</string>
-    <string name="include_account_token_warning_message_first">Als u uw accounttoken bijvoegt, wordt dit rapport gekoppeld aan uw account. We kunnen het probleem dan sneller oplossen. Alle rapporten worden automatisch na een bepaalde tijd verwijderd.</string>
-    <string name="include_account_token_warning_message_second">Zie ons %1$s voor meer informatie.</string>
-    <string name="include_account_token_warning_title">Dit heeft gevolgen voor uw anonimiteit</string>
     <string name="info">Info</string>
     <string name="internet">Internet</string>
     <string name="invalid_address_blank_warning">Voer een IP-adres in</string>
@@ -294,7 +285,7 @@
     <string name="ipv6_unavailable">Kon IPv6 niet configureren. Schakel het uit in de app of schakel het in op uw apparaat.</string>
     <string name="is_offline">Uw apparaat is offline. De tunnel wordt automatisch verbonden wanneer uw apparaat weer online is.</string>
     <string name="language">Taal</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Kan de tunnelverbinding niet starten. Schakel Altijd-aan VPN uit voordat u Mullvad VPN gebruikt.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Kan de tunnelverbinding niet starten. Schakel Altijd-aan VPN uit voordat u Krtek gebruikt.</string>
     <string name="legacy_always_on_vpn_error_notification_title">Altijd-aan VPN toegewezen aan andere VPN</string>
     <string name="less_than_a_day_left">Minder dan een dag resterend op dit account</string>
     <string name="less_than_one_day">minder dan één dag</string>
@@ -371,7 +362,6 @@
     <string name="next">Volgende</string>
     <string name="next_with_icon">Volgende %1$s</string>
     <string name="no_custom_lists_available">Geen aangepaste lijsten beschikbaar</string>
-    <string name="no_email_app_available">Er staat geen e-mailprogramma op het apparaat</string>
     <string name="no_internet_connection">Geen internetverbinding</string>
     <string name="no_matching_relay">Er zijn geen servers die overeenkomen met uw instellingen. Probeer een andere server of andere instellingen.</string>
     <string name="no_matching_relay_entry">Er zijn geen ingangsservers die overeenkomen met uw instellingen. Probeer een andere server of andere instellingen.</string>
@@ -411,8 +401,6 @@
     <string name="port">Poort</string>
     <string name="port_x">Poort: %1$s</string>
     <string name="privacy_policy_label">Privacybeleid</string>
-    <string name="privacy_policy_lower_case">privacybeleid</string>
-    <string name="problem_report_description">Het logboekbestand van uw app wordt aan dit bericht gekoppeld zodat we u beter kunnen helpen. Uw gegevens blijven veilig en privé, omdat ze worden geanonimiseerd voordat ze over een versleuteld kanaal worden verzonden.</string>
     <string name="providers">Aanbieders</string>
     <string name="quantum_resistant_info_first_paragraph">Deze eigenschap maakt de WireGuard-tunnel bestand tegen mogelijke aanvallen met kwantumcomputers.</string>
     <string name="quantum_resistant_info_second_paragraph">Het doet dit door een extra sleuteluitwisseling uit te voeren met een kwantumveilig algoritme en het resultaat te mengen met de reguliere versleuteling van WireGuard. Deze extra stap gebruikt ongeveer 500 kiB aan verkeer elke keer dat een nieuwe tunnel wordt opgezet.</string>
@@ -435,7 +423,6 @@
     <string name="rented">Gehuurd</string>
     <string name="rented_only">Alleen gehuurde</string>
     <string name="report_a_problem">Een probleem melden</string>
-    <string name="report_problem_message_is_empty">Voer een bericht in</string>
     <string name="reset_to_default_button">Standaardwaarde herstellen</string>
     <string name="retry">Opnieuw proberen</string>
     <string name="save">Opslaan</string>
@@ -443,13 +430,6 @@
     <string name="search_no_matches_for_text">Geen resultaat voor \"%1$s\", probeer een andere zoekopdracht</string>
     <string name="search_placeholder">Zoeken naar...</string>
     <string name="select_location">Locatie selecteren</string>
-    <string name="send">Verzenden</string>
-    <string name="send_anyway">Toch verzenden</string>
-    <string name="send_email">E-mail versturen</string>
-    <string name="sending">Verzenden...</string>
-    <string name="sent">Verzonden</string>
-    <string name="sent_contact">Indien nodig nemen we u contact op via %1$s</string>
-    <string name="sent_thanks">Bedankt!</string>
     <string name="separate_filters_title">Afzonderlijke filters</string>
     <string name="separate_filters_title_first_paragraph">Filter kunnen nu afzonderlijke worden ingesteld voor in- en uitgangslocaties.</string>
     <string name="separate_filters_title_second_paragraph">Uw huidige filters zijn toegepast op zowel de ingangs- als uitgangslocatie.</string>
@@ -527,7 +507,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Verbinding maken met een ander netwerk</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Schakel alle toegangsmethoden in de app in</string>
     <string name="unable_to_reach_api_dialog_message_second">Dit kan komen door censuur of netwerkproblemen. Probeer om:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Als deze stappen niet werken, kunt u het ondersteuningsteam een e-mail sturen via de knop hieronder. De (geanonimiseerde) logboeken worden automatisch bijgevoegd.</string>
     <string name="unavailable">Niet beschikbaar</string>
     <string name="undo">Ongedaan maken</string>
     <string name="unsupported_version">NIET-ONDERSTEUNDE VERSIE</string>
@@ -538,8 +517,6 @@
     <string name="uri_browser_app_not_found">Er is geen browserapp geïnstalleerd of de link kan niet worden geopend</string>
     <string name="uri_market_app_not_found">Er is geen Android-appstore geïnstalleerd of de link kan niet worden geopend</string>
     <string name="use_method">Methode gebruiken</string>
-    <string name="user_email_hint">Uw e-mailadres (optioneel)</string>
-    <string name="user_message_hint">Om u beter te kunnen helpen, kunt u in het Engels of Zweeds schrijven. Vermeld uit welk land u komt.</string>
     <string name="username">Gebruikersnaam</string>
     <string name="verification_failed_dialog_message">We kunnen uw laatste aankoop niet verifiëren. Controleer uw internetverbinding en probeer het opnieuw. Als het probleem zich blijft voordoen, neem dan contact op met de ondersteuning.</string>
     <string name="verifying_api_method">API-methode verifiëren ...</string>
@@ -562,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">VPN-machtigingsfout</string>
     <string name="vpn_settings_not_available">VPN-instellingen niet beschikbaar op apparaat</string>
     <string name="warning">Waarschuwing</string>
-    <string name="we_will_look_into_this">We gaan het bekijken.</string>
     <string name="when_needed">Wanneer nodig</string>
     <string name="wireguard_custom_port_title">Aangepast</string>
     <string name="wireguard_mtu_footer">Stel de MTU-waarde voor WireGuard in. Geldig bereik: %1$d - %2$d.</string>

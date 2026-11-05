@@ -24,10 +24,9 @@
     <string name="all_locations">တည်နေရာအာလုံး</string>
     <string name="all_providers">ပံ့ပိုးသူအားလုံး</string>
     <string name="always">အမြဲတမ်း</string>
-    <string name="always_on_vpn_error_notification_content">Tunnel ချိတ်ဆက်မှုကို စတင်၍ မရနိုင်ပါ။ Mullvad VPN ကို မသုံးမီ <b>%1$s</b> အတွက် VPN အမြဲဖွင့်ထားမှုကို ပိတ်ပေးပါ။</string>
+    <string name="always_on_vpn_error_notification_content">Tunnel ချိတ်ဆက်မှုကို စတင်၍ မရနိုင်ပါ။ Krtek ကို မသုံးမီ <b>%1$s</b> အတွက် VPN အမြဲဖွင့်ထားမှုကို ပိတ်ပေးပါ။</string>
     <string name="always_on_vpn_error_notification_title">အမြဲဖွင့် VPN ကို %1$s သို့ သတ်မှတ်ထားပါသည်</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Android 16 တွင် VPN အက်ပ်ကို အပ်ဒိတ်လုပ်ပြီးနောက် စက်များတွင် VPN အက်ပ်များက အင်တာနက်ချိတ်မပေးနိုင်တော့သည့် အခြေအနေမျိုး ကြုံရတတ်သည်။</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">စက်ကို ရီစတက်ချပြီး ထပ်မံချိတ်ဆက်ကြည့်ပါ။ ချိတ်၍မရသေးလျှင် %1$s သို့ ဆွီဒင် သို့မဟုတ် အင်္ဂလိပ်ဘာသာစကားဖြင့် အီးမေးလ်ပို့ပါ။</string>
     <string name="android_16_upgrade_warning_message">Android 16 တွင် သိထားပြီးသား ပြဿနာရှိသည်။ သင့်စက်ကို ရီစတက်ချပြီး ထပ်မံကြိုးစားပါ။ ပိုမိုလေ့လာရန်၊ </string>
     <string name="android_16_upgrade_warning_title">ချိတ်မရဘူးလား။</string>
     <string name="anti_censorship">ဆင်ဆာဖြတ်တောက်မှု ကျော်လွှားရေး</string>
@@ -50,7 +49,7 @@
     <string name="app_name_notes">Notes</string>
     <string name="app_name_weather">Weather</string>
     <string name="appearance">ပုံသဏ္ဌာန်</string>
-    <string name="appearance_description">Android စက်ရှိ Mullvad VPN အက်ပ်၏ ခေါင်းစဉ်နှင့် အိုင်ကွန်ကို ပြောင်းပါ။ ဤသို့ ပြောင်းခြင်းသည် Mullvad VPN ဆက်စပ်သော အသိပေးချက်မှန်သမျှအတွက် အိုင်ကွန်ကို မပြောင်းစေပါ။</string>
+    <string name="appearance_description">Android စက်ရှိ Krtek အက်ပ်၏ ခေါင်းစဉ်နှင့် အိုင်ကွန်ကို ပြောင်းပါ။ ဤသို့ ပြောင်းခြင်းသည် Krtek ဆက်စပ်သော အသိပေးချက်မှန်သမျှအတွက် အိုင်ကွန်ကို မပြောင်းစေပါ။</string>
     <string name="appearance_description_warning"><b>သတိပြုရန်-</b> အိုင်ကွန်နှင့် ခေါင်းစဉ်အသစ်ကို ရွေးပြီးသည်နှင့် အက်ပ်က အော်တို ပိတ်သွားမည်ဖြစ်ပြီး ကိုယ်တိုင် ပြန်ဖွင့်ရန် လိုအပ်ပါသည်။ ဤလုပ်ဆောင်မှုသည် VPN ချိတ်ဆက်မှုကို မထိခိုက်ပါ။</string>
     <string name="appearance_description_warning_restart">အက်ပ်ပိတ်ပြီးနောက် အိုင်ကွန်နှင့် ခေါင်းစဉ်သည် မပြောင်းလဲသေးပါက စက်ကို ပြန်လည်စတင်ကြည့်ပါ။</string>
     <string name="apply">သုံးရန်</string>
@@ -60,7 +59,7 @@
     <string name="authentication">စစ်မှန်ကြောင်း အတည်ပြုခြင်း</string>
     <string name="auto_connect_and_lockdown_mode">အော်တို ချိတ်ဆက်မှု နှင့် လော့ခ်ဒေါင်းစနစ်</string>
     <string name="auto_connect_and_lockdown_mode_footer">စက်သည် VPN Tunnel ကို အမြဲဖွင့်ထားကြောင်း သေချာပါစေ။</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. အောက်ရှိ \"VPN ဆက်တင်များသို့ သွားရန်\" ခလုတ်ကိုနှိပ်ပြီးနောက် \"Mullvad VPN\" အမည်ဘေးရှိ ခွေးသွားစိတ်ပုံကို နှိပ်ပါ။</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. အောက်ရှိ \"VPN ဆက်တင်များသို့ သွားရန်\" ခလုတ်ကိုနှိပ်ပြီးနောက် \"Krtek\" အမည်ဘေးရှိ ခွေးသွားစိတ်ပုံကို နှိပ်ပါ။</string>
     <string name="auto_connect_carousel_first_slide_top_text">အော်တို ချိတ်ဆက်မှုနှင့် လော့ခ်ဒေါင်းစနစ် ဆက်တင်များကို Android စနစ် ဆက်တင်များတွင် ရှာတွေ့နိုင်ပြီး တစ်ခု သို့မဟုတ် နှစ်ခုလုံးကို ဖွင့်ရန် ဤလမ်းညွှန်ချက်ကို လိုက်နာပါ။</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. အော်တို ချိတ်ဆက်မှုကို ဖွင့်ရန် \"အမြဲဖွင့် VPN\" ဘေးရှိ ဖွင့်/ပိတ် ခလုတ်ကို နှိပ်ပါ။</string>
     <string name="auto_connect_carousel_second_slide_top_text">Android စနစ် ဆက်တင်တွင် အော်တိုချိတ်ဆက်မှုကို အမြဲဖွင့် VPN ဟုခေါ်ပြီး VPN Tunnel ကို အမြဲချိတ်ဆက်ထားကြောင်း သေချာစေပြီး အစမှ ပြန်ဖွင့်ပြီးနောက် အော်တို ချိတ်ဆက်ပါသည်။</string>
@@ -96,7 +95,6 @@
     <string name="collapse">ချုံ့ရန်</string>
     <string name="confirm_ipv6_dns">VPN ဆက်တင်များအောက်ရှိ \"IPv6\" ကို မဖွင့်ထားပါက IPv6 DNS ဆာဗာသည် အလုပ်လုပ်မည်မဟုတ်ပါ။</string>
     <string name="confirm_local_dns">လိုကယ် DNS ဆာဗာသည် VPN ဆက်တင်များအောက်ရှိ \"လိုကယ် ကွန်ရက် ဝေမျှမှု\"ကို မဖွင့်မချင်း အလုပ်လုပ်မည် မဟုတ်ပါ။</string>
-    <string name="confirm_no_email">သင်သည် သင့်ထံ ကျွန်ုပ်တို့ ပြန်ဆက်သွယ်နိုင်မည့် နည်းလမ်း မပါဘဲ ပြဿနာ ရီပို့တ်ကို ပေးပို့တော့မည် ဖြစ်ပါသည်။ သင့်ရီပို့တ်အတွက် အဖြေ ရရှိလိုပါက အီမေးလိပ်စာ ဖြည့်သွင်းပေးရပါမည်။</string>
     <string name="confirm_removal">စက်မှ ထွက်မည်</string>
     <string name="congrats">ဝမ်းသာပါတယ်။</string>
     <string name="connect">ချိတ်ဆက်ရန်</string>
@@ -107,7 +105,7 @@
     <string name="connect_panel_connection_details">ချိတ်ဆက်မှု အသေးစိတ်အချက်များ</string>
     <string name="connected">ချိတ်ဆက်ပြီး</string>
     <string name="connecting">ချိတ်ဆက်နေဆဲ...</string>
-    <string name="connecting_to_daemon">Mullvad စနစ် ဝန်ဆောင်မှုနှင့် ချိတ်ဆက်နေဆဲ...</string>
+    <string name="connecting_to_daemon">Krtek စနစ် ဝန်ဆောင်မှုနှင့် ချိတ်ဆက်နေဆဲ...</string>
     <string name="connection_details_in">အဝင်</string>
     <string name="connection_details_out">အထွက်</string>
     <string name="cont">ဆက်လုပ်မည်</string>
@@ -215,7 +213,6 @@
     <string name="edit_list">စာရင်းကို တည်းဖြတ်ရန်</string>
     <string name="edit_lists">စာရင်းများကို တည်းဖြတ်ရန်</string>
     <string name="edit_locations">တည်နေရာများကို တည်းဖြတ်ရန်</string>
-    <string name="edit_message">မက်ဆေ့ချ် တည်းဖြတ်ရန်</string>
     <string name="edit_method">နည်းလမ်းကို တည်းဖြတ်ပါ</string>
     <string name="edit_name">အမည် တည်းဖြတ်ရန်</string>
     <string name="enable">ဖွင့်ရန်</string>
@@ -248,8 +245,6 @@
     <string name="failed_to_fetch_devices">စက်စာရင်းကို ယူ၍မရခဲ့ပါ</string>
     <string name="failed_to_load_products">ထုတ်ကုန်များကို လုပ်ဆောင်၍ မရပါ၊ ထပ်ကြိုးစားကြည့်ပါ</string>
     <string name="failed_to_remove_device">စက်ကို ဖယ်ရှားရန် မအောင်မြင်ခဲ့ပါ</string>
-    <string name="failed_to_send">ပို့ရန် မအောင်မြင်ခဲ့ပါ</string>
-    <string name="failed_to_send_details">ဖောင်မှ ထွက်ပြီး နောက်မှ ထပ်ကြိုးစားကြည့်ပါ၊ သင်ဖြည့်ထားသည့် အချက်အလက်များသည် ဤတွင် ဆက်ရှိနေပါမည်။</string>
     <string name="failed_to_set_current_test_error">လက်ရှိသို့ သတ်မှတ်၍ မရခဲ့ပါ - API နှင့် ချိတ်၍မရပါ</string>
     <string name="failed_to_set_current_unknown_error">လက်ရှိသို့ သတ်မှတ်၍ မရခဲ့ပါ - အကြောင်းအရင်း မသိပါ</string>
     <string name="faqs_and_guides">မေးလေ့ရှိသည့် မေးခွန်းများနှင့် လမ်းညွှန်များ</string>
@@ -275,10 +270,6 @@
     <string name="import_overrides_import">ထည့်ရန်</string>
     <string name="import_overrides_text_title">စာသားမှတစ်ဆင့် ထည့်သွင်းရန်</string>
     <string name="in_app_products_unavailable">အက်ပ်တွင်း ထုတ်ကုန်များကို မရရှိနိုင်ပါ၊ Google Play ၏ နောက်ဆုံးထွက်ဗာရှင်းကို ထည့်ပေးပါ။</string>
-    <string name="include_account_token_checkbox_text">ငွေပေးချေမှု သို့မဟုတ် အကောင့်ဆိုင်ရာ ပြဿနာများအတွက် ပိုမိုမြန်ဆန်စွာ အကူအညီရရှိနိုင်ရန် ကျွန်ုပ်၏ အကောင့်တိုကင်ကို ထည့်ပါမည်</string>
-    <string name="include_account_token_warning_message_first">သင့်အကောင့် တိုကင်ကို တွဲချိတ်ခြင်းဖြင့် ဤရီပို့တ်ကို သင့်အကောင့်နှင့် ချိတ်ဆက်လိုက်ပြီး ဤကဲ့သို့ တွဲချိတ်ပေးခြင်းအားဖြင့် သင်ကြုံတွေ့နေရသော ပြဿနာကို ပို၍ မြန်မြန်ဆန်ဆန် ဖြေရှင်းနိုင်ရန် အထောက်အကူပြုပါသည်။ ရီပို့တ်အားလုံးကို အချိန်ကာလတစ်ခုကြာပြီးနောက် အော်တို ဖျက်ပါသည်။</string>
-    <string name="include_account_token_warning_message_second">အသေးစိတ်အချက်အလက်များအတွက် ကျွန်ုပ်တို့၏ %1$s ကို ကြည့်ပါ။</string>
-    <string name="include_account_token_warning_title">ဤအရာကို ရွေးချယ်ပါက သင်၏ အမည်ဝှက်မှုကို သက်ရောက်မှု ရှိပါမည်</string>
     <string name="info">အချက်အလက်</string>
     <string name="internet">အင်တာနက်</string>
     <string name="invalid_address_blank_warning">IP လိပ်စာ တစ်ခု ထည့်ပေးပါ</string>
@@ -294,7 +285,7 @@
     <string name="ipv6_unavailable">IPv6 ကို သတ်မှတ်ချိန်ညှိ၍ မရနိုင်ပါ။ အက်ပ်တွင် ၎င်းကို ပိတ်ပါ သို့မဟုတ် သင့်စက်တွင် ၎င်းကို ဖွင့်ပါ။</string>
     <string name="is_offline">သင့်စက်သည် အော့ဖ်လိုင်း ဖြစ်နေပါသည်။ သင့်စက် အွန်လိုင်း ပြန်ဖြစ်သည်နှင့် Tunnel သည် အော်တို ချိတ်ဆက်သွားပါမည်။</string>
     <string name="language">ဘာသာစကား</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Tunnel ချိတ်ဆက်မှုကို စတင်၍ မရနိုင်ပါ။ Mullvad VPN ကို မသုံးမီ အတွက် VPN အမြဲဖွင့်ထားမှုကို ပိတ်ပေးပါ။</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Tunnel ချိတ်ဆက်မှုကို စတင်၍ မရနိုင်ပါ။ Krtek ကို မသုံးမီ အတွက် VPN အမြဲဖွင့်ထားမှုကို ပိတ်ပေးပါ။</string>
     <string name="legacy_always_on_vpn_error_notification_title">အမြဲဖွင့် VPN ကို အခြား VPN တစ်ခုသို့ သတ်မှတ်ထားပါသည်</string>
     <string name="less_than_a_day_left">ဤအကောင့်တွင် ကျန်ချိန် တစ်ရက်မပြည့်တော့ပါ</string>
     <string name="less_than_one_day">တစ်ရက်အောက် နည်းသည်။</string>
@@ -371,7 +362,6 @@
     <string name="next">ရှေ့သို့</string>
     <string name="next_with_icon">ရှေ့သို့ %1$s</string>
     <string name="no_custom_lists_available">စိတ်ကြိုက် စာရင်းများကို မရရှိနိုင်ပါ</string>
-    <string name="no_email_app_available">ဤစက်တွင် မည်သည့်အီးမေးလ်အက်ပ်ကိုမျှ မရရှိနိုင်ပါ</string>
     <string name="no_internet_connection">အင်တာနက် ချိတ်ဆက်မှု မရှိပါ</string>
     <string name="no_matching_relay">သင့်ဆက်တင်နှင့် ကိုက်ညီသော ဆာဗာများ မရှိပါ၊ ဆာဗာ သို့မဟုတ် အခြားဆက်တင်တို့ကို ပြောင်းလဲရန် ကြိုးစားကြည့်ပါ။</string>
     <string name="no_matching_relay_entry">သင့်ဆက်တင်နှင့် ကိုက်ညီသော အဝင်ဆာဗာ မရှိပါ၊ ဆာဗာ သို့မဟုတ် အခြားဆက်တင်တို့ကို ပြောင်းလဲရန် ကြိုးစားကြည့်ပါ။</string>
@@ -411,8 +401,6 @@
     <string name="port">ပေါ့တ်</string>
     <string name="port_x">ပေါ့တ်- %1$s</string>
     <string name="privacy_policy_label">ကိုယ်ပိုင်အချက်အလက် မူဝါဒ</string>
-    <string name="privacy_policy_lower_case">ကိုယ်ပိုင်အချက်အလက် မူဝါဒ</string>
-    <string name="problem_report_description">သင့်အား ပိုမိုထိရောက်စွာ ကူညီနိုင်ရန် သင့်အက်ပ်၏ မှတ်တမ်းဖိုင်ကို ဤမက်ဆေ့ချ်နှင့်အတူ တွဲပေးသွားပါမည်။ ကုဒ်ပြောင်းဝှက်ထားသည့် ချန်နယ်မှတစ်ဆင့် မပေးပို့မီ သင့်ဒေတာများကို အမည်မဖော်ဘဲ ထားမည်ဖြစ်သောကြောင့် လျှို့ဝှက်လုံခြုံလျက် ရှိနေပါမည်။</string>
     <string name="providers">ပံ့ပိုးသူများ</string>
     <string name="quantum_resistant_info_first_paragraph">ဤလုပ်ဆောင်ချက်သည် Quantum ကွန်ပျူတာများမှ ဖြစ်လာနိုင်ခြေရှိသော တိုက်ခိုက်မှုများကို ခုခံနိုင်သည့် WireGuard Tunnel ကို ပြုလုပ်သည်။</string>
     <string name="quantum_resistant_info_second_paragraph">Quantum Safe အယ်လဂိုရီသမ်တစ်ခုကို သုံး၍ ထပ်ဆောင်း ကီးဖလှယ်မှုတစ်ခုကို ဆောင်ရွက်ပြီး WireGuard ၏ ပုံမှန် ကုဒ်ပြောင်းဝှက်မှုအတွင်း ရလဒ်ကို ရောနှောခြင်းအားဖြင့် ဤသည်ကို လုပ်ဆောင်ပါသည်။ ဤထပ်ဆောင်းအဆင့်သည် Tunnel အသစ်တစ်ခု တည်ဆောက်တိုင်း ဒေတာ 500 kiB ခန့်ကို သုံးပါသည်။</string>
@@ -435,7 +423,6 @@
     <string name="rented">အငှား</string>
     <string name="rented_only">အငှားသီးသန့်</string>
     <string name="report_a_problem">ပြဿနာကို ရီပို့(တ်)လုပ်ရန်</string>
-    <string name="report_problem_message_is_empty">မက်ဆေ့ချ် တစ်ခု ထည့်ပေးပါ</string>
     <string name="reset_to_default_button">ပုံသေသို့ ပြန်လည်သတ်မှတ်ရန်</string>
     <string name="retry">ပြန်ကြိုးစားကြည့်ရန်</string>
     <string name="save">သိမ်းမည်</string>
@@ -443,13 +430,6 @@
     <string name="search_no_matches_for_text">\"%1$s\" အတွက် ရလဒ်မရှိပါ၊ အခြားရှာဖွေမှုတစ်ခုကို စမ်းလုပ်ကြည့်ပါ</string>
     <string name="search_placeholder">ရှာရန်...</string>
     <string name="select_location">တည်နေရာ ရွေးရန်</string>
-    <string name="send">ပို့ရန်</string>
-    <string name="send_anyway">မည်သို့ပင်ဖြစ်စေ ပို့ရန်</string>
-    <string name="send_email">အီးမေးလ်ပို့ရန်</string>
-    <string name="sending">ပို့နေဆဲ...</string>
-    <string name="sent">ပို့ပြီး</string>
-    <string name="sent_contact">လိုအပ်ပါက %1$s မှတစ်ဆင့် ကျွန်ုပ်တို့ထံ ဆက်သွယ်ပါ</string>
-    <string name="sent_thanks">ကျေးဇူးတင်ပါသည်။</string>
     <string name="separate_filters_title">သီးခြားစစ်ထုတ်ချက်များ</string>
     <string name="separate_filters_title_first_paragraph">ယခုအခါ အဝင်နေရာနှင့် အထွက်နေရာအတွက် စစ်ထုတ်ချက်များကို သီးခြားစီ သတ်မှတ်နိုင်ပါပြီ။</string>
     <string name="separate_filters_title_second_paragraph">သင်၏ လက်ရှိ စစ်ထုတ်ချက်များကို အဝင်နေရာနှင့် အထွက်နေရာ နှစ်ခုစလုံးအတွက် အသုံးပြုထားသည်။</string>
@@ -527,7 +507,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">အခြားကွန်ရက်တစ်ခုကို ချိတ်ဆက်ကြည့်ပါ</string>
     <string name="unable_to_reach_api_dialog_message_list_third">အက်ပ်တွင် ရယူသုံးစွဲခွင့် နည်းလမ်းအားလုံးကို ဖွင့်ပါ</string>
     <string name="unable_to_reach_api_dialog_message_second">ဆင်ဆာဖြတ်တောက်မှု သို့မဟုတ် ကွန်ရက်ပြဿနာများကြောင့် ဖြစ်နိုင်သည်။ အောက်ပါတို့ကို လုပ်ဆောင်ကြည့်ပါ-</string>
-    <string name="unable_to_reach_api_dialog_message_third">ဤအဆင့်များအတိုင်း လုပ်ဆောင်သော်လည်း မပြေလည်ပါက အောက်ရှိ ခလုတ်ကို သုံး၍ သုံးစွဲသူ အကူအညီပေးရေး အဖွဲ့ထံ အီးမေးလ်တစ်စောင် ပို့ပေးပါ။ အီးမေးလ်တွင် အမည်ဝှက်ထားသော မှတ်တမ်းများကို အော်တို တွဲချိတ်သွားပါမည်။</string>
     <string name="unavailable">မရနိုင်ပါ</string>
     <string name="undo">မလုပ်တော့ပါ</string>
     <string name="unsupported_version">တွဲဖက်မလုပ်ဆောင်နိုင်သည့် ဗားရှင်း</string>
@@ -538,8 +517,6 @@
     <string name="uri_browser_app_not_found">ဘရောက်ဇာအက်ပ် တစ်ခုမျှ ထည့်သွင်းထားခြင်း မရှိပါ၊ လင့်ခ်ကို ဖွင့်၍မရပါ</string>
     <string name="uri_market_app_not_found">Android အက်ပ်စတိုး တစ်ခုမျှ ထည့်သွင်းထားခြင်း မရှိပါ၊ လင့်ခ်ကို ဖွင့်၍မရပါ</string>
     <string name="use_method">နည်းလမ်းကို သုံးရန်</string>
-    <string name="user_email_hint">သင့်အီးမေးလ် (မဖြည့်လည်း ရပါသည်)</string>
-    <string name="user_message_hint">သင့်အား ပို၍ အကူအညီပေးနိုင်ရန် အင်္ဂလိပ်ဘာသာ သို့မဟုတ် ဆွီဒင်ဘာသာဖြင့် ရေးပြီး မည်သည့်နိုင်ငံမှ သင်ချိတ်ဆက်နေသည်ကို ထည့်သွင်းဖော်ပြပါ။</string>
     <string name="username">သုံးစွဲသူအမည်</string>
     <string name="verification_failed_dialog_message">သင့်နောက်ဆုံးဝယ်ယူမှုကို အတည်မပြုနိုင်ပါ။ သင့်အင်တာနက်ချိတ်ဆက်မှုကို စစ်ဆေးပြီး ထပ်လုပ်ကြည့်ပါ။ ပြဿနာဆက်ရှိနေပါက ကူညီရေးအဖွဲ့ကို ဆက်သွယ်ပါ။</string>
     <string name="verifying_api_method">API နည်းလမ်းကို စိစစ်နေဆဲ...</string>
@@ -562,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">VPN ခွင့်ပြုချက် ချို့ယွင်းချက်</string>
     <string name="vpn_settings_not_available">VPN ဆက်တင်များကို စက်တွင် မရရှိနိုင်ပါ</string>
     <string name="warning">သတိပေးချက်</string>
-    <string name="we_will_look_into_this">ဤသည်ကို စစ်ဆေးလိုက်ပါမည်။</string>
     <string name="when_needed">လိုအပ်သည့်အခါ လုပ်ဆောင်ရန်</string>
     <string name="wireguard_custom_port_title">စိတ်ကြိုက်</string>
     <string name="wireguard_mtu_footer">WireGuard MTU တန်ဖိုးကို သတ်မှတ်ပါ။  အကျုံးဝင်သော အပိုင်းအခြား- %1$d - %2$d ။</string>

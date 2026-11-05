@@ -23,10 +23,9 @@
     <string name="all_applications">تمام اپلیکیشن‌ها</string>
     <string name="all_locations">تمام مکان‌ها</string>
     <string name="all_providers">تمام ارائه‌دهندگان</string>
-    <string name="always_on_vpn_error_notification_content">نمی‌توان اتصال تونل را آغاز کرد. لطفاً پیش از استفاده از Mullvad VPN، گزینهٔ «VPN همیشه‌فعال» را برای <b>%1$s</b> غیرفعال کنید.</string>
+    <string name="always_on_vpn_error_notification_content">نمی‌توان اتصال تونل را آغاز کرد. لطفاً پیش از استفاده از Krtek، گزینهٔ «VPN همیشه‌فعال» را برای <b>%1$s</b> غیرفعال کنید.</string>
     <string name="always_on_vpn_error_notification_title">VPN همیشه‌فعال به %1$s اختصاص داده شد</string>
     <string name="android_16_upgrade_warning_dialog_first_message">پس از به‌روزرسانی یک اپلیکیشن VPN در اندروید 16، ممکن است دستگاه‌ها به حالتی برسند که اپلیکیشن‌های VPN دیگر نتوانند به اینترنت دسترسی پیدا کنند.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">لطفاً دستگاه‌تان را دوباره راه‌اندازی کنید و دوباره تلاش کنید وصل شوید. اگر مشکل برطرف نشد، لطفاً یک ایمیل به %1$s به زبان سوئدی یا انگلیسی بنویسید.</string>
     <string name="android_16_upgrade_warning_message">‏اندروید 16 یک مشکل شناخته‌شده دارد. لطفاً دستگاه‌تان را مجدد راه‌اندازی کرده و دوباره امتحان کنید. برای کسب اطلاعات بیشتر،</string>
     <string name="android_16_upgrade_warning_title">اتصال برقرار نمی‌شود؟</string>
     <string name="anti_censorship">ضد سانسور</string>
@@ -49,7 +48,7 @@
     <string name="app_name_notes">یادداشت‌ها</string>
     <string name="app_name_weather">آب و هوا</string>
     <string name="appearance">ظاهر</string>
-    <string name="appearance_description">عنوان و آیکون اپلیکیشن Mullvad VPN را روی دستگاه اندرویدی خود تغییر دهید. این کار، آیکون هیچ‌یک از اعلان‌های مرتبط با Mullvad VPN را تغییر نخواهد داد.</string>
+    <string name="appearance_description">عنوان و آیکون اپلیکیشن Krtek را روی دستگاه اندرویدی خود تغییر دهید. این کار، آیکون هیچ‌یک از اعلان‌های مرتبط با Krtek را تغییر نخواهد داد.</string>
     <string name="appearance_description_warning"><b>توجه:</b> اپلیکیشن به‌صورت خودکار بسته می‌شود و پس از انتخاب آیکون و عنوان جدید، باید دوباره به‌صورت دستی باز شود. این موضوع بر اتصال VPN شما تأثیری نخواهد داشت.</string>
     <string name="appearance_description_warning_restart">اگر پس از بستن برنامه، نماد و عنوان همچنان تغییر نکرده‌اند، لطفاً دستگاه خود را مجدد راه‌اندازی کنید.</string>
     <string name="apply">اعمال</string>
@@ -59,7 +58,7 @@
     <string name="authentication">احراز هویت</string>
     <string name="auto_connect_and_lockdown_mode">اتصال خودکار و حالت قفل</string>
     <string name="auto_connect_and_lockdown_mode_footer">اطمینان می‌دهد که دستگاه همیشه به تونل VPN متصل باشد.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. پس از کلیک روی دکمهٔ «رفتن به تنظیمات VPN» در پایین، روی آیکون چرخ‌دندهٔ کنار نام «Mullvad VPN» کلیک کنید.</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. پس از کلیک روی دکمهٔ «رفتن به تنظیمات VPN» در پایین، روی آیکون چرخ‌دندهٔ کنار نام «Krtek» کلیک کنید.</string>
     <string name="auto_connect_carousel_first_slide_top_text">تنظیمات اتصال خودکار و حالت قفل در تنظیمات سیستمی اندروید قرار دارند. برای فعال‌کردن یکی یا هر دو، این راهنما را دنبال کنید.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. برای فعال کردن «اتصال خودکار»، روی دکمهٔ تغییر وضعیت کنار «VPN همیشه‌فعال» کلیک کنید.</string>
     <string name="auto_connect_carousel_second_slide_top_text">در تنظیمات سیستم اندروید، «اتصال خودکار» با نام «VPN همیشه‌فعال» شناخته می‌شود و باعث می‌شود دستگاه شما همیشه به تونل VPN وصل بماند و پس از راه‌اندازی مجدد نیز به‌طور خودکار دوباره متصل شود.</string>
@@ -94,7 +93,6 @@
     <string name="collapse">پنهان کردن</string>
     <string name="confirm_ipv6_dns">سرور DNS مربوط به IPv6 تنها زمانی کار می‌کند که «IPv6» را در تنظیمات VPN فعال کنید.</string>
     <string name="confirm_local_dns">سرور DNS محلی تنها زمانی کار می‌کند که «اشتراک‌گذاری شبکهٔ محلی» را در تنظیمات VPN فعال کنید.</string>
-    <string name="confirm_no_email">در حال ارسال گزارش مشکل هستید، اما راهی برای تماس با شما وجود ندارد. اگر مایل به دریافت پاسخ هستید، لطفاً یک آدرس ایمیل وارد کنید.</string>
     <string name="confirm_removal">بله، خروج از دستگاه</string>
     <string name="congrats">تبریک!</string>
     <string name="connect">اتصال</string>
@@ -105,7 +103,7 @@
     <string name="connect_panel_connection_details">جزئیات اتصال</string>
     <string name="connected">متصل شد</string>
     <string name="connecting">در حال اتصال...</string>
-    <string name="connecting_to_daemon">در حال اتصال به سرویس سیستم Mullvad...</string>
+    <string name="connecting_to_daemon">در حال اتصال به سرویس سیستم Krtek...</string>
     <string name="connection_details_in">ورودی</string>
     <string name="connection_details_out">خروجی</string>
     <string name="cont">ادامه</string>
@@ -210,7 +208,6 @@
     <string name="edit_list">ویرایش فهرست</string>
     <string name="edit_lists">ویرایش فهرست‌ها</string>
     <string name="edit_locations">ویرایش مکان‌ها</string>
-    <string name="edit_message">ویرایش پیام</string>
     <string name="edit_method">ویرایش روش</string>
     <string name="edit_name">ویرایش نام</string>
     <string name="enable">فعال کردن</string>
@@ -238,8 +235,6 @@
     <string name="failed_to_fetch_devices">بازیابی فهرست دستگاه‌ها انجام نشد</string>
     <string name="failed_to_load_products">بارگذاری محصولات ناموفق بود، لطفاً دوباره تلاش کنید</string>
     <string name="failed_to_remove_device">حذف دستگاه ناموفق بود</string>
-    <string name="failed_to_send">ارسال ناموفق بود</string>
-    <string name="failed_to_send_details">اگر از فرم خارج شوید و بعداً دوباره تلاش کنید، اطلاعاتی که قبلاً وارد کرده‌اید همچنان اینجا خواهد بود.</string>
     <string name="failed_to_set_current_test_error">تنظیم به وضعیت فعلی ناموفق بود – دسترسی به API ممکن نیست</string>
     <string name="failed_to_set_current_unknown_error">تنظیم به وضعیت فعلی ناموفق بود – دلیل نامشخص</string>
     <string name="faqs_and_guides">پرسش‌های متداول و راهنماها</string>
@@ -265,10 +260,6 @@
     <string name="import_overrides_import">وارد کردن</string>
     <string name="import_overrides_text_title">وارد کردن از طریق متن</string>
     <string name="in_app_products_unavailable">محصولات درون‌اپلیکیشنی در دسترس نیستند، لطفاً مطمئن شوید آخرین نسخهٔ Google Play را نصب کرده‌اید.</string>
-    <string name="include_account_token_checkbox_text">توکن حساب خود را ضمیمه کنید تا برای مشکلات مربوط به پرداخت یا حساب، کمک سریع‌تری دریافت کنید</string>
-    <string name="include_account_token_warning_message_first">با پیوست کردن توکن حساب‌تان، این گزارش به حساب شما متصل می‌شود و به ما کمک می‌کند مشکل‌تان را سریع‌تر حل کنیم. همهٔ گزارش‌ها پس از مدتی به‌صورت خودکار حذف می‌شوند.</string>
-    <string name="include_account_token_warning_message_second">برای بررسی جزئیات، لطفاً %1$s ما را ببینید.</string>
-    <string name="include_account_token_warning_title">این مورد بر ناشناس‌ماندن شما تأثیر می‌گذارد</string>
     <string name="info">اطلاعات</string>
     <string name="internet">اینترنت</string>
     <string name="invalid_address_blank_warning">لطفاً یک آدرس IP معتبر را وارد کنید</string>
@@ -284,7 +275,7 @@
     <string name="ipv6_unavailable">پیکربندی IPv6 ممکن نشد. آن را در اپلیکیشن غیرفعال کنید یا در دستگاه خود فعال نمایید.</string>
     <string name="is_offline">دستگاه شما آفلاین است. تونل به‌طور خودکار زمانی که دستگاه آنلاین شود، متصل خواهد شد.</string>
     <string name="language">زبان</string>
-    <string name="legacy_always_on_vpn_error_notification_content">نمی‌توان اتصال تونل را آغاز کرد. لطفاً قبل از استفاده از Mullvad VPN، گزینهٔ «VPN همیشه‌فعال» را غیرفعال کنید.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">نمی‌توان اتصال تونل را آغاز کرد. لطفاً قبل از استفاده از Krtek، گزینهٔ «VPN همیشه‌فعال» را غیرفعال کنید.</string>
     <string name="legacy_always_on_vpn_error_notification_title">VPN همیشه‌فعال به یک VPN دیگر اختصاص داده شده است</string>
     <string name="less_than_a_day_left">کمتر از یک روز از اعتبار این حساب باقی مانده است</string>
     <string name="less_than_one_day">کمتر از یک روز</string>
@@ -352,7 +343,6 @@
     <string name="next">بعدی</string>
     <string name="next_with_icon">بعدی %1$s</string>
     <string name="no_custom_lists_available">هیچ فهرست سفارشی موجود نیست</string>
-    <string name="no_email_app_available">هیچ اپلیکیشن ایمیلی روی دستگاه موجود نیست</string>
     <string name="no_internet_connection">اتصال به اینترنت وجود ندارد</string>
     <string name="no_matching_relay">هیچ سروری با تنظیمات شما مطابقت ندارد؛ لطفاً سرور یا سایر تنظیمات را تغییر دهید.</string>
     <string name="no_matching_relay_entry">هیچ سرور ورودی با تنظیمات شما مطابقت ندارد، لطفاً سرور یا سایر تنظیمات را تغییر دهید.</string>
@@ -392,8 +382,6 @@
     <string name="port">پورت</string>
     <string name="port_x">پورت: %1$s</string>
     <string name="privacy_policy_label">سیاست حفظ حریم خصوصی</string>
-    <string name="privacy_policy_lower_case">سیاست حفظ حریم خصوصی</string>
-    <string name="problem_report_description">برای کمک مؤثرتر، فایل لاگ اپلیکیشن شما به این پیام پیوست خواهد شد. داده‌های شما امن و خصوصی می‌مانند، زیرا پیش از ارسال از طریق یک کانال رمزگذاری‌شده، ناشناس‌ می‌شوند.</string>
     <string name="providers">ارائه‌دهندگان</string>
     <string name="quantum_resistant_info_first_paragraph">ویژگی زیر، تونل WireGuard را در برابر حملات احتمالی رایانه‌های کوانتومی مقاوم می‌کند.</string>
     <string name="quantum_resistant_info_second_paragraph">این کار را با انجام یک تبادل کلیدِ اضافه با استفاده از یک الگوریتم امنِ کوانتومی انجام می‌دهد و نتیجه را در رمزگذاری معمولی WireGuard ترکیب می‌کند. این مرحلهٔ اضافی، هر بار که یک تونل جدید برقرار می‌شود، حدود 500 کیلوبایت ترافیک مصرف می‌کند.</string>
@@ -416,7 +404,6 @@
     <string name="rented">اجاره‌ای</string>
     <string name="rented_only">فقط اجاره‌ای</string>
     <string name="report_a_problem">گزارش مشکل</string>
-    <string name="report_problem_message_is_empty">لطفاً یک پیغام را وارد کنید</string>
     <string name="reset_to_default_button">بازنشانی به حالت پیش‌فرض</string>
     <string name="retry">تلاش دوباره</string>
     <string name="save">ذخیره</string>
@@ -424,13 +411,6 @@
     <string name="search_no_matches_for_text">هیچ نتیجه‌ای برای «%1$s» یافت نشد، لطفاً جستجوی دیگری انجام دهید</string>
     <string name="search_placeholder">جست‌وجو برای...</string>
     <string name="select_location">انتخاب مکان</string>
-    <string name="send">ارسال</string>
-    <string name="send_anyway">با این حال ارسال کنید</string>
-    <string name="send_email">ارسال ایمیل</string>
-    <string name="sending">در حال ارسال...</string>
-    <string name="sent">ارسال شد</string>
-    <string name="sent_contact">در صورت نیاز با شما از طریق %1$s تماس خواهیم گرفت</string>
-    <string name="sent_thanks">تشکر!</string>
     <string name="server">سرور</string>
     <string name="server_ip_override">جایگزینی‌ IP سرور</string>
     <string name="server_ip_overrides_active">جایگزینی‌ها فعال هستند</string>
@@ -501,7 +481,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">اتصال به یک شبکهٔ دیگر</string>
     <string name="unable_to_reach_api_dialog_message_list_third">فعال کردن همهٔ روش‌های دسترسی در اپلیکیشن</string>
     <string name="unable_to_reach_api_dialog_message_second">این ممکن است به دلیل سانسور یا مشکلات شبکه باشد. لطفاً موارد زیر را امتحان کنید:</string>
-    <string name="unable_to_reach_api_dialog_message_third">اگر این مراحل کار نکرد، لطفاً با استفاده از دکمهٔ زیر به پشتیبانی ایمیل بزنید. این کار به‌طور خودکار گزارش‌ها را که ناشناس‌ شده‌اند، پیوست خواهد کرد.</string>
     <string name="unavailable">ناموجود</string>
     <string name="undo">لغو انجام</string>
     <string name="unsupported_version">نسخهٔ پشتیبانی‌نشده</string>
@@ -512,8 +491,6 @@
     <string name="uri_browser_app_not_found">هیچ مرورگر وبی نصب نشده است، امکان باز کردن لینک وجود ندارد</string>
     <string name="uri_market_app_not_found">هیچ فروشگاه اپلیکیشن اندروید نصب نشده است، امکان باز کردن لینک وجود ندارد</string>
     <string name="use_method">استفاده از روش</string>
-    <string name="user_email_hint">ایمیل شما (اختیاری)</string>
-    <string name="user_message_hint">برای اینکه بتوانیم بهتر کمک کنیم، لطفاً به انگلیسی یا سوئدی بنویسید و کشوری را که از آن وصل می‌شوید ذکر کنید.</string>
     <string name="username">نام کاربری</string>
     <string name="verification_failed_dialog_message">نتوانستیم آخرین خرید شما را تأیید کنیم. لطفاً اتصال اینترنت خود را بررسی کرده و دوباره تلاش کنید. اگر مشکل همچنان ادامه داشت، لطفاً با پشتیبانی تماس بگیرید.</string>
     <string name="verifying_api_method">در حال بررسی روش API...</string>
@@ -536,7 +513,6 @@
     <string name="vpn_permission_error_notification_title">خطای اجازهٔ VPN</string>
     <string name="vpn_settings_not_available">تنظیمات VPN روی این دستگاه در دسترس نیست</string>
     <string name="warning">هشدار</string>
-    <string name="we_will_look_into_this">ما این موضوع را بررسی خواهیم کرد.</string>
     <string name="wireguard_custom_port_title">سفارشی</string>
     <string name="wireguard_mtu_footer">مقدار MTU مربوط به WireGuard را تنظیم کنید. دامنهٔ معتبر: %1$d تا %2$d.</string>
     <string name="wireguard_port_is_not_supported">پورتِ %1$s انتخاب‌شده پشتیبانی نمی‌شود؛ لطفاً آن را در بخش مربوطه تغییر دهید</string>

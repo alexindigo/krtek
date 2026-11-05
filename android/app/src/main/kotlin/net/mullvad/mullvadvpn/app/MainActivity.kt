@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import net.mullvad.mullvadvpn.di.paymentModule
 import net.mullvad.mullvadvpn.di.uiModule
-import net.mullvad.mullvadvpn.lib.common.constant.KEY_REQUEST_VPN_PROFILE
+import net.mullvad.mullvadvpn.lib.common.constant.requestVpnProfileAction
 import net.mullvad.mullvadvpn.lib.common.util.CreateVpnProfile
 import net.mullvad.mullvadvpn.lib.common.util.prepareVpnSafe
 import net.mullvad.mullvadvpn.lib.endpoint.ApiEndpointFromIntentHolder
@@ -118,7 +118,7 @@ class MainActivity : ComponentActivity(), AndroidScopeComponent {
                 apiEndpointFromIntentHolder.setApiEndpointOverride(
                     intent.getApiEndpointConfigurationExtras()
                 )
-            KEY_REQUEST_VPN_PROFILE -> handleRequestVpnProfileIntent()
+            requestVpnProfileAction(packageName) -> handleRequestVpnProfileIntent()
             else -> Logger.w("Unhandled intent action: $action")
         }
     }

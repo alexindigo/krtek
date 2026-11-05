@@ -23,10 +23,9 @@
     <string name="all_applications">جميع التطبيقات</string>
     <string name="all_locations">جميع المواقع</string>
     <string name="all_providers">جميع موفري الخدمة</string>
-    <string name="always_on_vpn_error_notification_content">يتعذَّر بدء اتصال النفق. يُرجى إيقاف \"تشغيل VPN دائمًا\" لـ <b>%1$s</b> قبل استخدام Mullvad VPN.</string>
+    <string name="always_on_vpn_error_notification_content">يتعذَّر بدء اتصال النفق. يُرجى إيقاف \"تشغيل VPN دائمًا\" لـ <b>%1$s</b> قبل استخدام Krtek.</string>
     <string name="always_on_vpn_error_notification_title">تم تعيين \"تشغيل VPN دائمًا\" إلى %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">بعد تحديث تطبيق VPN على نظام التشغيل Android 16، قد تصل الأجهزة إلى حالة تفقد فيها تطبيقات VPN قدرتها على الوصول إلى الإنترنت.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">يُرجى إعادة تشغيل جهازك ومحاولة الاتصال مرة أخرى. إذا لم ينجح ذلك، يُرجى إرسال رسالة بريد إلكتروني إلى %1$s باللغة السويدية أو الإنجليزية.</string>
     <string name="android_16_upgrade_warning_message">هناك مشكلة معروفة في نظام Android 16. يُرجى إعادة تشغيل جهازك وإعادة المحاولة. لمعرفة المزيد،</string>
     <string name="android_16_upgrade_warning_title">هل يتعذَّر الاتصال؟</string>
     <string name="anti_censorship">مكافحة الرقابة</string>
@@ -49,7 +48,7 @@
     <string name="app_name_notes">ملاحظات</string>
     <string name="app_name_weather">الطقس</string>
     <string name="appearance">المظهر</string>
-    <string name="appearance_description">تغيير عنوان ورمز تطبيق VPN على جهاز Android لديك. لن يؤدي ذلك إلى تغيير الرمز لأي إشعارات متعلقة بـ Mullvad VPN.</string>
+    <string name="appearance_description">تغيير عنوان ورمز تطبيق VPN على جهاز Android لديك. لن يؤدي ذلك إلى تغيير الرمز لأي إشعارات متعلقة بـ Krtek.</string>
     <string name="appearance_description_warning"><b>تنبيه:</b> سيتم إيقاف التطبيق تلقائيًا ويلزم فتحه يدويًا مرة أخرى بعد اختيار أيقونة وعنوان جديدين. لن يؤثر ذلك على اتصال VPN لديك.</string>
     <string name="appearance_description_warning_restart">إذا لم تتغير الأيقونة والعنوان بعد إغلاق التطبيق، فالرجاء محاولة إعادة تشغيل الجهاز.</string>
     <string name="apply">تطبيق</string>
@@ -59,7 +58,7 @@
     <string name="authentication">المصادقة</string>
     <string name="auto_connect_and_lockdown_mode">الاتصال التلقائي ووضع التأمين</string>
     <string name="auto_connect_and_lockdown_mode_footer">يضمن هذا الخيار بقاء الجهاز متصلًا دائمًا بنفق VPN.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. بعد النقر على الزر \"الانتقال إلى إعدادات VPN\" أدناه، انقر على الترس الموجود بجوار اسم \"Mullvad VPN\".</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. بعد النقر على الزر \"الانتقال إلى إعدادات VPN\" أدناه، انقر على الترس الموجود بجوار اسم \"Krtek\".</string>
     <string name="auto_connect_carousel_first_slide_top_text">يمكن العثور على إعدادات \"الاتصال التلقائي\" و\"وضع التأمين\" في إعدادات نظام Android. اتَّبع هذا الدليل لتفعيل أحدهما أو كليهما.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. لتفعيل الاتصال التلقائي، انقر على زر التبديل بجوار \"تشغيل VPN دائمًا\".</string>
     <string name="auto_connect_carousel_second_slide_top_text">يُطلق على الاتصال التلقائي اسم \"تشغيل VPN دائمًا\" في إعدادات نظام Android، ويتأكد من اتصالك الدائم بنفق VPN ويتصل تلقائيًا بعد إعادة التشغيل.</string>
@@ -94,7 +93,6 @@
     <string name="collapse">طي</string>
     <string name="confirm_ipv6_dns">لن يعمل خادم IPv6 DNS ما لم يتم تفعيل \"IPv6\" ضمن إعدادات VPN.</string>
     <string name="confirm_local_dns">لن يعمل خادم DNS المحلي ما لم يتم تفعيل خاصية \"مشاركة الشبكة المحلية\" ضمن إعدادات شبكة VPN.</string>
-    <string name="confirm_no_email">أنت على وشك إرسال بلاغ بالمشكلة دون توفير وسيلة لنا للرد عليك. إذا كنت تريد الرد على بلاغك، فسيتعين عليك إدخال عنوان بريد إلكتروني.</string>
     <string name="confirm_removal">نعم، تسجيل الخروج من الجهاز</string>
     <string name="congrats">تهانينا!</string>
     <string name="connect">الاتصال</string>
@@ -105,7 +103,7 @@
     <string name="connect_panel_connection_details">تفاصيل الاتصال</string>
     <string name="connected">متصل</string>
     <string name="connecting">جارٍ الاتصال...</string>
-    <string name="connecting_to_daemon">جارٍ الاتصال بخدمة نظام Mullvad...</string>
+    <string name="connecting_to_daemon">جارٍ الاتصال بخدمة نظام Krtek...</string>
     <string name="connection_details_in">داخل</string>
     <string name="connection_details_out">خارج</string>
     <string name="cont">استمرار</string>
@@ -210,7 +208,6 @@
     <string name="edit_list">تعديل القائمة</string>
     <string name="edit_lists">تعديل القوائم</string>
     <string name="edit_locations">تعديل المواقع</string>
-    <string name="edit_message">تعديل الرسالة</string>
     <string name="edit_method">تعديل الطريقة</string>
     <string name="edit_name">تعديل الاسم</string>
     <string name="enable">تفعيل</string>
@@ -238,8 +235,6 @@
     <string name="failed_to_fetch_devices">فشل جلب قائمة الأجهزة</string>
     <string name="failed_to_load_products">فشل تحميل المنتجات، يُرجى إعادة المحاولة</string>
     <string name="failed_to_remove_device">فشلت إزالة الجهاز</string>
-    <string name="failed_to_send">فشل الإرسال</string>
-    <string name="failed_to_send_details">إذا خرجت من النموذج وحاولت مرة أخرى لاحقًا، فستظل المعلومات التي أدخلتها موجودة هنا.</string>
     <string name="failed_to_set_current_test_error">فشل التعيين إلى الحالي - واجهة API غير قابلة للوصول</string>
     <string name="failed_to_set_current_unknown_error">فشل التعيين إلى الطريقة الحالية - السبب غير معروف</string>
     <string name="faqs_and_guides">الأسئلة الشائعة والأدلة</string>
@@ -265,10 +260,6 @@
     <string name="import_overrides_import">استيراد</string>
     <string name="import_overrides_text_title">الاستيراد عبر النص</string>
     <string name="in_app_products_unavailable">المنتجات داخل التطبيق غير متاحة، يُرجى التأكد من تثبيت أحدث إصدار من Google Play.</string>
-    <string name="include_account_token_checkbox_text">تضمين رمز حسابي للحصول على مساعدة أسرع فيما يتعلق بالدفع أو المشكلات المتعلقة بالحساب</string>
-    <string name="include_account_token_warning_message_first">من خلال ربط رمز حسابك، يتم ربط هذا البلاغ بحسابك، مما يساعدنا على حل مشكلتك بشكلٍ أسرع. يتم حذف جميع البلاغات تلقائيًا بعد فترة زمنية مُحدَّدة.</string>
-    <string name="include_account_token_warning_message_second">للحصول على التفاصيل، يُرجى الاطلاع على %1$s لدينا.</string>
-    <string name="include_account_token_warning_title">يؤثر ذلك على إخفاء هويتك</string>
     <string name="info">المعلومات</string>
     <string name="internet">الإنترنت</string>
     <string name="invalid_address_blank_warning">الرجاء إدخال عنوان IP</string>
@@ -284,7 +275,7 @@
     <string name="ipv6_unavailable">تعذَّرت تهيئة بروتوكول IPv6. أوقفه في التطبيق أو فعِّله على جهازك.</string>
     <string name="is_offline">جهازك غير متصل بالإنترنت. سيتصل النفق تلقائيًا بمجرد اتصال جهازك مرة أخرى بالإنترنت.</string>
     <string name="language">اللغة</string>
-    <string name="legacy_always_on_vpn_error_notification_content">يتعذَّر بدء اتصال النفق. يُرجى إيقاف \"تشغيل VPN دائمًا\" قبل استخدام Mullvad VPN.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">يتعذَّر بدء اتصال النفق. يُرجى إيقاف \"تشغيل VPN دائمًا\" قبل استخدام Krtek.</string>
     <string name="legacy_always_on_vpn_error_notification_title">تم تعيين \"تشغيل VPN دائمًا\" إلى شبكة VPN أخرى</string>
     <string name="less_than_a_day_left">يتبقى أقل من يوم لهذا الحساب</string>
     <string name="less_than_one_day">أقل من يوم</string>
@@ -352,7 +343,6 @@
     <string name="next">التالي</string>
     <string name="next_with_icon">التالي %1$s</string>
     <string name="no_custom_lists_available">لا توجد قوائم مُخصَّصة متاحة</string>
-    <string name="no_email_app_available">لا يتوفَّر تطبيق بريد إلكتروني على الجهاز</string>
     <string name="no_internet_connection">لا يتوفَّر اتصال بالإنترنت</string>
     <string name="no_matching_relay">لا توجد خوادم تتطابق مع إعداداتك، حاول تغيير الخادم أو الإعدادات الأخرى.</string>
     <string name="no_matching_relay_entry">لا يوجد خادم دخول متطابق مع إعداداتك، جرِّب تغيير الخادم أو أي إعدادات أخرى.</string>
@@ -392,8 +382,6 @@
     <string name="port">المنفذ</string>
     <string name="port_x">المنفذ: %1$s</string>
     <string name="privacy_policy_label">سياسة الخصوصية</string>
-    <string name="privacy_policy_lower_case">سياسة الخصوصية</string>
-    <string name="problem_report_description">لمساعدتك بشكلٍ أكثر فعالية، سيتم إرفاق ملف سجل تطبيقك بهذه الرسالة. ستبقى بياناتك آمنة وسرية، حيث يتم إخفاء هويتها قبل إرسالها عبر قناة مشفرة.</string>
     <string name="providers">موفرو الخدمة</string>
     <string name="quantum_resistant_info_first_paragraph">تجعل هذه الميزة نفق WireGuard مقاومًا للهجمات المحتملة من الحواسيب الكمّية.</string>
     <string name="quantum_resistant_info_second_paragraph">وتفعل ذلك من خلال إجراء تبادل مفتاح إضافي باستخدام خوارزمية آمنة ضد هجمات الحواسيب الكميّة، ودمج النتيجة في تشفير WireGuard الاعتيادي. تستهلك هذه الخطوة الإضافية حوالي 500 كيلو بايت من حركة البيانات في كل مرة يتم فيها إنشاء نفق جديد.</string>
@@ -416,7 +404,6 @@
     <string name="rented">مؤجر</string>
     <string name="rented_only">مؤجر فقط</string>
     <string name="report_a_problem">الإبلاغ عن مشكلة</string>
-    <string name="report_problem_message_is_empty">الرجاء إدخال رسالة</string>
     <string name="reset_to_default_button">إعادة التعيين إلى الإعدادات الافتراضية</string>
     <string name="retry">إعادة المحاولة</string>
     <string name="save">حفظ</string>
@@ -424,13 +411,6 @@
     <string name="search_no_matches_for_text">لم يتم العثور على نتائج للبحث عن \"%1$s\"، يُرجى تجربة بحث مختلف</string>
     <string name="search_placeholder">ابحث عن...</string>
     <string name="select_location">حدِّد الموقع</string>
-    <string name="send">إرسال</string>
-    <string name="send_anyway">الإرسال على أي حال</string>
-    <string name="send_email">إرسال رسالة بريد إلكتروني</string>
-    <string name="sending">جارٍ الإرسال...</string>
-    <string name="sent">تم الإرسال</string>
-    <string name="sent_contact">إذا لزم الأمر، سنتواصل معك على %1$s</string>
-    <string name="sent_thanks">شكرًا لك!</string>
     <string name="server">الخادم</string>
     <string name="server_ip_override">تجاوز عنوان IP للخادم</string>
     <string name="server_ip_overrides_active">التجاوزات نشطة</string>
@@ -501,7 +481,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">الاتصال بشبكة مختلفة</string>
     <string name="unable_to_reach_api_dialog_message_list_third">تفعيل جميع طرق الوصول في التطبيق</string>
     <string name="unable_to_reach_api_dialog_message_second">قد يكون هذا بسبب الرقابة أو مشكلات في الشبكة. يُرجى تجربة ما يلي:</string>
-    <string name="unable_to_reach_api_dialog_message_third">إذا لم تنجح هذه الخطوات في حال المشكلة، يُرجى مراسلة فريق الدعم عبر البريد الإلكتروني باستخدام الزر أدناه. سيتم تلقائيًا إرفاق السجلات التي تم إخفاء هويتها.</string>
     <string name="unavailable">غير متوفر</string>
     <string name="undo">تراجع</string>
     <string name="unsupported_version">إصدار غير مدعوم</string>
@@ -512,8 +491,6 @@
     <string name="uri_browser_app_not_found">لم يتم تثبيت تطبيق متصفح، تعذَّر فتح الرابط</string>
     <string name="uri_market_app_not_found">لم يتم تثبيت متجر تطبيقات Android، تعذَّر فتح الرابط</string>
     <string name="use_method">استخدام الطريقة</string>
-    <string name="user_email_hint">بريدك الإلكتروني (اختياري)</string>
-    <string name="user_message_hint">لمساعدتك بشكلٍ أفضل، يُرجى الكتابة باللغة الإنجليزية أو السويدية مع ذكر البلد الذي تتصل منه.</string>
     <string name="username">اسم المستخدم</string>
     <string name="verification_failed_dialog_message">تعذر التحقق من آخر عملية شراء أجريتها. يرجى فحص اتصالك بالإنترنت وحاول مرة أخرى. إذا استمرت المشكلة، فيرجى الاتصال بالدعم.</string>
     <string name="verifying_api_method">جار التحقُّق من طريقة واجهة API...</string>
@@ -536,7 +513,6 @@
     <string name="vpn_permission_error_notification_title">خطأ في إذن شبكة VPN</string>
     <string name="vpn_settings_not_available">إعدادات شبكة VPN غير متاحة على الجهاز</string>
     <string name="warning">تحذير</string>
-    <string name="we_will_look_into_this">سوف ننظر في هذا الأمر.</string>
     <string name="wireguard_custom_port_title">مُخصَّص</string>
     <string name="wireguard_mtu_footer">قم بتعيين قيمة WireGuard MTU. النطاق الصالح: %1$d - %2$d.</string>
     <string name="wireguard_port_is_not_supported">المنفذ المُحدَّد %1$s غير مدعوم، يُرجى تغييره ضمن</string>

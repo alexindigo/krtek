@@ -22,10 +22,10 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
-import net.mullvad.mullvadvpn.lib.common.constant.KEY_CONNECT_ACTION
-import net.mullvad.mullvadvpn.lib.common.constant.KEY_DISCONNECT_ACTION
 import net.mullvad.mullvadvpn.lib.common.constant.MAIN_ACTIVITY_CLASS
 import net.mullvad.mullvadvpn.lib.common.constant.VPN_SERVICE_CLASS
+import net.mullvad.mullvadvpn.lib.common.constant.connectAction
+import net.mullvad.mullvadvpn.lib.common.constant.disconnectAction
 import net.mullvad.mullvadvpn.lib.common.util.getSupportedPendingIntentFlags
 import net.mullvad.mullvadvpn.lib.common.util.prepareVpnSafe
 import net.mullvad.mullvadvpn.lib.grpc.GrpcConnectivityState
@@ -100,9 +100,9 @@ class MullvadTileService : TileService() {
                     setClassName(applicationContext.packageName, VPN_SERVICE_CLASS)
                     action =
                         if (qsTile.state == Tile.STATE_INACTIVE) {
-                            KEY_CONNECT_ACTION
+                            connectAction(applicationContext.packageName)
                         } else {
-                            KEY_DISCONNECT_ACTION
+                            disconnectAction(applicationContext.packageName)
                         }
                 }
 

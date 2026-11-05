@@ -27,7 +27,6 @@
     <string name="always_on_vpn_error_notification_content">Kunne ikke starte tunnelforbindelse. Deaktiver Altid-til VPN for <b>%1$s</b>.</string>
     <string name="always_on_vpn_error_notification_title">Altid-til VPN tildelt %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Når en VPN-app er blevet opdateret på Android 16, kan enheder ende i en tilstand, hvor VPN-apps ikke længere kan få kontakt til internettet.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Genstart din enhed, og prøv at oprette forbindelse igen. Hvis det ikke hjælper, kan du skrive en e-mail til %1$s på svensk eller engelsk.</string>
     <string name="android_16_upgrade_warning_message">Android 16 har et kendt problem. Genstart din enhed, og prøv igen. For at få mere at vide</string>
     <string name="android_16_upgrade_warning_title">Kan du ikke oprette forbindelse?</string>
     <string name="anti_censorship">Anti-censur</string>
@@ -50,7 +49,7 @@
     <string name="app_name_notes">Noter</string>
     <string name="app_name_weather">Vejr</string>
     <string name="appearance">Udseende</string>
-    <string name="appearance_description">Ændr titlen og ikonet for Mullvad VPN-appen på din Android-enhed. Dette ændrer ikke ikonet for Mullvad VPN-relaterede notifikationer.</string>
+    <string name="appearance_description">Ændr titlen og ikonet for Krtek-appen på din Android-enhed. Dette ændrer ikke ikonet for Krtek-relaterede notifikationer.</string>
     <string name="appearance_description_warning"><b>Bemærk:</b> Appen lukker automatisk og skal åbnes igen manuelt efter valg af et nyt ikon og en ny titel. Dette påvirker ikke din VPN-forbindelse.</string>
     <string name="appearance_description_warning_restart">Hvis ikonet og titlen stadig ikke er ændret, efter at appen er lukket, skal du prøve at genstarte enheden.</string>
     <string name="apply">Anvend</string>
@@ -60,7 +59,7 @@
     <string name="authentication">Godkendelse</string>
     <string name="auto_connect_and_lockdown_mode">Auto-tilslutning og Lockdown-tilstand</string>
     <string name="auto_connect_and_lockdown_mode_footer">Sørger for, at enheden altid er på VPN-tunnelen.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. Når du har klikket på knappen \"Gå til VPN-indstillinger \"nedenfor, skal du klikke på tandhjulet ved siden af navnet \"Mullvad VPN\".</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. Når du har klikket på knappen \"Gå til VPN-indstillinger \"nedenfor, skal du klikke på tandhjulet ved siden af navnet \"Krtek\".</string>
     <string name="auto_connect_carousel_first_slide_top_text">Indstillingerne for automatisk forbindelse og Lockdown-tilstand kan findes i Android- systemindstillingerne. Følg denne vejledning for at aktivere en eller begge.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. For at aktivere automatisk forbindelse skal du klikke på knappen ved siden af \"Altid-til VPN\".</string>
     <string name="auto_connect_carousel_second_slide_top_text">Auto-tilslutning kaldes Altid-til VPN i Android-systemindstillingerne, og det sørger for, at du konstant er forbundet til VPN-tunnelen og automatisk forbinder efter genstart.</string>
@@ -96,7 +95,6 @@
     <string name="collapse">Skjul</string>
     <string name="confirm_ipv6_dns">IPv6 DNS-serveren fungerer ikke, medmindre du aktiverer \"IPv6\" under VPN-indstillinger.</string>
     <string name="confirm_local_dns">Den lokale DNS-server fungerer ikke, medmindre du aktiverer \"Lokal netværksdeling\" under VPN-indstillinger.</string>
-    <string name="confirm_no_email">Du er ved at sende rapporten om problemet, men har ikke angivet hvordan vi kan kontakte dig. Hvis du ønsker et svar på din rapport, skal du indtaste en e-mail-adresse.</string>
     <string name="confirm_removal">Ja, log enhed af</string>
     <string name="congrats">Tillykke!</string>
     <string name="connect">Tilslut</string>
@@ -107,7 +105,7 @@
     <string name="connect_panel_connection_details">Forbindelsesoplysninger</string>
     <string name="connected">Tilsluttet</string>
     <string name="connecting">Tilslutter...</string>
-    <string name="connecting_to_daemon">Opretter forbindelse til Mullvad-systemtjeneste...</string>
+    <string name="connecting_to_daemon">Opretter forbindelse til Krtek-systemtjeneste...</string>
     <string name="connection_details_in">Ind</string>
     <string name="connection_details_out">Ud</string>
     <string name="cont">Fortsæt</string>
@@ -215,7 +213,6 @@
     <string name="edit_list">Rediger liste</string>
     <string name="edit_lists">Rediger lister</string>
     <string name="edit_locations">Rediger placeringer</string>
-    <string name="edit_message">Rediger meddelelse</string>
     <string name="edit_method">Rediger metode</string>
     <string name="edit_name">Rediger navn</string>
     <string name="enable">Aktiver</string>
@@ -248,8 +245,6 @@
     <string name="failed_to_fetch_devices">Kunne ikke hente listen over enheder</string>
     <string name="failed_to_load_products">Kunne ikke indlæse produkter, prøv igen</string>
     <string name="failed_to_remove_device">Enheden kunne ikke fjernes</string>
-    <string name="failed_to_send">Kunne ikke sende</string>
-    <string name="failed_to_send_details">Hvis du lukker formularen og prøver igen senere, vil de oplysninger, du allerede har indtastet, stadig være her.</string>
     <string name="failed_to_set_current_test_error">Kunne ikke indstilles til aktuel - API ikke tilgængelig</string>
     <string name="failed_to_set_current_unknown_error">Kunne ikke indstilles til aktuel - Ukendt årsag</string>
     <string name="faqs_and_guides">Ofte stillede spørgsmål og vejledninger</string>
@@ -275,10 +270,6 @@
     <string name="import_overrides_import">Importer</string>
     <string name="import_overrides_text_title">Importer via tekst</string>
     <string name="in_app_products_unavailable">Produkter i appen er ikke tilgængelige, sørg for at du har den nyeste version af Google Play.</string>
-    <string name="include_account_token_checkbox_text">Inkluder min konto-token for hurtigere hjælp med betalings- eller kontorelaterede problemer</string>
-    <string name="include_account_token_warning_message_first">Ved at vedhæfte dit konto-token knyttes denne rapport til din konto, og det hjælper os med at løse dit problem hurtigere. Alle rapporter bliver automatisk slettet efter noget tid.</string>
-    <string name="include_account_token_warning_message_second">Se vores %1$s for at få flere oplysninger.</string>
-    <string name="include_account_token_warning_title">Dette påvirker din anonymitet</string>
     <string name="info">Info</string>
     <string name="internet">Internet</string>
     <string name="invalid_address_blank_warning">Indtast en IP-adresse</string>
@@ -294,7 +285,7 @@
     <string name="ipv6_unavailable">Kunne ikke konfigurere IPv6. Deaktiver det i appen, eller aktiver det på din enhed.</string>
     <string name="is_offline">Din enhed er offline. Tunnelen vil oprette forbindelse automatisk, når din enhed er online igen.</string>
     <string name="language">Sprog</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Kunne ikke starte tunnelforbindelse. Deaktiver Altid-til VPN før brug af Mullvad VPN.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Kunne ikke starte tunnelforbindelse. Deaktiver Altid-til VPN før brug af Krtek.</string>
     <string name="legacy_always_on_vpn_error_notification_title">Altid-til VPN tildelt en anden VPN</string>
     <string name="less_than_a_day_left">Mindre end en dag tilbage på denne konto</string>
     <string name="less_than_one_day">mindre end én dag</string>
@@ -371,7 +362,6 @@
     <string name="next">Næste</string>
     <string name="next_with_icon">Næste %1$s</string>
     <string name="no_custom_lists_available">Ingen brugerdefinerede lister tilgængelige</string>
-    <string name="no_email_app_available">Ingen e-mailapp tilgængelig på enheden</string>
     <string name="no_internet_connection">Ingen internetforbindelse</string>
     <string name="no_matching_relay">Ingen servere matcher dine indstillinger. Prøv at ændre server eller andre indstillinger.</string>
     <string name="no_matching_relay_entry">Ingen indgangsserver matcher dine indstillinger. Prøv at ændre server eller andre indstillinger.</string>
@@ -411,8 +401,6 @@
     <string name="port">Port</string>
     <string name="port_x">Port: %1$s</string>
     <string name="privacy_policy_label">Fortrolighedspolitik</string>
-    <string name="privacy_policy_lower_case">fortrolighedspolitik</string>
-    <string name="problem_report_description">For at vi bedre kan hjælpe dig, bedes du vedhæfte din apps logfil til denne meddelelse. Dine data vil forblive sikre og private, da de anonymiseres, før de sendes via en krypteret kanal.</string>
     <string name="providers">Udbydere</string>
     <string name="quantum_resistant_info_first_paragraph">Denne funktion gør WireGuard-tunnelen modstandsdygtig over for potentielle angreb fra kvantecomputere.</string>
     <string name="quantum_resistant_info_second_paragraph">Det gør den ved at udføre en ekstra nøgleudveksling ved hjælp af en kvantesikker algoritme og blande resultatet med WireGuards almindelige kryptering. Dette ekstra trin bruger cirka 500 kB trafik, hver gang en ny tunnel etableres.</string>
@@ -435,7 +423,6 @@
     <string name="rented">Lejet</string>
     <string name="rented_only">Kun lejet</string>
     <string name="report_a_problem">Rapporter et problem</string>
-    <string name="report_problem_message_is_empty">Indtast en besked</string>
     <string name="reset_to_default_button">Nulstil til standard</string>
     <string name="retry">Prøv igen</string>
     <string name="save">Gem</string>
@@ -443,13 +430,6 @@
     <string name="search_no_matches_for_text">Intet resultat for \"%1$s\". Prøv en anden søgning</string>
     <string name="search_placeholder">Søg efter...</string>
     <string name="select_location">Vælg placering</string>
-    <string name="send">Send</string>
-    <string name="send_anyway">Send alligevel</string>
-    <string name="send_email">Send e-mail</string>
-    <string name="sending">Sender...</string>
-    <string name="sent">Sendt</string>
-    <string name="sent_contact">Hvis det er nødvendigt, kontakter vi dig på %1$s</string>
-    <string name="sent_thanks">Tak!</string>
     <string name="separate_filters_title">Separate filtre</string>
     <string name="separate_filters_title_first_paragraph">Filtre kan nu indstilles separat for indgangs- og udgangsplaceringer.</string>
     <string name="separate_filters_title_second_paragraph">Dine nuværende filtre blev anvendt på både indgangs- og udgangsplaceringer.</string>
@@ -527,7 +507,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Opret forbindelse til et andet netværk</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Aktiver alle adgangsmetoder i appen</string>
     <string name="unable_to_reach_api_dialog_message_second">Det kan være pga. censur eller netværksproblemer. Prøv at:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Hvis disse trin ikke virker, kan du sende en e-mail til support via knappen nedenfor. Den vil automatisk vedhæfte de logfiler, som er blevet anonymiseret.</string>
     <string name="unavailable">Ikke tilgængelig</string>
     <string name="undo">Fortryd</string>
     <string name="unsupported_version">IKKE-UNDERSTØTTET VERSION</string>
@@ -538,8 +517,6 @@
     <string name="uri_browser_app_not_found">Der er ikke installeret nogen browser-app, så linket kunne ikke åbnes</string>
     <string name="uri_market_app_not_found">Der er ikke installeret nogen Android-appbutik, og linket kunne ikke åbnes</string>
     <string name="use_method">Brug metode</string>
-    <string name="user_email_hint">Din e-mail (valgfrit)</string>
-    <string name="user_message_hint">For at vi bedre kan hjælpe dig, bedes du skrive på engelsk eller svensk og nævne hvilket land, du befinder dig i.</string>
     <string name="username">Brugernavn</string>
     <string name="verification_failed_dialog_message">Vi kunne ikke bekræfte dit seneste køb. Tjek din internetforbindelse, og prøv igen. Kontakt support, hvis problemet fortsætter.</string>
     <string name="verifying_api_method">Bekræfter API-metode...</string>
@@ -562,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">VPN-tilladelsesfejl</string>
     <string name="vpn_settings_not_available">VPN-indstillinger er ikke tilgængelige på enheden</string>
     <string name="warning">Advarsel</string>
-    <string name="we_will_look_into_this">Vi vil undersøge dette.</string>
     <string name="when_needed">Efter behov</string>
     <string name="wireguard_custom_port_title">Brugerdefineret</string>
     <string name="wireguard_mtu_footer">Indstil WireGuard MTU-værdi. Gyldigt område: %1$d - %2$d.</string>

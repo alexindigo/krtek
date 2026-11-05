@@ -18,9 +18,9 @@ import net.mullvad.mullvadvpn.BuildConfig
 import net.mullvad.mullvadvpn.app.service.migration.MigrateSplitTunneling
 import net.mullvad.mullvadvpn.app.service.notifications.ForegroundNotificationManager
 import net.mullvad.mullvadvpn.di.vpnServiceModule
-import net.mullvad.mullvadvpn.lib.common.constant.KEY_CONNECT_ACTION
-import net.mullvad.mullvadvpn.lib.common.constant.KEY_DISCONNECT_ACTION
-import net.mullvad.mullvadvpn.lib.common.constant.KEY_RECONNECT_ACTION
+import net.mullvad.mullvadvpn.lib.common.constant.connectAction
+import net.mullvad.mullvadvpn.lib.common.constant.disconnectAction
+import net.mullvad.mullvadvpn.lib.common.constant.reconnectAction
 import net.mullvad.mullvadvpn.lib.endpoint.ApiEndpointFromIntentHolder
 import net.mullvad.mullvadvpn.lib.grpc.ManagementService
 import net.mullvad.mullvadvpn.lib.model.DisconnectReason
@@ -115,17 +115,17 @@ class MullvadVpnService : TalpidVpnService() {
                 Logger.i("Keyguard is locked, ignoring command")
             }
 
-            intent.isFromSystem() || intent?.action == KEY_CONNECT_ACTION -> {
+            intent.isFromSystem() || intent?.action == connectAction(packageName) -> {
                 foregroundNotificationHandler.startForeground()
                 lifecycleScope.launch { connectionProxy.connectWithoutPermissionCheck() }
             }
 
-            intent?.action == KEY_RECONNECT_ACTION -> {
+            intent?.action == reconnectAction(packageName) -> {
                 foregroundNotificationHandler.startForeground()
                 lifecycleScope.launch { connectionProxy.reconnect() }
             }
 
-            intent?.action == KEY_DISCONNECT_ACTION -> {
+            intent?.action == disconnectAction(packageName) -> {
                 // MullvadTileService might have launched this service with the expectancy of it
                 // being in the foreground, thus it must go into foreground to please the android
                 // system

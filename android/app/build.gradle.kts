@@ -50,7 +50,7 @@ android {
     ndkVersion = libs.versions.ndk.get()
 
     defaultConfig {
-        applicationId = "net.mullvad.mullvadvpn"
+        applicationId = "io.github.alexindigo.krtek"
         minSdk = libs.versions.min.sdk.get().toInt()
         targetSdk = libs.versions.target.sdk.get().toInt()
         versionCode = appVersion.code
@@ -129,7 +129,7 @@ android {
         }
         create(Flavors.DEVMOLE) {
             dimension = FlavorDimensions.INFRASTRUCTURE
-            applicationId = "net.mullvad.mullvadvpn.devmole"
+            applicationId = "io.github.alexindigo.krtek.devmole"
             buildConfigField("String", "API_ENDPOINT", "\"api-app.devmole.eu\"")
             buildConfigField("String", "API_IP", "\"185.217.116.4\"")
             buildConfigField("String", "AM_I_URL", "\"am.i.devmole.eu\"")
@@ -145,7 +145,7 @@ android {
         }
         create(Flavors.STAGEMOLE) {
             dimension = FlavorDimensions.INFRASTRUCTURE
-            applicationId = "net.mullvad.mullvadvpn.stagemole"
+            applicationId = "io.github.alexindigo.krtek.stagemole"
             buildConfigField("String", "API_ENDPOINT", "\"api-app.stagemole.eu\"")
             buildConfigField("String", "API_IP", "\"185.217.116.132\"")
             buildConfigField("String", "AM_I_URL", "\"am.i.stagemole.eu\"")

@@ -24,10 +24,9 @@
     <string name="all_locations">Toutes les localisations</string>
     <string name="all_providers">Tous les fournisseurs</string>
     <string name="always">Toujours</string>
-    <string name="always_on_vpn_error_notification_content">Impossible de démarrer la connexion au tunnel. Veuillez désactiver « Toujours exiger un VPN « pour <b>%1$s</b> avant d\'utiliser Mullvad VPN.</string>
+    <string name="always_on_vpn_error_notification_content">Impossible de démarrer la connexion au tunnel. Veuillez désactiver « Toujours exiger un VPN « pour <b>%1$s</b> avant d\'utiliser Krtek.</string>
     <string name="always_on_vpn_error_notification_title">« Toujours exiger un VPN » est assigné à %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Après la mise à jour d\'une application de VPN sur Android 16, les appareils peuvent se retrouver dans un état où ces applications de VPN ne sont plus en mesure d\'accéder à Internet.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Veuillez redémarrer votre appareil et réessayer de vous connecter. Si cela ne fonctionne pas, veuillez envoyer un e-mail à %1$s en suédois ou en anglais.</string>
     <string name="android_16_upgrade_warning_message">Android 16 présente un problème connu. Veuillez redémarrer votre appareil et réessayer. Pour en savoir plus,</string>
     <string name="android_16_upgrade_warning_title">Connexion impossible ?</string>
     <string name="anti_censorship">Anti-censure</string>
@@ -50,7 +49,7 @@
     <string name="app_name_notes">Remarques</string>
     <string name="app_name_weather">Météo</string>
     <string name="appearance">Apparence</string>
-    <string name="appearance_description">Modifiez le titre et l\'icône de l\'application Mullvad VPN sur votre appareil Android. Cela ne modifiera pas l\'icône pour les notifications liées à Mullvad VPN.</string>
+    <string name="appearance_description">Modifiez le titre et l\'icône de l\'application Krtek sur votre appareil Android. Cela ne modifiera pas l\'icône pour les notifications liées à Krtek.</string>
     <string name="appearance_description_warning"><b>Attention :</b> l\'application se fermera automatiquement et devra être rouverte manuellement après avoir sélectionné une nouvelle icône et un nouveau titre. Cela n\'affectera pas votre connexion VPN.</string>
     <string name="appearance_description_warning_restart">Si l\'icône et le titre ne changent toujours pas une fois l\'application fermée, veuillez essayer de redémarrer l\'appareil.</string>
     <string name="apply">Appliquer</string>
@@ -60,7 +59,7 @@
     <string name="authentication">Authentification</string>
     <string name="auto_connect_and_lockdown_mode">Connexion automatique et mode Verrouillage</string>
     <string name="auto_connect_and_lockdown_mode_footer">Permet de s\'assurer que l\'appareil est toujours sur le tunnel VPN.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. Après avoir cliqué sur le bouton « Aller aux paramètres VPN » ci-dessous, cliquez sur l\'engrenage à côté du nom « Mullvad VPN ».</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. Après avoir cliqué sur le bouton « Aller aux paramètres VPN » ci-dessous, cliquez sur l\'engrenage à côté du nom « Krtek ».</string>
     <string name="auto_connect_carousel_first_slide_top_text">Les paramètres de la connexion automatique et du mode Verrouillage se trouvent dans les paramètres du système Android, suivez ce guide pour activer l\'un, l\'autre ou les deux.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. Pour activer la connexion automatique, cliquez sur l\'interrupteur situé à côté de « Toujours exiger un VPN ».</string>
     <string name="auto_connect_carousel_second_slide_top_text">La connexion automatique est appelée VPN toujours actif dans les paramètres du système Android et elle s\'assure que vous êtes constamment connecté au tunnel VPN et se connecte automatiquement après le redémarrage.</string>
@@ -96,7 +95,6 @@
     <string name="collapse">Réduire</string>
     <string name="confirm_ipv6_dns">Le serveur DNS IPv6 ne fonctionnera pas si vous n\'activez pas « IPv6 » dans les paramètres VPN.</string>
     <string name="confirm_local_dns">Le serveur DNS local ne fonctionnera pas si vous n\'activez pas le « Partage du réseau local » dans les paramètres VPN.</string>
-    <string name="confirm_no_email">Vous êtes sur le point d\'envoyer un signalement de problème sans nous fournir un moyen de vous contacter. Si vous désirez une réponse à votre signalement, vous devez saisir une adresse e-mail.</string>
     <string name="confirm_removal">Oui, déconnecter l\'appareil</string>
     <string name="congrats">Félicitations !</string>
     <string name="connect">Connexion</string>
@@ -107,7 +105,7 @@
     <string name="connect_panel_connection_details">Détails de la connexion</string>
     <string name="connected">Connecté</string>
     <string name="connecting">Connexion...</string>
-    <string name="connecting_to_daemon">Connexion au service système Mullvad...</string>
+    <string name="connecting_to_daemon">Connexion au service système Krtek...</string>
     <string name="connection_details_in">Entrante</string>
     <string name="connection_details_out">Sortante</string>
     <string name="cont">Continuer</string>
@@ -215,7 +213,6 @@
     <string name="edit_list">Modifier la liste</string>
     <string name="edit_lists">Modifier les listes</string>
     <string name="edit_locations">Modifier les localisations</string>
-    <string name="edit_message">Modifier le message</string>
     <string name="edit_method">Modifier le mode</string>
     <string name="edit_name">Modifier le nom</string>
     <string name="enable">Activer</string>
@@ -248,8 +245,6 @@
     <string name="failed_to_fetch_devices">Impossible de récupérer la liste des appareils</string>
     <string name="failed_to_load_products">Échec du chargement des produits. Veuillez réessayer</string>
     <string name="failed_to_remove_device">Impossible de supprimer l\'appareil</string>
-    <string name="failed_to_send">Échec de l\'envoi</string>
-    <string name="failed_to_send_details">Si vous quittez le formulaire et réessayez plus tard, les informations que vous avez déjà saisies seront toujours là.</string>
     <string name="failed_to_set_current_test_error">Impossible de définir sur la méthode actuelle - API injoignable</string>
     <string name="failed_to_set_current_unknown_error">Impossible de définir sur la méthode actuelle - Raison inconnue</string>
     <string name="faqs_and_guides">FAQ et guides</string>
@@ -275,10 +270,6 @@
     <string name="import_overrides_import">Importer</string>
     <string name="import_overrides_text_title">Importer par texte</string>
     <string name="in_app_products_unavailable">Produits dans l\'application indisponibles. Veuillez vous assurer que vous avez la dernière version de Google Play.</string>
-    <string name="include_account_token_checkbox_text">Inclure mon jeton de compte pour recevoir plus rapidement de l\'aide avec les problèmes relatifs aux paiements ou à mon compte</string>
-    <string name="include_account_token_warning_message_first">Joindre votre jeton de compte rattachera ce rapport à votre compte, ce qui nous aidera à résoudre votre problème plus vite. Tous les rapports sont automatiquement supprimés après une certaine période.</string>
-    <string name="include_account_token_warning_message_second">Pour plus d\'informations, veuillez consulter notre %1$s.</string>
-    <string name="include_account_token_warning_title">Ceci affecte votre anonymat</string>
     <string name="info">Informations</string>
     <string name="internet">Internet</string>
     <string name="invalid_address_blank_warning">Veuillez saisir une adresse IP</string>
@@ -294,7 +285,7 @@
     <string name="ipv6_unavailable">Impossible de configurer IPv6. Désactivez le protocole dans l\'application ou activez-le dans votre appareil.</string>
     <string name="is_offline">Votre appareil est hors ligne. Le tunnel se connectera automatiquement une fois votre appareil à nouveau en ligne.</string>
     <string name="language">Langue</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Impossible de démarrer la connexion au tunnel. Veuillez désactiver Toujours exiger un VPN avant d\'utiliser Mullvad VPN.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Impossible de démarrer la connexion au tunnel. Veuillez désactiver Toujours exiger un VPN avant d\'utiliser Krtek.</string>
     <string name="legacy_always_on_vpn_error_notification_title">« Toujours exiger un VPN » est assigné à un autre VPN</string>
     <string name="less_than_a_day_left">Moins d\'un jour restant sur ce compte</string>
     <string name="less_than_one_day">moins d\'un jour</string>
@@ -371,7 +362,6 @@
     <string name="next">Suivant</string>
     <string name="next_with_icon">Suivant %1$s</string>
     <string name="no_custom_lists_available">Aucune liste personnalisée disponible</string>
-    <string name="no_email_app_available">Aucune application d\'e-mail disponible sur cet appareil</string>
     <string name="no_internet_connection">Aucune connexion à Internet</string>
     <string name="no_matching_relay">Aucun serveur ne correspond à vos paramètres, essayez de modifier les paramètres du serveur ou d\'autres paramètres.</string>
     <string name="no_matching_relay_entry">Aucun serveur d\'entrée ne correspond à vos paramètres, essayez de modifier les paramètres du serveur ou d\'autres paramètres.</string>
@@ -411,8 +401,6 @@
     <string name="port">Port</string>
     <string name="port_x">Port : %1$s</string>
     <string name="privacy_policy_label">Politique de confidentialité</string>
-    <string name="privacy_policy_lower_case">politique de confidentialité</string>
-    <string name="problem_report_description">Pour mieux vous aider, le fichier journal de l\'application est joint à ce message. Vos données restent privées et en sécurité dans la mesure où elles sont rendues anonymes avant d\'être envoyées via un canal chiffré.</string>
     <string name="providers">Fournisseurs</string>
     <string name="quantum_resistant_info_first_paragraph">Cette fonctionnalité rend le tunnel WireGuard résistant aux attaques potentielles des ordinateurs quantiques.</string>
     <string name="quantum_resistant_info_second_paragraph">Pour ce faire, il effectue un échange de clés supplémentaire à l\'aide d\'un algorithme à sécurité quantique et mélange le résultat au chiffrement habituel de WireGuard. Cette étape supplémentaire utilise environ 500 kiB de trafic chaque fois qu\'un nouveau tunnel est établi.</string>
@@ -435,7 +423,6 @@
     <string name="rented">Loué</string>
     <string name="rented_only">Loués uniquement</string>
     <string name="report_a_problem">Signaler un problème</string>
-    <string name="report_problem_message_is_empty">Veuillez saisir un message</string>
     <string name="reset_to_default_button">Réinitialiser à la valeur par défaut</string>
     <string name="retry">Réessayer</string>
     <string name="save">Enregistrer</string>
@@ -443,13 +430,6 @@
     <string name="search_no_matches_for_text">Aucun résultat pour « %1$s ». Veuillez essayer une autre recherche</string>
     <string name="search_placeholder">Rechercher...</string>
     <string name="select_location">Sélectionner une localisation</string>
-    <string name="send">Envoyer</string>
-    <string name="send_anyway">Envoyer quand même</string>
-    <string name="send_email">Envoyer un e-mail</string>
-    <string name="sending">Envoi...</string>
-    <string name="sent">Envoyé</string>
-    <string name="sent_contact">Si nécessaire, nous vous contacterons à l\'adresse %1$s</string>
-    <string name="sent_thanks">Merci !</string>
     <string name="separate_filters_title">Filtres distincts</string>
     <string name="separate_filters_title_first_paragraph">Les filtres peuvent désormais être réglés séparément pour les localisations d\'entrée et de sortie.</string>
     <string name="separate_filters_title_second_paragraph">Vos filtres actuels ont été appliqués à la fois aux points d\'entrée et de sortie.</string>
@@ -527,7 +507,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Connectez-vous à un réseau différent</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Activer tous les modes d\'accès dans l\'application</string>
     <string name="unable_to_reach_api_dialog_message_second">Cela peut être dû à de la censure ou à des problèmes de réseau. Veuillez essayer :</string>
-    <string name="unable_to_reach_api_dialog_message_third">Si ces étapes ne fonctionnent pas, veuillez envoyer un e-mail à l\'assistance à l\'aide du bouton ci-dessous. Les fichiers journaux anonymisés y seront automatiquement joints.</string>
     <string name="unavailable">Indisponible</string>
     <string name="undo">Annuler</string>
     <string name="unsupported_version">VERSION NON PRISE EN CHARGE</string>
@@ -538,8 +517,6 @@
     <string name="uri_browser_app_not_found">Aucune application de navigateur n\'est installée, le lien ne peut pas être ouvert</string>
     <string name="uri_market_app_not_found">Aucune boutique d\'applications Android n\'est installée, le lien n\'a pas pu être ouvert</string>
     <string name="use_method">Utiliser la méthode</string>
-    <string name="user_email_hint">Votre e-mail (facultatif)</string>
-    <string name="user_message_hint">Pour nous permettre de mieux vous assister, merci d\'écrire en anglais ou en suédois et d\'indiquer le pays à partir duquel vous vous connectez.</string>
     <string name="username">Nom d\'utilisateur</string>
     <string name="verification_failed_dialog_message">Nous n\'avons pas pu vérifier votre dernier achat. Veuillez vérifier votre connexion Internet et réessayer. Si le problème persiste, veuillez contacter le service d\'assistance.</string>
     <string name="verifying_api_method">Vérification de la méthode API...</string>
@@ -562,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">Erreur de permission VPN</string>
     <string name="vpn_settings_not_available">Les paramètres VPN ne sont pas disponibles sur l\'appareil</string>
     <string name="warning">Avertissement</string>
-    <string name="we_will_look_into_this">Nous allons nous pencher dessus.</string>
     <string name="when_needed">Quand nécessaire</string>
     <string name="wireguard_custom_port_title">Personnalisé</string>
     <string name="wireguard_mtu_footer">Définir la valeur MTU WireGuard. Plage valide : %1$d - %2$d.</string>

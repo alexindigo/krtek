@@ -24,10 +24,9 @@
     <string name="all_locations">所有位置</string>
     <string name="all_providers">所有供應商</string>
     <string name="always">一律</string>
-    <string name="always_on_vpn_error_notification_content">無法啟動通道連線。在使用 Mullvad VPN 之前，請先為 <b>%1$s</b> 停用「始終啟用 VPN」。</string>
+    <string name="always_on_vpn_error_notification_content">無法啟動通道連線。在使用 Krtek 之前，請先為 <b>%1$s</b> 停用「始終啟用 VPN」。</string>
     <string name="always_on_vpn_error_notification_title">「一律啟用 VPN」已指派給 %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">在 Android 16 更新 VPN 應用程式後，裝置可能會出現 VPN 應用程式無法連線至網際網路的情況。</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">請重新啟動您的裝置並嘗試重新連線。若不成功，請以瑞典語或英語撰寫電子郵件並寄至 %1$s。</string>
     <string name="android_16_upgrade_warning_message">Android 16 存在已知問題。請重新啟動您的裝置並再試一次。如需更多資訊，</string>
     <string name="android_16_upgrade_warning_title">無法連線嗎？</string>
     <string name="anti_censorship">反審查</string>
@@ -50,7 +49,7 @@
     <string name="app_name_notes">記事</string>
     <string name="app_name_weather">天氣</string>
     <string name="appearance">外觀</string>
-    <string name="appearance_description">變更您 Android 裝置上 Mullvad VPN 應用程式的圖示與標題。這不會變更 Mullvad VPN 相關通知所使用的圖示。</string>
+    <string name="appearance_description">變更您 Android 裝置上 Krtek 應用程式的圖示與標題。這不會變更 Krtek 相關通知所使用的圖示。</string>
     <string name="appearance_description_warning"><b>請注意：</b>應用程式將自動關閉，在選擇新的圖示與標題後，需手動重新開啟。這不會影響您的 VPN 連線。</string>
     <string name="appearance_description_warning_restart">如果關閉應用程式後，圖示和標題仍未變更，請嘗試重新啟動裝置。</string>
     <string name="apply">套用</string>
@@ -60,7 +59,7 @@
     <string name="authentication">驗證</string>
     <string name="auto_connect_and_lockdown_mode">自動連線和鎖定模式</string>
     <string name="auto_connect_and_lockdown_mode_footer">請確認裝置始終位於 VPN 通道上。</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. 按一下下方「前往 VPN 設定」按鈕後，再按一下「Mullvad VPN」名稱旁邊的齒輪。</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. 按一下下方「前往 VPN 設定」按鈕後，再按一下「Krtek」名稱旁邊的齒輪。</string>
     <string name="auto_connect_carousel_first_slide_top_text">自動連線和鎖定模式設定皆可在 Android 系統設定中找到，請按照本指南的指示，啟用其中一項或兩項設定。</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. 若要啟用自動連線，請按一下「一律啟用 VPN」旁邊的開關。</string>
     <string name="auto_connect_carousel_second_slide_top_text">自動連線在 Android 系統設定中稱為「始終啟用 VPN」，此功能可確保您始終與 VPN 通道連線，並且會在重新啟動後自動連線。</string>
@@ -96,7 +95,6 @@
     <string name="collapse">折疊</string>
     <string name="confirm_ipv6_dns">若要執行 IPv6 DNS 伺服器，需先在 VPN 設定下啟用「IPv6」。</string>
     <string name="confirm_local_dns">若要使本機 DNS 伺服器運作，需先在 VPN 設定下啟用「本機網路共享」。</string>
-    <string name="confirm_no_email">您即將傳送的問題報告未包含回覆方式資訊。如果想收到您這份報告的回覆，請輸入您的電子郵件位址。</string>
     <string name="confirm_removal">是，將裝置登出</string>
     <string name="congrats">恭喜！</string>
     <string name="connect">連線</string>
@@ -107,7 +105,7 @@
     <string name="connect_panel_connection_details">連線詳細資訊</string>
     <string name="connected">已連線</string>
     <string name="connecting">正在連線…</string>
-    <string name="connecting_to_daemon">連線 Mullvad 系統服務中…</string>
+    <string name="connecting_to_daemon">連線 Krtek 系統服務中…</string>
     <string name="connection_details_in">入境</string>
     <string name="connection_details_out">出境</string>
     <string name="cont">繼續</string>
@@ -215,7 +213,6 @@
     <string name="edit_list">編輯清單</string>
     <string name="edit_lists">編輯清單</string>
     <string name="edit_locations">編輯位置</string>
-    <string name="edit_message">編輯訊息</string>
     <string name="edit_method">編輯方式</string>
     <string name="edit_name">編輯名稱</string>
     <string name="enable">啟用</string>
@@ -248,8 +245,6 @@
     <string name="failed_to_fetch_devices">無法取得裝置清單</string>
     <string name="failed_to_load_products">載入產品失敗，請再試一次</string>
     <string name="failed_to_remove_device">無法移除裝置</string>
-    <string name="failed_to_send">無法傳送</string>
-    <string name="failed_to_send_details">如果您關閉表格後再重新嘗試，所輸入的資訊仍會出現在這裡。</string>
     <string name="failed_to_set_current_test_error">無法設定為目前方式 - 無法透過 API 存取</string>
     <string name="failed_to_set_current_unknown_error">無法設定為目前方式 - 不明原因</string>
     <string name="faqs_and_guides">常見問題集與指南</string>
@@ -275,10 +270,6 @@
     <string name="import_overrides_import">匯入</string>
     <string name="import_overrides_text_title">透過文字匯入</string>
     <string name="in_app_products_unavailable">無法取得應用程式內產品，請確認您是否擁有最新版本的 Google Play。</string>
-    <string name="include_account_token_checkbox_text">加入我的帳戶權杖，就能更快取得付款或帳戶相關問題的協助</string>
-    <string name="include_account_token_warning_message_first">附加您的帳戶權杖後，此回報就會和您的帳戶相連，這能讓我們更快為您解決問題。所有回報都會在一段時間後自動刪除。</string>
-    <string name="include_account_token_warning_message_second">如需詳細資訊，請參閱我們的 %1$s。</string>
-    <string name="include_account_token_warning_title">這會影響您的匿名性</string>
     <string name="info">資訊</string>
     <string name="internet">網際網路</string>
     <string name="invalid_address_blank_warning">請輸入 IP 位址</string>
@@ -294,7 +285,7 @@
     <string name="ipv6_unavailable">無法配置 IPv6。請在應用程式中將其停用，或是在您的裝置上啟用它。</string>
     <string name="is_offline">您的裝置已離線。在您的裝置重新上線後，通道將自動連線。</string>
     <string name="language">語言</string>
-    <string name="legacy_always_on_vpn_error_notification_content">無法啟動通道連線。在使用 Mullvad VPN 之前，請停用「一律啟用 VPN」。</string>
+    <string name="legacy_always_on_vpn_error_notification_content">無法啟動通道連線。在使用 Krtek 之前，請停用「一律啟用 VPN」。</string>
     <string name="legacy_always_on_vpn_error_notification_title">「一律啟用 VPN」已指派給其他 VPN</string>
     <string name="less_than_a_day_left">此帳戶剩餘不到一天</string>
     <string name="less_than_one_day">不足 1 天</string>
@@ -371,7 +362,6 @@
     <string name="next">下一步</string>
     <string name="next_with_icon">下一步 %1$s</string>
     <string name="no_custom_lists_available">有可用的自訂清單</string>
-    <string name="no_email_app_available">裝置上沒有可用的電子郵件應用程式</string>
     <string name="no_internet_connection">沒有網際網路連線</string>
     <string name="no_matching_relay">沒有與您的設定相符的伺服器，請嘗試變更伺服器或其他設定。</string>
     <string name="no_matching_relay_entry">沒有與您的設定相符的入口伺服器，請嘗試變更伺服器或其他設定。</string>
@@ -411,8 +401,6 @@
     <string name="port">連接埠</string>
     <string name="port_x">連接埠：%1$s</string>
     <string name="privacy_policy_label">隱私權政策</string>
-    <string name="privacy_policy_lower_case">隱私權政策</string>
-    <string name="problem_report_description">為了更有效協助您，會將應用程式的日誌檔將附加到此郵件。您的資料會保持安全和私密性，因為這些資料會先經過匿名處理，再透過加密通道傳送。</string>
     <string name="providers">供應商</string>
     <string name="quantum_resistant_info_first_paragraph">借助此功能，WireGuard 通道便能夠抵抗可能從量子電腦發起的攻擊。</string>
     <string name="quantum_resistant_info_second_paragraph">實現方法是使用量子安全演算法執行額外的金鑰交換，並將結果混合至 WireGuard 的常規加密。每次建立新通道時，這一額外步驟都會使用約 500 kiB 流量。</string>
@@ -435,7 +423,6 @@
     <string name="rented">租用</string>
     <string name="rented_only">僅租用</string>
     <string name="report_a_problem">回報問題</string>
-    <string name="report_problem_message_is_empty">請輸入訊息</string>
     <string name="reset_to_default_button">重設為預設值</string>
     <string name="retry">重試</string>
     <string name="save">儲存</string>
@@ -443,13 +430,6 @@
     <string name="search_no_matches_for_text">找不到「%1$s」的結果，請使改用其他搜尋條件。</string>
     <string name="search_placeholder">搜尋…</string>
     <string name="select_location">選擇位置</string>
-    <string name="send">傳送</string>
-    <string name="send_anyway">仍要傳送</string>
-    <string name="send_email">傳送電子郵件</string>
-    <string name="sending">傳送中…</string>
-    <string name="sent">已傳送</string>
-    <string name="sent_contact">如有需要，我們將透過 %1$s 與您聯絡</string>
-    <string name="sent_thanks">謝謝！</string>
     <string name="separate_filters_title">個別篩選器</string>
     <string name="separate_filters_title_first_paragraph">現在可以分別設定入口及出口位置的篩選器。</string>
     <string name="separate_filters_title_second_paragraph">您目前的篩選器已套用於入口和出口位置。</string>
@@ -527,7 +507,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">連上其他網路</string>
     <string name="unable_to_reach_api_dialog_message_list_third">啟用應用程式中所有存取方式</string>
     <string name="unable_to_reach_api_dialog_message_second">這可能是由於審查或網路問題所造成。請嘗試：</string>
-    <string name="unable_to_reach_api_dialog_message_third">若以上步驟無效，請使用下方按鈕傳送電子郵件至支援團隊。電子郵件將自動附加已匿名處理的日誌記錄。</string>
     <string name="unavailable">無法使用</string>
     <string name="undo">復原</string>
     <string name="unsupported_version">不支援的版本</string>
@@ -538,8 +517,6 @@
     <string name="uri_browser_app_not_found">未安裝瀏覽器應用程式，無法開啟連結</string>
     <string name="uri_market_app_not_found">未安裝 Android 應用程式商店，無法開啟連結</string>
     <string name="use_method">使用方式</string>
-    <string name="user_email_hint">您的電子郵件 (選填)</string>
-    <string name="user_message_hint">為了給您提供更完善的協助，請您使用英語或瑞典語書寫，並註明您是從哪個國家/地區進行連線。</string>
     <string name="username">使用者名稱</string>
     <string name="verification_failed_dialog_message">我們無法驗證您最近一次的購買。請檢查您的網際網路連線並再試一次。如果問題持續發生，請聯絡支援團隊。</string>
     <string name="verifying_api_method">正在驗證 API 方式…</string>
@@ -562,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">VPN 權限錯誤</string>
     <string name="vpn_settings_not_available">裝置上的 VPN 設定無法使用</string>
     <string name="warning">警告</string>
-    <string name="we_will_look_into_this">我們會對此進行調查。</string>
     <string name="when_needed">必要時</string>
     <string name="wireguard_custom_port_title">自訂</string>
     <string name="wireguard_mtu_footer">設定 WireGuard MTU 值。有效範圍：%1$d - %2$d。</string>

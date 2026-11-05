@@ -24,10 +24,9 @@
     <string name="all_locations">Alle Standorte</string>
     <string name="all_providers">Alle Anbieter</string>
     <string name="always">Immer</string>
-    <string name="always_on_vpn_error_notification_content">Tunnelverbindung kann nicht gestartet werden. Bitte deaktivieren Sie Always-on VPN für <b>%1$s</b>, bevor Sie Mullvad VPN verwenden.</string>
+    <string name="always_on_vpn_error_notification_content">Tunnelverbindung kann nicht gestartet werden. Bitte deaktivieren Sie Always-on VPN für <b>%1$s</b>, bevor Sie Krtek verwenden.</string>
     <string name="always_on_vpn_error_notification_title">Always-on VPN ist %1$s zugeordnet</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Nach dem Update einer VPN-App auf Android 16 kann es vorkommen, dass die VPN-Apps auf diesen Geräten nicht länger auf das Internet zugreifen können.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Bitte starten Sie Ihr Gerät neu und versuchen Sie erneut, sich zu verbinden. Wenn dies nicht funktioniert, schreiben Sie bitte eine E-Mail an %1$s auf Schwedisch oder Englisch.</string>
     <string name="android_16_upgrade_warning_message">Android 16 hat einen bekannten Fehler. Bitte starten Sie Ihr Gerät neu und versuchen Sie es erneut. Um mehr darüber zu erfahren,</string>
     <string name="android_16_upgrade_warning_title">Keine Verbindung möglich?</string>
     <string name="anti_censorship">Anti-Zensur</string>
@@ -50,7 +49,7 @@
     <string name="app_name_notes">Hinweise</string>
     <string name="app_name_weather">Wetter</string>
     <string name="appearance">Erscheinungsbild</string>
-    <string name="appearance_description">Ändern Sie den Titel und das Symbol der Mullvad VPN-App auf Ihrem Android-Gerät. Dadurch wird das Symbol für Mullvad-VPN-bezogene Benachrichtigungen nicht geändert.</string>
+    <string name="appearance_description">Ändern Sie den Titel und das Symbol der Krtek-App auf Ihrem Android-Gerät. Dadurch wird das Symbol für Krtek-bezogene Benachrichtigungen nicht geändert.</string>
     <string name="appearance_description_warning"><b>Achtung:</b> Die Anwendung wird automatisch geschlossen und muss nach der Auswahl eines neuen Symbols und eines neuen Titels manuell erneut geöffnet werden. Dies hat keine Auswirkungen auf Ihre VPN-Verbindung.</string>
     <string name="appearance_description_warning_restart">Wenn sich das Symbol und der Titel nach dem Schließen der App immer noch nicht geändert haben, starten Sie das Gerät bitte neu.</string>
     <string name="apply">Anwenden</string>
@@ -60,7 +59,7 @@
     <string name="authentication">Authentifizierung</string>
     <string name="auto_connect_and_lockdown_mode">Automatische Verbindung &amp; Sperrmodus</string>
     <string name="auto_connect_and_lockdown_mode_footer">Gewährleistet, dass sich das Gerät immer im VPN-Tunnel befindet.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. Nachdem Sie unten auf „VPN-Einstellungen öffnen“ geklickt haben, klicken Sie auf das Zahnrad neben „Mullvad-VPN“.</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. Nachdem Sie unten auf „VPN-Einstellungen öffnen“ geklickt haben, klicken Sie auf das Zahnrad neben „Krtek“.</string>
     <string name="auto_connect_carousel_first_slide_top_text">Die Einstellungen für die automatische Verbindung und den Sperrmodus finden Sie in den Android-Systemeinstellungen. Folgen Sie dieser Anleitung, um eine oder beide Einstellungen zu aktivieren.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. Um die automatische Verbindung zu aktivieren, klicken Sie auf den Kippschalter neben „Always-on VPN“.</string>
     <string name="auto_connect_carousel_second_slide_top_text">Die automatische Verbindung wird in den Android-Systemeinstellungen als „Always-on VPN“ bezeichnet und sorgt dafür, dass Sie ständig mit dem VPN-Tunnel verbunden sind und sich nach einem Neustart automatisch verbinden.</string>
@@ -96,7 +95,6 @@
     <string name="collapse">Zuklappen</string>
     <string name="confirm_ipv6_dns">Der IPv6-DNS-Server wird nicht funktionieren, solange „IPv6“ nicht in den VPN-Einstellungen aktiviert ist.</string>
     <string name="confirm_local_dns">Der lokale DNS-Server wird nicht funktionieren, solange „Teilen im lokalen Netzwerk“ nicht in den VPN-Einstellungen aktiviert ist.</string>
-    <string name="confirm_no_email">Sie wollen einen Problembericht senden, ohne uns die Möglichkeit zu geben, Sie zu erreichen. Wenn Sie sich eine Antwort zu Ihrem Problem wünschen, müssen Sie eine E-Mail-Adresse eingeben.</string>
     <string name="confirm_removal">Ja, Gerät abmelden</string>
     <string name="congrats">Glückwunsch!</string>
     <string name="connect">Verbinden</string>
@@ -107,7 +105,7 @@
     <string name="connect_panel_connection_details">Verbindungsdetails</string>
     <string name="connected">Verbunden</string>
     <string name="connecting">Verbinden …</string>
-    <string name="connecting_to_daemon">Verbindung zum Mullvad-Systemdienst wird hergestellt...</string>
+    <string name="connecting_to_daemon">Verbindung zum Krtek-Systemdienst wird hergestellt...</string>
     <string name="connection_details_in">Eingehend</string>
     <string name="connection_details_out">Ausgehend</string>
     <string name="cont">Fortfahren</string>
@@ -215,7 +213,6 @@
     <string name="edit_list">Liste bearbeiten</string>
     <string name="edit_lists">Listen bearbeiten</string>
     <string name="edit_locations">Standorte bearbeiten</string>
-    <string name="edit_message">Nachricht bearbeiten</string>
     <string name="edit_method">Methode bearbeiten</string>
     <string name="edit_name">Name bearbeiten</string>
     <string name="enable">Aktivieren</string>
@@ -248,8 +245,6 @@
     <string name="failed_to_fetch_devices">Fehler beim Abrufen der Geräteliste</string>
     <string name="failed_to_load_products">Fehler beim Laden der Produkte, bitte versuchen Sie es erneut</string>
     <string name="failed_to_remove_device">Fehler beim Entfernen des Geräts</string>
-    <string name="failed_to_send">Fehler beim Senden</string>
-    <string name="failed_to_send_details">Die Informationen, die Sie bereits eingegeben haben, werden immer noch da sein, wenn Sie das Formular schließen und es später erneut versuchen.</string>
     <string name="failed_to_set_current_test_error">Konnte nicht als aktuelle gesetzt werden – API nicht erreichbar</string>
     <string name="failed_to_set_current_unknown_error">Konnte nicht als aktuelle gesetzt werden – Unbekannter Grund</string>
     <string name="faqs_and_guides">Häufig gestellte Fragen &amp; Anleitungen</string>
@@ -275,10 +270,6 @@
     <string name="import_overrides_import">Importieren</string>
     <string name="import_overrides_text_title">Import via Text</string>
     <string name="in_app_products_unavailable">In-App-Produkte nicht verfügbar, bitte vergewissern Sie sich, dass sie die neueste Version von Google Play haben.</string>
-    <string name="include_account_token_checkbox_text">Meinen Konto-Token hinzufügen, um schnellere Hilfe bei Zahlungen oder kontobezogenen Problemen zu erhalten</string>
-    <string name="include_account_token_warning_message_first">Durch Anhängen Ihres Konto-Tokens wird diese Meldung mit Ihrem Konto verknüpft, wodurch wir Ihr Problem schneller lösen können. Alle Meldungen werden nach einiger Zeit automatisch gelöscht.</string>
-    <string name="include_account_token_warning_message_second">Weitere Informationen finden Sie in unserer %1$s.</string>
-    <string name="include_account_token_warning_title">Dies wirkt sich auf Ihre Anonymität aus</string>
     <string name="info">Info</string>
     <string name="internet">Internet</string>
     <string name="invalid_address_blank_warning">Geben Sie bitte eine IP-Adresse ein</string>
@@ -294,7 +285,7 @@
     <string name="ipv6_unavailable">IPv6 konnte nicht konfiguriert werden. Deaktivieren Sie es in der App oder aktivieren Sie es auf Ihrem Gerät.</string>
     <string name="is_offline">Ihr Gerät ist offline. Der Tunnel wird automatisch verbunden, sobald Ihr Gerät wieder online ist.</string>
     <string name="language">Sprache</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Tunnelverbindung kann nicht gestartet werden. Bitte deaktivieren Sie Always-on VPN, bevor Sie Mullvad VPN verwenden.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Tunnelverbindung kann nicht gestartet werden. Bitte deaktivieren Sie Always-on VPN, bevor Sie Krtek verwenden.</string>
     <string name="legacy_always_on_vpn_error_notification_title">Always-on VPN ist einem anderen VPN zugeordnet</string>
     <string name="less_than_a_day_left">Weniger als ein Tag verbleibend auf diesem Konto</string>
     <string name="less_than_one_day">weniger als ein Tag</string>
@@ -371,7 +362,6 @@
     <string name="next">Weiter</string>
     <string name="next_with_icon">Weiter %1$s</string>
     <string name="no_custom_lists_available">Keine eigenen Listen verfügbar</string>
-    <string name="no_email_app_available">Keine E-Mail-App auf dem Gerät verfügbar</string>
     <string name="no_internet_connection">Keine Internetverbindung</string>
     <string name="no_matching_relay">Kein Server entspricht Ihren Einstellungen. Versuchen Sie, den Server oder andere Einstellungen zu ändern.</string>
     <string name="no_matching_relay_entry">Kein Eingangsserver entspricht Ihren Einstellungen. Versuchen Sie, den Server oder andere Einstellungen zu ändern.</string>
@@ -411,8 +401,6 @@
     <string name="port">Port</string>
     <string name="port_x">Port: %1$s</string>
     <string name="privacy_policy_label">Datenschutzrichtlinie</string>
-    <string name="privacy_policy_lower_case">Datenschutzrichtlinie</string>
-    <string name="problem_report_description">Damit wir Ihnen besser helfen können, wird die Protokolldatei Ihrer App an diese Nachricht angehängt. Ihre Daten bleiben sicher und privat, da sie vor dem Senden über einen verschlüsselten Kanal anonymisiert werden.</string>
     <string name="providers">Anbieter</string>
     <string name="quantum_resistant_info_first_paragraph">Diese Funktion macht den WireGuard-Tunnel resistent gegen mögliche Angriffe von Quantencomputern.</string>
     <string name="quantum_resistant_info_second_paragraph">Dazu wird ein zusätzlicher Schlüsselaustausch mit einem quantensicheren Algorithmus durchgeführt und das Ergebnis mit der regulären Verschlüsselung von WireGuard vermischt. Dieser zusätzliche Schritt verbraucht jedes Mal, wenn ein neuer Tunnel aufgebaut wird, etwa 500 KiB an Datenverkehr.</string>
@@ -435,7 +423,6 @@
     <string name="rented">Gemietet</string>
     <string name="rented_only">Nur gemietet</string>
     <string name="report_a_problem">Problem melden</string>
-    <string name="report_problem_message_is_empty">Geben Sie bitte eine Nachricht ein</string>
     <string name="reset_to_default_button">Auf Standard zurücksetzen</string>
     <string name="retry">Erneut versuchen</string>
     <string name="save">Speichern</string>
@@ -443,13 +430,6 @@
     <string name="search_no_matches_for_text">Kein Ergebnis für „%1$s“, bitte versuchen Sie einen anderen Suchbegriff</string>
     <string name="search_placeholder">Suchen nach …</string>
     <string name="select_location">Ort auswählen</string>
-    <string name="send">Senden</string>
-    <string name="send_anyway">Trotzdem senden</string>
-    <string name="send_email">E-Mail senden</string>
-    <string name="sending">Wird gesendet...</string>
-    <string name="sent">Gesendet</string>
-    <string name="sent_contact">Bei Bedarf werden wir Sie über %1$s kontaktieren</string>
-    <string name="sent_thanks">Danke!</string>
     <string name="separate_filters_title">Filter trennen</string>
     <string name="separate_filters_title_first_paragraph">Filter können nun separat für Eingangs- und Ausgangsstandorte eingestellt werden.</string>
     <string name="separate_filters_title_second_paragraph">Ihre aktuellen Filter werden sowohl auf den Eingangs- als auch auf den Ausgangsstandort angewendet.</string>
@@ -527,7 +507,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Mit einem anderen Netzwerk verbinden</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Alle Zugriffsmethoden in der App aktivieren</string>
     <string name="unable_to_reach_api_dialog_message_second">Das kann an Zensur oder Netzwerkproblemen liegen. Versuchen Sie Folgendes:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Sollten die oben genannten Schritte nicht zum Erfolg führen, senden Sie bitte über die Schaltfläche unten eine E-Mail an unseren Support. Es werden automatisch anonymisierte Protokolle als Anhang beigefügt.</string>
     <string name="unavailable">Nicht verfügbar</string>
     <string name="undo">Rückgängig</string>
     <string name="unsupported_version">NICHT UNTERSTÜTZTE VERSION</string>
@@ -538,8 +517,6 @@
     <string name="uri_browser_app_not_found">Keine Browser-App installiert, Link konnte nicht geöffnet werden</string>
     <string name="uri_market_app_not_found">Kein Android-App-Store installiert, Link konnte nicht geöffnet werden</string>
     <string name="use_method">Methode verwenden</string>
-    <string name="user_email_hint">Ihre E-Mail-Adresse (optional)</string>
-    <string name="user_message_hint">Um Ihnen besser weiterhelfen zu können, schreiben Sie uns bitte auf Englisch oder Schwedisch und geben Sie an, aus welchem Land Sie die Verbindung herstellen.</string>
     <string name="username">Benutzername</string>
     <string name="verification_failed_dialog_message">Wir konnten Ihren letzten Kauf nicht verifizieren. Überprüfen Sie bitte Ihre Internetverbindung und versuchen Sie es erneut. Wenden Sie sich an den Support, falls das Problem weiterhin besteht.</string>
     <string name="verifying_api_method">API-Methode verifizieren …</string>
@@ -562,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">VPN-Berechtigungsfehler</string>
     <string name="vpn_settings_not_available">VPN-Einstellungen auf dem Gerät nicht verfügbar</string>
     <string name="warning">Warnung</string>
-    <string name="we_will_look_into_this">Wir werden uns das anschauen.</string>
     <string name="when_needed">Bei Bedarf</string>
     <string name="wireguard_custom_port_title">Benutzerdefiniert</string>
     <string name="wireguard_mtu_footer">WireGuard-MTU-Wert einstellen. Gültiger Bereich: %1$d–%2$d.</string>

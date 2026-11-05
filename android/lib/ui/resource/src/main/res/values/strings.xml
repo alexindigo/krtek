@@ -6,7 +6,7 @@
     <string name="foreground_notification_channel_description">Shows current VPN tunnel status</string>
     <string name="account_time_notification_channel_name">Account time reminders</string>
     <string name="account_time_notification_channel_description">Shows reminders when the account time is about to expire</string>
-    <string name="connecting_to_daemon">Connecting to Mullvad system service...</string>
+    <string name="connecting_to_daemon">Connecting to Krtek system service...</string>
     <string name="log_in">Log in</string>
     <string name="login_description">Enter your account number</string>
     <string name="logging_in_title">Logging in...</string>
@@ -63,7 +63,7 @@
     <string name="auto_connect_and_lockdown_mode_footer">Makes sure the device is always on the VPN tunnel.</string>
     <string name="go_to_vpn_settings">Go to VPN settings</string>
     <string name="auto_connect_carousel_first_slide_top_text">The Auto-connect and Lockdown mode settings can be found in the Android system settings, follow this guide to enable one or both.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. After clicking on the \"Go to VPN settings\" button below, click on the cogwheel next to the \"Mullvad VPN\" name.</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. After clicking on the \"Go to VPN settings\" button below, click on the cogwheel next to the \"Krtek\" name.</string>
     <string name="auto_connect_carousel_second_slide_top_text">Auto-connect is called Always-on VPN in the Android system settings and it makes sure you are constantly connected to the VPN tunnel and auto connects after restart.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. To enable Auto-connect, click on the toggle next to \"Always-on VPN\".</string>
     <string name="auto_connect_carousel_third_slide_top_text">The Lockdown mode is called \"Block connections without VPN\" in the Android system settings. It helps minimize leaks, however it has some known limitations which you can read more about</string>
@@ -75,23 +75,13 @@
     <string name="mtu_x">Value: %s</string>
     <string name="wireguard_mtu_footer">Set WireGuard MTU value. Valid range: %1$d - %2$d.</string>
     <string name="hint_default">Default</string>
-    <string name="problem_report_description">To help you more effectively, your app’s log file will be attached to this message. Your data will remain secure and private, as it is anonymised before being sent over an encrypted channel.</string>
-    <string name="user_email_hint">Your email (optional)</string>
-    <string name="user_message_hint">To assist you better, please write in English or Swedish and include which country you are connecting from.</string>
+    <string name="problem_report_github_description">Krtek is an independent client. Problems are tracked as public GitHub issues.</string>
+    <string name="problem_report_message_hint">Message (optional)</string>
+    <string name="open_github_issue">Open GitHub issue</string>
+    <string name="problem_report_public_logs_notice">Logs are anonymised, but GitHub issues are public. Review the logs before sharing them, and never post your account number.</string>
     <string name="view_logs">View app logs</string>
-    <string name="send">Send</string>
-    <string name="sending">Sending...</string>
-    <string name="sent">Sent</string>
-    <string name="failed_to_send">Failed to send</string>
-    <string name="confirm_no_email">You are about to send the problem report without a way for us to get back to you. If you want an answer to your report you will have to enter an email address.</string>
-    <string name="send_anyway">Send anyway</string>
     <string name="back">Back</string>
     <string name="back_with_icon"> %1$s Back</string>
-    <string name="sent_thanks">Thanks!</string>
-    <string name="we_will_look_into_this">We will look into this.</string>
-    <string name="sent_contact">If needed we will contact you at %1$s</string>
-    <string name="failed_to_send_details">If you exit the form and try again later, the information you already entered will still be here.</string>
-    <string name="edit_message">Edit message</string>
     <string name="try_again">Try again</string>
     <string name="blocked_connection">BLOCKED CONNECTION</string>
     <string name="error_state">FAILED TO CONNECT</string>
@@ -160,10 +150,10 @@
     <string name="failed_to_remove_device">Failed to remove device</string>
     <string name="always_on_vpn_error_notification_title">Always-on VPN assigned to %s</string>
     <string name="always_on_vpn_error_notification_content">
-        <![CDATA[Unable to start tunnel connection. Please disable Always-on VPN for <b>%s</b> before using Mullvad VPN.]]>
+        <![CDATA[Unable to start tunnel connection. Please disable Always-on VPN for <b>%s</b> before using Krtek.]]>
     </string>
     <string name="legacy_always_on_vpn_error_notification_title">Always-on VPN assigned to other VPN</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Unable to start tunnel connection. Please disable Always-on VPN before using Mullvad VPN.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Unable to start tunnel connection. Please disable Always-on VPN before using Krtek.</string>
     <string name="vpn_permission_error_notification_title">VPN permission error</string>
     <string name="vpn_permission_error_notification_message">Please press connect to request VPN permission</string>
     <string name="new_device_notification_title">NEW DEVICE CREATED</string>
@@ -436,7 +426,7 @@
     <string name="android_16_upgrade_warning_title">Can’t connect?</string>
     <string name="android_16_upgrade_warning_message">Android 16 has a known issue. Please restart your device and try again. To learn more, </string>
     <string name="android_16_upgrade_warning_dialog_first_message">After updating a VPN app on Android 16, devices might end up in a state where VPN apps are no longer able to reach the internet.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Please restart your device and try connecting again. If this does not work, please write an email to %s in Swedish or English.</string>
+    <string name="android_16_upgrade_warning_support_message">Please restart your device and try connecting again. If this does not work, report the problem at %s.</string>
     <string name="click_here">click here</string>
     <string name="login_error_api_unreachable">Unable to reach API, %s</string>
     <string name="login_error_too_many_attempts">Too many attempts, please try again later</string>
@@ -449,17 +439,12 @@
     <string name="unable_to_reach_api_dialog_message_list_first">Restart your device</string>
     <string name="unable_to_reach_api_dialog_message_list_second">Connect to a different network</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Enable all access methods in the app</string>
-    <string name="unable_to_reach_api_dialog_message_third">If these steps don’t work, please send an email to support using the button below. It will automatically attach the logs which have been anonymized.</string>
+    <string name="unable_to_reach_api_github_message">If these steps don’t work, report the problem as a public GitHub issue using the button below. No logs are attached automatically.</string>
     <string name="enable_all_methods">Enable all &amp; retry</string>
-    <string name="send_email">Send email</string>
-    <string name="no_email_app_available">No email app available on the device</string>
-    <string name="include_account_token_checkbox_text">Include my account token for faster help with payment or account related issues</string>
+    <string name="report_on_github">Report on GitHub</string>
+    <string name="browser_unavailable">No browser is available. Copy this link and open it in a browser.</string>
     <string name="no_matching_relay_entry">No entry server match your settings, try changing server or other settings.</string>
     <string name="no_matching_relay_exit">No exit server match your settings, try changing server or other settings.</string>
-    <string name="include_account_token_warning_title">This impacts your anonymity</string>
-    <string name="include_account_token_warning_message_first">By attaching your account token it links this report to your account, which helps us resolve your issue quicker. All reports are automatically deleted after a period of time.</string>
-    <string name="include_account_token_warning_message_second">For details, please see our %s.</string>
-    <string name="privacy_policy_lower_case">privacy policy</string>
     <string name="disable_multihop">Disable multihop</string>
     <string name="unavailable">Unavailable</string>
     <string name="warning">Warning</string>
@@ -483,7 +468,7 @@
     <string name="custom_port_recommended_range_second">Valid range for all servers: %s</string>
     <string name="appearance">Appearance</string>
     <string name="icon_and_title">Icon and title</string>
-    <string name="appearance_description">Change the title and icon of the Mullvad VPN app on your Android device. This will not change the icon for any Mullvad VPN related notifications.</string>
+    <string name="appearance_description">Change the title and icon of the Krtek app on your Android device. This will not change the icon for any Krtek related notifications.</string>
     <string name="appearance_description_warning"><b>Attention:</b> The app will close automatically and needs to be manually opened again after selecting a new icon and title. This will not impact your VPN connection.</string>
     <string name="appearance_description_warning_restart">If the icon and title is still not changed after the app has closed, please try restarting the device.</string>
     <string name="applying_changes">Applying changes...</string>
@@ -525,7 +510,6 @@
     <string name="generating_account_number">Generating...</string>
     <string name="divier_or">Or</string>
     <string name="custom_list_error_list_is_empty">Please enter a name</string>
-    <string name="report_problem_message_is_empty">Please enter a message</string>
     <string name="voucher_too_short">Voucher code is too short</string>
     <string name="invalid_address_blank_warning">Please enter an IP address</string>
     <string name="invalid_address_invalid_warning">Invalid IP address</string>

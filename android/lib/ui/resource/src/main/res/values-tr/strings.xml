@@ -24,10 +24,9 @@
     <string name="all_locations">Tüm konumlar</string>
     <string name="all_providers">Tüm hizmet sağlayıcılar</string>
     <string name="always">Her zaman</string>
-    <string name="always_on_vpn_error_notification_content">Tünel bağlantısı başlatılamıyor. Mullvad VPN\'i kullanmadan önce lütfen Her zaman açık VPN\'i <b>%1$s</b> için devre dışı bırakın.</string>
+    <string name="always_on_vpn_error_notification_content">Tünel bağlantısı başlatılamıyor. Krtek uygulamasını kullanmadan önce lütfen Her zaman açık VPN\'i <b>%1$s</b> için devre dışı bırakın.</string>
     <string name="always_on_vpn_error_notification_title">Her zaman açık VPN %1$s uygulamasına atandı</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Android 16\'da bir VPN uygulaması güncellendikten sonra, cihazlar VPN uygulamalarının artık internete erişemediği bir duruma geçebilir.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Lütfen cihazınızı yeniden başlatın ve tekrar bağlanmayı deneyin. Bu işe yaramazsa lütfen %1$s adresine İsveççe veya İngilizce bir e-posta yazın.</string>
     <string name="android_16_upgrade_warning_message">Android 16\'da bilinen bir sorun mevcut. Lütfen cihazınızı yeniden başlatıp tekrar deneyin. Daha fazla bilgi için</string>
     <string name="android_16_upgrade_warning_title">Bağlanamıyor musunuz?</string>
     <string name="anti_censorship">Sansürü önleme</string>
@@ -50,7 +49,7 @@
     <string name="app_name_notes">Notlar</string>
     <string name="app_name_weather">Hava durumu</string>
     <string name="appearance">Görünüm</string>
-    <string name="appearance_description">Android cihazınızdaki Mullvad VPN uygulamasının başlığını ve simgesini değiştirin. Bu işlem, Mullvad VPN ile ilgili bildirimlerin simgesini değiştirmeyecektir.</string>
+    <string name="appearance_description">Android cihazınızdaki Krtek uygulamasının başlığını ve simgesini değiştirin. Bu işlem, Krtek ile ilgili bildirimlerin simgesini değiştirmeyecektir.</string>
     <string name="appearance_description_warning"><b>Dikkat:</b> Uygulama otomatik olarak kapanacağı için yeni bir simge ve başlık seçildikten sonra manuel olarak tekrar açılması gerekecektir. Bu durum VPN bağlantınızı etkilemez.</string>
     <string name="appearance_description_warning_restart">Uygulama kapatıldıktan sonra simge ve başlık hâlâ değişmediyse lütfen cihazı yeniden başlatmayı deneyin.</string>
     <string name="apply">Uygula</string>
@@ -60,7 +59,7 @@
     <string name="authentication">Yetkilendirme</string>
     <string name="auto_connect_and_lockdown_mode">Otomatik bağlantı ve Kilitleme modu</string>
     <string name="auto_connect_and_lockdown_mode_footer">Cihazın her zaman VPN tünelinde olduğundan emin olun.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. Aşağıdaki \"VPN ayarlarına git\" düğmesine tıkladıktan sonra \"Mullvad VPN\" adının yanındaki dişli çarka tıklayın.</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. Aşağıdaki \"VPN ayarlarına git\" düğmesine tıkladıktan sonra \"Krtek\" adının yanındaki dişli çarka tıklayın.</string>
     <string name="auto_connect_carousel_first_slide_top_text">Otomatik Bağlantı ve Kilitleme modu ayarları Android sistem ayarlarında yer alır. Bu ayarlardan birini veya her ikisini de etkinleştirmek için bu kılavuza göz atın.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. Otomatik bağlantıyı etkinleştirmek için \"VPN her zaman açık\" seçeneğinin yanındaki düğmeye tıklayın.</string>
     <string name="auto_connect_carousel_second_slide_top_text">Otomatik bağlantı, Android sistem ayarlarında VPN her zaman açık olarak gösterilir ve VPN tüneline sürekli bağlı olmanızı ve yeniden başlatma sonrası otomatik olarak bağlanmanızı sağlar.</string>
@@ -96,7 +95,6 @@
     <string name="collapse">Daralt</string>
     <string name="confirm_ipv6_dns">VPN ayarlarındaki \"IPv6\" seçeneğini etkinleştirmediğiniz sürece IPv6 DNS sunucusu çalışmaz.</string>
     <string name="confirm_local_dns">VPN ayarlarındaki \"Yerel Ağ Paylaşımı\" seçeneğini etkinleştirmediğiniz sürece yerel DNS sunucusu etkinleşmez.</string>
-    <string name="confirm_no_email">Sorun raporunu, size geri dönüş yapmamıza imkan vermeyen bir şekilde göndermek üzeresiniz. Sorununuz için yanıt almak istiyorsanız bir e-posta adresi girmelisiniz.</string>
     <string name="confirm_removal">Evet, cihazdan çıkış yap</string>
     <string name="congrats">Tebrikler!</string>
     <string name="connect">Bağlan</string>
@@ -107,7 +105,7 @@
     <string name="connect_panel_connection_details">Bağlantı ayrıntıları</string>
     <string name="connected">Bağlandı</string>
     <string name="connecting">Bağlanılıyor...</string>
-    <string name="connecting_to_daemon">Mullvad sistem hizmetlerine bağlanılıyor...</string>
+    <string name="connecting_to_daemon">Krtek sistem hizmetlerine bağlanılıyor...</string>
     <string name="connection_details_in">Giriş</string>
     <string name="connection_details_out">Çıkış</string>
     <string name="cont">İleri</string>
@@ -215,7 +213,6 @@
     <string name="edit_list">Listeyi düzenle</string>
     <string name="edit_lists">Listeleri düzenle</string>
     <string name="edit_locations">Konumları düzenle</string>
-    <string name="edit_message">Mesajı düzenle</string>
     <string name="edit_method">Yöntemi düzenle</string>
     <string name="edit_name">Adı düzenle</string>
     <string name="enable">Etkinleştir</string>
@@ -248,8 +245,6 @@
     <string name="failed_to_fetch_devices">Cihaz listesi alınamadı</string>
     <string name="failed_to_load_products">Ürünler yüklenemedi, lütfen tekrar deneyin</string>
     <string name="failed_to_remove_device">Cihaz kaldırılamadı</string>
-    <string name="failed_to_send">Gönderme başarısız</string>
-    <string name="failed_to_send_details">Formdan çıkıp daha sonra tekrar denerseniz, girmiş olduğunuz bilgiler hala burada olacaktır.</string>
     <string name="failed_to_set_current_test_error">Geçerli olarak ayarlanamadı - API\'ye ulaşılamıyor</string>
     <string name="failed_to_set_current_unknown_error">Geçerli olarak ayarlanamadı - Bilinmeyen neden</string>
     <string name="faqs_and_guides">SSS ve Kılavuzlar</string>
@@ -275,10 +270,6 @@
     <string name="import_overrides_import">İçe aktar</string>
     <string name="import_overrides_text_title">Metin yoluyla içe aktar</string>
     <string name="in_app_products_unavailable">Uygulama içi ürünler kullanılamıyor. Lütfen Google Play\'in en yeni sürümüne sahip olduğunuzdan emin olun.</string>
-    <string name="include_account_token_checkbox_text">Ödeme veya hesapla ilgili sorunlarda daha hızlı yardım almak için hesap token\'ımı ekle</string>
-    <string name="include_account_token_warning_message_first">Hesap token’ınızı eklediğinizde, bu rapor hesabınızla ilişkilendirilir ve sorununuzun daha kısa sürede çözülmesine yardımcı olur. Tüm raporlar belirli bir süre sonra otomatik olarak silinir.</string>
-    <string name="include_account_token_warning_message_second">Ayrıntılar için lütfen %1$s sayfamıza göz atın.</string>
-    <string name="include_account_token_warning_title">Bu, anonimliğinizi etkileyebilir</string>
     <string name="info">Bilgiler</string>
     <string name="internet">İnternet</string>
     <string name="invalid_address_blank_warning">Lütfen bir IP adresi girin</string>
@@ -294,7 +285,7 @@
     <string name="ipv6_unavailable">IPv6 yapılandırılamadı. IPv6\'yı uygulamada devre dışı bırakın veya cihazınızda etkinleştirin.</string>
     <string name="is_offline">Cihazınız çevrimdışı. Cihazınız tekrar çevrimiçi olduğunda tünel otomatik olarak bağlanacak.</string>
     <string name="language">Dil</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Tünel bağlantısı başlatılamıyor. Mullvad VPN\'i kullanmadan önce lütfen \"Her zaman açık VPN\"i devre dışı bırakın.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Tünel bağlantısı başlatılamıyor. Krtek uygulamasını kullanmadan önce lütfen \"Her zaman açık VPN\"i devre dışı bırakın.</string>
     <string name="legacy_always_on_vpn_error_notification_title">Her zaman açık VPN diğer VPN\'e atandı</string>
     <string name="less_than_a_day_left">Bu hesapta bir günden daha az süre kaldı</string>
     <string name="less_than_one_day">bir günden az</string>
@@ -371,7 +362,6 @@
     <string name="next">Sonraki</string>
     <string name="next_with_icon">İleri %1$s</string>
     <string name="no_custom_lists_available">Özel listeler mevcut değil</string>
-    <string name="no_email_app_available">Cihazda e-posta uygulaması yok</string>
     <string name="no_internet_connection">İnternet bağlantısı yok</string>
     <string name="no_matching_relay">Ayarlarınızla eşleşen sunucu yok. Sunucuyu veya diğer ayarları değiştirmeyi deneyin.</string>
     <string name="no_matching_relay_entry">Ayarlarınızla eşleşen giriş sunucusu yok. Sunucuyu veya diğer ayarları değiştirmeyi deneyin.</string>
@@ -411,8 +401,6 @@
     <string name="port">Port</string>
     <string name="port_x">Port: %1$s</string>
     <string name="privacy_policy_label">Gizlilik politikası</string>
-    <string name="privacy_policy_lower_case">gizlilik politikası</string>
-    <string name="problem_report_description">Size daha etkili bir şekilde yardımcı olmak için uygulamanızın günlük dosyası bu mesaja eklenecektir. Verileriniz şifrelenmiş bir kanal üzerinden gönderilmeden önce anonimleştirildiği için güvenli ve gizli kalacaktır.</string>
     <string name="providers">Hizmet sağlayıcılar</string>
     <string name="quantum_resistant_info_first_paragraph">Bu özellik, WireGuard tünelini kuantum bilgisayarlardan gelebilecek potansiyel saldırılara karşı dayanıklı hale getirir.</string>
     <string name="quantum_resistant_info_second_paragraph">Bu işlemi, bir kuantum güvenlik algoritmasıyla ekstra bir anahtar değişimi gerçekleştirdikten sonra sonucu WireGuard\'ın normal şifrelemesiyle karıştırarak yapar. Bu ekstra adım, her yeni tünel kurulduğunda yaklaşık 500 kiB trafik kullanır.</string>
@@ -435,7 +423,6 @@
     <string name="rented">Kiralananlar</string>
     <string name="rented_only">Sadece kiralananlar</string>
     <string name="report_a_problem">Bir sorun bildir</string>
-    <string name="report_problem_message_is_empty">Lütfen bir mesaj girin</string>
     <string name="reset_to_default_button">Varsayılana sıfırla</string>
     <string name="retry">Tekrar dene</string>
     <string name="save">Kaydet</string>
@@ -443,13 +430,6 @@
     <string name="search_no_matches_for_text">\"%1$s\" için sonuç yok, lütfen farklı bir arama yapın</string>
     <string name="search_placeholder">Ara...</string>
     <string name="select_location">Konum seçin</string>
-    <string name="send">Gönder</string>
-    <string name="send_anyway">Yine de gönder</string>
-    <string name="send_email">E-posta gönder</string>
-    <string name="sending">Gönderiliyor...</string>
-    <string name="sent">Gönderildi</string>
-    <string name="sent_contact">Gerektiğinde sizinle %1$s adresinden iletişime geçeceğiz</string>
-    <string name="sent_thanks">Teşekkürler!</string>
     <string name="separate_filters_title">Ayrı filtreler</string>
     <string name="separate_filters_title_first_paragraph">Filtreler artık giriş ve çıkış konumları için ayrı ayrı ayarlanabilir.</string>
     <string name="separate_filters_title_second_paragraph">Mevcut filtreleriniz hem giriş hem de çıkış konumlarına uygulandı.</string>
@@ -527,7 +507,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Farklı bir ağa bağlan</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Uygulamadaki tüm erişim yöntemlerini etkinleştir</string>
     <string name="unable_to_reach_api_dialog_message_second">Bu, sansür veya ağ sorunlarından kaynaklanıyor olabilir. Lütfen şunları deneyin:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Bu adımlar işe yaramazsa, lütfen aşağıdaki düğmeyi kullanarak destek ekibine bir e-posta gönderin. Anonimleştirilmiş kayıtlar otomatik olarak eklenerek gönderilir.</string>
     <string name="unavailable">Mevcut değil</string>
     <string name="undo">Geri al</string>
     <string name="unsupported_version">DESTEKLENMEYEN SÜRÜM</string>
@@ -538,8 +517,6 @@
     <string name="uri_browser_app_not_found">Hiçbir tarayıcı uygulaması yüklü olmadığından bağlantı açılamadı</string>
     <string name="uri_market_app_not_found">Android uygulama mağazası yüklü olmadığından bağlantı açılamadı</string>
     <string name="use_method">Yöntemi kullan</string>
-    <string name="user_email_hint">E-posta adresiniz (isteğe bağlı)</string>
-    <string name="user_message_hint">Size daha iyi yardımcı olabilmemiz için lütfen mesajınızı İngilizce veya İsveççe olarak yazın ve hangi ülkeden bağlandığınızı belirtin.</string>
     <string name="username">Kullanıcı adı</string>
     <string name="verification_failed_dialog_message">Lütfen internet bağlantınızı kontrol ederek tekrar deneyin. Sorun devam ederse destek ekibiyle iletişime geçin.</string>
     <string name="verifying_api_method">API yöntemi doğrulanıyor...</string>
@@ -562,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">VPN izin hatası</string>
     <string name="vpn_settings_not_available">Cihazda VPN Ayarları mevcut değil</string>
     <string name="warning">Uyarı</string>
-    <string name="we_will_look_into_this">Bunu araştıracağız.</string>
     <string name="when_needed">Gerektiğinde</string>
     <string name="wireguard_custom_port_title">Özel</string>
     <string name="wireguard_mtu_footer">WireGuard MTU değerini ayarlayın. Geçerli aralık: %1$d - %2$d.</string>

@@ -24,10 +24,9 @@
     <string name="all_locations">Все местоположения</string>
     <string name="all_providers">Все провайдеры</string>
     <string name="always">Всегда</string>
-    <string name="always_on_vpn_error_notification_content">Не удалось запустить туннельное подключение. Перед использованием Mullvad VPN отключите опцию «Постоянная VPN» для приложения <b>%1$s</b>.</string>
+    <string name="always_on_vpn_error_notification_content">Не удалось запустить туннельное подключение. Перед использованием приложения Krtek отключите опцию «Постоянная VPN» для приложения <b>%1$s</b>.</string>
     <string name="always_on_vpn_error_notification_title">Опция «Постоянная VPN» назначена приложению «%1$s»</string>
     <string name="android_16_upgrade_warning_dialog_first_message">После обновления VPN-приложения на Android 16 VPN-приложения иногда теряют доступ к Интернету.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Перезагрузите устройство и снова попробуйте подключиться. Если это не поможет, отправьте письмо на %1$s на английском или шведском.</string>
     <string name="android_16_upgrade_warning_message">В Android 16 есть известная проблема. Перезагрузите устройство и попробуйте снова. Чтобы узнать больше,</string>
     <string name="android_16_upgrade_warning_title">Проблемы с подключением?</string>
     <string name="anti_censorship">Обход цензуры</string>
@@ -50,7 +49,7 @@
     <string name="app_name_notes">Заметки</string>
     <string name="app_name_weather">Погода</string>
     <string name="appearance">Внешний вид</string>
-    <string name="appearance_description">Измените название и значок приложения Mullvad VPN на устройстве Android. Это не повлияет на значок уведомлений, связанных с Mullvad VPN.</string>
+    <string name="appearance_description">Измените название и значок приложения Krtek на устройстве Android. Это не повлияет на значок уведомлений, связанных с приложением Krtek.</string>
     <string name="appearance_description_warning"><b>Внимание:</b> после выбора нового значка и названия приложение автоматически закроется и его потребуется открыть вручную. Это не повлияет на ваше VPN-соединение.</string>
     <string name="appearance_description_warning_restart">Если после закрытия приложения значок и название не изменились, попробуйте перезагрузить устройство.</string>
     <string name="apply">Применить</string>
@@ -60,7 +59,7 @@
     <string name="authentication">Аутентификация</string>
     <string name="auto_connect_and_lockdown_mode">Автоподключение и режим блокировки</string>
     <string name="auto_connect_and_lockdown_mode_footer">Обеспечивает постоянное подключение устройства к туннелю VPN.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. После нажатия кнопки «Перейти к настройкам VPN» ниже нажмите на шестеренку рядом с пунктом Mullvad VPN.</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. После нажатия кнопки «Перейти к настройкам VPN» ниже нажмите на шестеренку рядом с пунктом Krtek.</string>
     <string name="auto_connect_carousel_first_slide_top_text">Настройки автоподключения и режима блокировки можно найти в системных настройках Android. Чтобы включить их, следуйте этой инструкции.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. Чтобы включить автоподключение, нажмите на переключатель возле пункта «Постоянная VPN».</string>
     <string name="auto_connect_carousel_second_slide_top_text">В системных настройках Android автоподключение называется «Постоянная VPN». Эта опция обеспечивает постоянное подключение к туннелю VPN и автоподключение после перезапуска.</string>
@@ -96,7 +95,6 @@
     <string name="collapse">Свернуть</string>
     <string name="confirm_ipv6_dns">DNS-сервер IPv6 не будет работать, если не включить IPv6 в разделе «Настройки VPN».</string>
     <string name="confirm_local_dns">Локальный DNS-сервер не будет работать, если не включить «Обмен данными в локальной сети» в разделе «Настройки VPN».</string>
-    <string name="confirm_no_email">Вы собираетесь отправить отчет о проблеме, не оставив контакты. Если вы хотите получить ответ, введите свой адрес электронной почты.</string>
     <string name="confirm_removal">Выйти из профиля на устройстве</string>
     <string name="congrats">Поздравляем!</string>
     <string name="connect">Подключить</string>
@@ -107,7 +105,7 @@
     <string name="connect_panel_connection_details">Сведения о подключении</string>
     <string name="connected">Подключено</string>
     <string name="connecting">Идет подключение...</string>
-    <string name="connecting_to_daemon">Подключение к системному сервису Mullvad...</string>
+    <string name="connecting_to_daemon">Подключение к системному сервису приложения Krtek...</string>
     <string name="connection_details_in">Вход</string>
     <string name="connection_details_out">Выход</string>
     <string name="cont">Продолжить</string>
@@ -215,7 +213,6 @@
     <string name="edit_list">Изменение списка</string>
     <string name="edit_lists">Изменить списки</string>
     <string name="edit_locations">Изменить местоположения</string>
-    <string name="edit_message">Изменить сообщение</string>
     <string name="edit_method">Изменение метода</string>
     <string name="edit_name">Изменить имя</string>
     <string name="enable">Включить</string>
@@ -248,8 +245,6 @@
     <string name="failed_to_fetch_devices">Не удалось получить список устройств</string>
     <string name="failed_to_load_products">Не удалось загрузить продукты — повторите попытку</string>
     <string name="failed_to_remove_device">Не удалось удалить устройство</string>
-    <string name="failed_to_send">Ошибка отправки</string>
-    <string name="failed_to_send_details">Если вы выйдете из формы и повторите попытку позже, информация, которую вы уже ввели, сохранится.</string>
     <string name="failed_to_set_current_test_error">Не удалось установить текущий метод: API недоступен</string>
     <string name="failed_to_set_current_unknown_error">Не удалось установить текущий метод: причина неизвестна</string>
     <string name="faqs_and_guides">Ответы на вопросы и руководства</string>
@@ -275,10 +270,6 @@
     <string name="import_overrides_import">Импортировать</string>
     <string name="import_overrides_text_title">Импортировать через текст</string>
     <string name="in_app_products_unavailable">Встроенные покупки недоступны — убедитесь, что у вас установлена последняя версия Google Play.</string>
-    <string name="include_account_token_checkbox_text">Прикрепить токен моей учетной записи для ускоренной помощи по вопросам, связанным с оплатой или учетной записью</string>
-    <string name="include_account_token_warning_message_first">Прикрепляя токен своей учетной записи, вы привяжете это сообщение к своей учетной записи, что поможет нам быстрее решить вашу проблему. Все сообщения автоматически удаляются через определенный период времени.</string>
-    <string name="include_account_token_warning_message_second">Подробнее смотрите здесь: %1$s.</string>
-    <string name="include_account_token_warning_title">Это влияет на вашу анонимность</string>
     <string name="info">Информация</string>
     <string name="internet">Интернет</string>
     <string name="invalid_address_blank_warning">Введите IP-адрес</string>
@@ -294,7 +285,7 @@
     <string name="ipv6_unavailable">Не удается сконфигурировать IPv6. Отключите этот протокол в приложении или включите на устройстве.</string>
     <string name="is_offline">Устройство отключено от Интернета. Туннельное подключение автоматически запустится, как только ваше устройство подключится к Интернету.</string>
     <string name="language">Язык</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Не удалось запустить туннельное соединение. Перед использованием Mullvad VPN отключите опцию «Постоянная VPN».</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Не удалось запустить туннельное соединение. Перед использованием приложения Krtek отключите опцию «Постоянная VPN».</string>
     <string name="legacy_always_on_vpn_error_notification_title">Опция «Постоянная VPN» назначена другой VPN</string>
     <string name="less_than_a_day_left">На этой учетной записи осталось менее одного дня</string>
     <string name="less_than_one_day">менее суток</string>
@@ -371,7 +362,6 @@
     <string name="next">Далее</string>
     <string name="next_with_icon">Далее %1$s</string>
     <string name="no_custom_lists_available">Нет своих списков</string>
-    <string name="no_email_app_available">На устройстве нет приложения для работы с электронной почтой</string>
     <string name="no_internet_connection">Нет подключения к Интернету</string>
     <string name="no_matching_relay">Нет серверов, соответствующих вашим настройкам. Попробуйте изменить сервер или задайте другие настройки.</string>
     <string name="no_matching_relay_entry">Нет серверов входа, соответствующих вашим настройкам. Попробуйте изменить сервер или задайте другие настройки.</string>
@@ -411,8 +401,6 @@
     <string name="port">Порт</string>
     <string name="port_x">Порт: %1$s</string>
     <string name="privacy_policy_label">Политика конфиденциальности</string>
-    <string name="privacy_policy_lower_case">политика конфиденциальности</string>
-    <string name="problem_report_description">Чтобы помощь была эффективнее, к этому сообщению будет прикреплен файл журнала из приложения. Ваши данные останутся защищенными и конфиденциальными: они обезличиваются и отправляются по зашифрованному каналу.</string>
     <string name="providers">Провайдеры</string>
     <string name="quantum_resistant_info_first_paragraph">Эта функция делает туннель WireGuard устойчивым к потенциальным атакам с использованием квантовых компьютеров.</string>
     <string name="quantum_resistant_info_second_paragraph">Для этого функция выполняет дополнительный обмен ключами с использованием квантово-устойчивого алгоритма и добавляет результат к обычному шифрованию WireGuard. Эта дополнительная мера использует примерно 500 КиБ трафика при каждом создании нового туннеля.</string>
@@ -435,7 +423,6 @@
     <string name="rented">Арендованные</string>
     <string name="rented_only">Только арендованные</string>
     <string name="report_a_problem">Сообщить о проблеме</string>
-    <string name="report_problem_message_is_empty">Введите сообщение</string>
     <string name="reset_to_default_button">Восстановить значение по умолчанию</string>
     <string name="retry">Повторить</string>
     <string name="save">Сохранить</string>
@@ -443,13 +430,6 @@
     <string name="search_no_matches_for_text">По запросу «%1$s» ничего не найдено — попробуйте другой запрос</string>
     <string name="search_placeholder">Поиск...</string>
     <string name="select_location">Выбор местоположения</string>
-    <string name="send">Отправить</string>
-    <string name="send_anyway">Все равно отправить</string>
-    <string name="send_email">Отправить письмо</string>
-    <string name="sending">Идет отправка...</string>
-    <string name="sent">Отправлено</string>
-    <string name="sent_contact">При необходимости мы свяжемся с вами по адресу %1$s</string>
-    <string name="sent_thanks">Спасибо!</string>
     <string name="separate_filters_title">Раздельные фильтры</string>
     <string name="separate_filters_title_first_paragraph">Теперь фильтры можно настраивать отдельно для местоположений входа и выхода.</string>
     <string name="separate_filters_title_second_paragraph">Ваши текущие фильтры применены к входному и выходному местоположениям.</string>
@@ -527,7 +507,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Подключиться к другой сети.</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Включить все методы доступа в приложении</string>
     <string name="unable_to_reach_api_dialog_message_second">Это могло произойти из-за цензуры или проблем с сетью. Попробуйте следующее:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Если описанные выше шаги не помогли, отправьте письмо в службу поддержки, нажав кнопку ниже. К письму будут автоматически прикреплены анонимизированные журналы активности.</string>
     <string name="unavailable">Недоступно</string>
     <string name="undo">Отменить</string>
     <string name="unsupported_version">НЕПОДДЕРЖИВАЕМАЯ ВЕРСИЯ</string>
@@ -538,8 +517,6 @@
     <string name="uri_browser_app_not_found">Не удалось открыть ссылку: браузер не установлен</string>
     <string name="uri_market_app_not_found">Не удалось открыть ссылку: магазин приложений Android не установлен</string>
     <string name="use_method">Использовать метод</string>
-    <string name="user_email_hint">Ваша электронная почта (необязательно)</string>
-    <string name="user_message_hint">Чтобы мы могли быстрее решить проблему, напишите нам на английском или шведском и укажите, из какой страны вы подключаетесь.</string>
     <string name="username">Имя пользователя</string>
     <string name="verification_failed_dialog_message">Не удалось подтвердить вашу последнюю покупку. Проверьте подключение к Интернету и повторите попытку. Если проблема не исчезнет, обратитесь в службу поддержки.</string>
     <string name="verifying_api_method">Проверяем метод доступа к API...</string>
@@ -562,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">Ошибка разрешения для VPN</string>
     <string name="vpn_settings_not_available">Настройки VPN недоступны на устройстве</string>
     <string name="warning">Предупреждение</string>
-    <string name="we_will_look_into_this">Мы рассмотрим эту проблему.</string>
     <string name="when_needed">При необходимости</string>
     <string name="wireguard_custom_port_title">Пользовательский</string>
     <string name="wireguard_mtu_footer">Установите значение MTU для WireGuard. Диапазон значений: %1$d–%2$d.</string>

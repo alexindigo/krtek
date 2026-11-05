@@ -24,10 +24,9 @@
     <string name="all_locations">Wszystkie lokalizacje</string>
     <string name="all_providers">Wszyscy dostawcy</string>
     <string name="always">Zawsze</string>
-    <string name="always_on_vpn_error_notification_content">Nie można uruchomić połączenia tunelowego. Przed rozpoczęciem użytkowania usługi Mullvad VPN wyłącz opcję „Zawsze włączony VPN” w <b>%1$s</b>.</string>
+    <string name="always_on_vpn_error_notification_content">Nie można uruchomić połączenia tunelowego. Przed rozpoczęciem użytkowania aplikacji Krtek wyłącz opcję „Zawsze włączony VPN” w <b>%1$s</b>.</string>
     <string name="always_on_vpn_error_notification_title">Opcja „Zawsze włączony VPN” przypisana jest do %1$s</string>
     <string name="android_16_upgrade_warning_dialog_first_message">Po zaktualizowaniu aplikacji VPN w systemie Android 16 urządzenia mogą znaleźć się w stanie, w którym aplikacje VPN nie będą już miały dostępu do Internetu.</string>
-    <string name="android_16_upgrade_warning_dialog_second_message">Ponownie uruchom urządzenie i ponów próbę połączenia. Jeśli to nie zadziała, wyślij wiadomość e-mail na adres %1$s w języku szwedzkim lub angielskim.</string>
     <string name="android_16_upgrade_warning_message">System Android 16 ma znany nam problem. Uruchom ponownie urządzenie i spróbuj jeszcze raz. Aby dowiedzieć się więcej,</string>
     <string name="android_16_upgrade_warning_title">Nie możesz się połączyć?</string>
     <string name="anti_censorship">Przeciwdziałanie cenzurze</string>
@@ -50,7 +49,7 @@
     <string name="app_name_notes">Uwagi</string>
     <string name="app_name_weather">Pogoda</string>
     <string name="appearance">Wygląd</string>
-    <string name="appearance_description">Zmień tytuł i ikonę aplikacji Mullvad VPN na urządzeniu z systemem Android. Nie spowoduje to zmiany ikony żadnych powiadomień związanych z Mullvad VPN.</string>
+    <string name="appearance_description">Zmień tytuł i ikonę aplikacji Krtek na urządzeniu z systemem Android. Nie spowoduje to zmiany ikony żadnych powiadomień związanych z aplikacją Krtek.</string>
     <string name="appearance_description_warning"><b>Uwaga:</b> aplikacja zostanie zamknięta automatycznie i trzeba będzie ręcznie otworzyć ją ponownie po wybraniu nowej ikony i tytułu. Nie wpłynie to na połączenie VPN.</string>
     <string name="appearance_description_warning_restart">Jeśli ikona i tytuł nadal nie zmienią się po zamknięciu aplikacji, spróbuj ponownie uruchomić urządzenie.</string>
     <string name="apply">Zastosuj</string>
@@ -60,7 +59,7 @@
     <string name="authentication">Uwierzytelnianie</string>
     <string name="auto_connect_and_lockdown_mode">Automatyczne łączenie i tryb Lockdown</string>
     <string name="auto_connect_and_lockdown_mode_footer">Zapewnia, że urządzenie zawsze działa za pośrednictwem tunelu VPN.</string>
-    <string name="auto_connect_carousel_first_slide_bottom_text">1. Po kliknięciu poniższego przycisku Przejdź do ustawień VPN, kliknij ikonę koła zębatego obok nazwy Mullvad VPN.</string>
+    <string name="auto_connect_carousel_first_slide_bottom_text">1. Po kliknięciu poniższego przycisku Przejdź do ustawień VPN, kliknij ikonę koła zębatego obok nazwy Krtek.</string>
     <string name="auto_connect_carousel_first_slide_top_text">Ustawienia trybu automatycznego łączenia i trybu Lockdown można znaleźć w ustawieniach systemu Android. Aby włączyć jeden lub oba tryby, postępuj zgodnie z niniejszym poradnikiem.</string>
     <string name="auto_connect_carousel_second_slide_bottom_text">2. Aby włączyć automatyczne łączenie, kliknij przełącznik obok opcji Zawsze włączony VPN.</string>
     <string name="auto_connect_carousel_second_slide_top_text">Automatyczne łączenie w ustawieniach systemu Android nazywa się „Zawsze włączony VPN” i zapewnia stałe połączenie z tunelem VPN oraz automatyczne łączenie po ponownym uruchomieniu.</string>
@@ -96,7 +95,6 @@
     <string name="collapse">Zwiń</string>
     <string name="confirm_ipv6_dns">Serwer DNS protokołu IPv6 nie będzie działać, jeśli nie włączysz opcji „IPv6” w ustawieniach VPN.</string>
     <string name="confirm_local_dns">Lokalny serwer DNS nie będzie działał, dopóki nie włączysz opcji „Udostępnianie sieci lokalnej” w obszarze Ustawienia VPN.</string>
-    <string name="confirm_no_email">Za chwilę wyślesz zgłoszenie problemu, nie umożliwiając nam skontaktowania się z Tobą. Aby uzyskać odpowiedź na zgłoszenie, musisz podać adres e-mail.</string>
     <string name="confirm_removal">Tak, wyloguj urządzenie</string>
     <string name="congrats">Gratulacje!</string>
     <string name="connect">Połącz</string>
@@ -107,7 +105,7 @@
     <string name="connect_panel_connection_details">Szczegóły połączenia</string>
     <string name="connected">Połączono</string>
     <string name="connecting">Łączenie...</string>
-    <string name="connecting_to_daemon">Łączenie z usługą systemową Mullvad...</string>
+    <string name="connecting_to_daemon">Łączenie z usługą systemową aplikacji Krtek...</string>
     <string name="connection_details_in">Wejście</string>
     <string name="connection_details_out">Wyjście</string>
     <string name="cont">Kontynuuj</string>
@@ -215,7 +213,6 @@
     <string name="edit_list">Edytuj listę</string>
     <string name="edit_lists">Edytuj listy</string>
     <string name="edit_locations">Edytuj lokalizacje</string>
-    <string name="edit_message">Edytuj wiadomość</string>
     <string name="edit_method">Edytuj metodę</string>
     <string name="edit_name">Edytuj nazwę</string>
     <string name="enable">Włącz</string>
@@ -248,8 +245,6 @@
     <string name="failed_to_fetch_devices">Nie udało się pobrać listy urządzeń</string>
     <string name="failed_to_load_products">Nie udało się załadować produktów. Spróbuj ponownie</string>
     <string name="failed_to_remove_device">Niepowodzenie usunięcia urządzenia</string>
-    <string name="failed_to_send">Błąd wysyłania</string>
-    <string name="failed_to_send_details">Jeśli wyjdziesz z formularza i spróbujesz ponownie później, zastaniesz już wprowadzone dane.</string>
     <string name="failed_to_set_current_test_error">Nie udało się ustawić jako bieżącą — interfejs API nieosiągalny</string>
     <string name="failed_to_set_current_unknown_error">Nie udało się ustawić jako bieżącą — przyczyna nieznana</string>
     <string name="faqs_and_guides">Często zadawane pytania i poradniki</string>
@@ -275,10 +270,6 @@
     <string name="import_overrides_import">Importuj</string>
     <string name="import_overrides_text_title">Import tekstowy</string>
     <string name="in_app_products_unavailable">Produkty w aplikacji są niedostępne. Upewnij się, że masz najnowszą wersję Google Play.</string>
-    <string name="include_account_token_checkbox_text">Dodaj token mojego konta, aby przyspieszyć pomoc w kwestiach związanych z płatnościami lub kontem</string>
-    <string name="include_account_token_warning_message_first">Dołączenie tokena konta powoduje połączenie raportu z kontem, co pomaga nam szybciej rozwiązać problem. Wszystkie raporty są automatycznie usuwane po pewnym czasie.</string>
-    <string name="include_account_token_warning_message_second">Szczegółowe informacje znajdziesz w naszej %1$s.</string>
-    <string name="include_account_token_warning_title">Ma to wpływ na anonimowość</string>
     <string name="info">Informacje</string>
     <string name="internet">Internet</string>
     <string name="invalid_address_blank_warning">Wprowadź adres IP</string>
@@ -294,7 +285,7 @@
     <string name="ipv6_unavailable">Nie można skonfigurować protokołu IPv6. Wyłącz go w aplikacji lub włącz na urządzeniu.</string>
     <string name="is_offline">Twoje urządzenie jest offline. Tunel zostanie automatycznie połączony, gdy urządzenie ponownie przejdzie w tryb online.</string>
     <string name="language">Język</string>
-    <string name="legacy_always_on_vpn_error_notification_content">Nie można uruchomić połączenia tunelowego. Przed rozpoczęciem użytkowania usługi Mullvad VPN wyłącz opcję „Zawsze włączony VPN”.</string>
+    <string name="legacy_always_on_vpn_error_notification_content">Nie można uruchomić połączenia tunelowego. Przed rozpoczęciem użytkowania aplikacji Krtek wyłącz opcję „Zawsze włączony VPN”.</string>
     <string name="legacy_always_on_vpn_error_notification_title">Opcja „Zawsze włączony VPN” przypisana jest do innej aplikacji VPN</string>
     <string name="less_than_a_day_left">Na koncie pozostał mniej niż jeden dzień</string>
     <string name="less_than_one_day">mniej niż jeden dzień</string>
@@ -371,7 +362,6 @@
     <string name="next">Dalej</string>
     <string name="next_with_icon">Dalej %1$s</string>
     <string name="no_custom_lists_available">Brak dostępnych list niestandardowych</string>
-    <string name="no_email_app_available">Na urządzeniu nie ma dostępnej aplikacji poczty elektronicznej</string>
     <string name="no_internet_connection">Brak połączenia z Internetem</string>
     <string name="no_matching_relay">Żaden serwer nie odpowiada ustawieniom. Spróbuj zmienić serwer lub inne ustawienia.</string>
     <string name="no_matching_relay_entry">Żaden serwer wejściowy nie odpowiada ustawieniom. Spróbuj zmienić serwer lub inne ustawienia.</string>
@@ -411,8 +401,6 @@
     <string name="port">Port</string>
     <string name="port_x">Port: %1$s</string>
     <string name="privacy_policy_label">Polityka prywatności</string>
-    <string name="privacy_policy_lower_case">polityka prywatności</string>
-    <string name="problem_report_description">Aby można było pomóc Ci skuteczniej, do tej wiadomości dołączony zostanie plik dziennika aplikacji. Twoje dane pozostaną bezpieczne i prywatne, ponieważ przed wysłaniem zaszyfrowanym kanałem zostają one zanonimizowane.</string>
     <string name="providers">Dostawcy</string>
     <string name="quantum_resistant_info_first_paragraph">Ta funkcja sprawia, że tunel WireGuard jest odporny na potencjalne ataki ze strony komputerów kwantowych.</string>
     <string name="quantum_resistant_info_second_paragraph">Jest to wykonywane poprzez dodatkową wymianę kluczy przy użyciu algorytmu odpornego na ataki z użyciem komputerów kwantowych i zmieszanie wyniku ze zwykłym szyfrowaniem WireGuard. Ten dodatkowy krok zużywa około 500 kB ruchu za każdym razem, gdy ustanawiany jest nowy tunel.</string>
@@ -435,7 +423,6 @@
     <string name="rented">Wynajmowane</string>
     <string name="rented_only">Wyłącznie wynajmowane</string>
     <string name="report_a_problem">Zgłoś problem</string>
-    <string name="report_problem_message_is_empty">Wprowadź wiadomość</string>
     <string name="reset_to_default_button">Przywróć domyślne</string>
     <string name="retry">Ponów próbę</string>
     <string name="save">Zapisz</string>
@@ -443,13 +430,6 @@
     <string name="search_no_matches_for_text">Brak wyników dla hasła „%1$s”, spróbuj innego wyszukiwania</string>
     <string name="search_placeholder">Wyszukaj...</string>
     <string name="select_location">Wybierz lokalizację</string>
-    <string name="send">Wyślij</string>
-    <string name="send_anyway">Mimo to wyślij</string>
-    <string name="send_email">Wyślij wiadomość e-mail</string>
-    <string name="sending">Wysyłanie...</string>
-    <string name="sent">Wysłano</string>
-    <string name="sent_contact">W razie potrzeby skontaktujemy się z Tobą pod adresem %1$s</string>
-    <string name="sent_thanks">Dziękujemy!</string>
     <string name="separate_filters_title">Oddzielne filtry</string>
     <string name="separate_filters_title_first_paragraph">Filtry można teraz ustawiać oddzielnie dla lokalizacji wejściowej i wyjściowej.</string>
     <string name="separate_filters_title_second_paragraph">Obecne filtry zastosowano zarówno do lokalizacji wejścia, jak i wyjścia.</string>
@@ -527,7 +507,6 @@
     <string name="unable_to_reach_api_dialog_message_list_second">Połącz się z inną siecią</string>
     <string name="unable_to_reach_api_dialog_message_list_third">Włącz wszystkie metody dostępu w aplikacji</string>
     <string name="unable_to_reach_api_dialog_message_second">Może to być spowodowane cenzurą lub problemami z siecią. Spróbuj:</string>
-    <string name="unable_to_reach_api_dialog_message_third">Jeśli te kroki nie pomogą, wyślij wiadomość e-mail do działu pomocy technicznej, korzystając z poniższego przycisku. Spowoduje to automatyczne dołączenie zanonimizowanych dzienników.</string>
     <string name="unavailable">Niedostępne</string>
     <string name="undo">Cofnij</string>
     <string name="unsupported_version">WERSJA NIEOBSŁUGIWANA</string>
@@ -538,8 +517,6 @@
     <string name="uri_browser_app_not_found">Nie zainstalowano żadnej aplikacji przeglądarki, nie można otworzyć linku</string>
     <string name="uri_market_app_not_found">Nie zainstalowano żadnego sklepu z aplikacjami dla systemu Android, nie można otworzyć linku</string>
     <string name="use_method">Użyj metody</string>
-    <string name="user_email_hint">Twój adres e-mail (opcjonalnie)</string>
-    <string name="user_message_hint">Abyśmy mogli lepiej Ci pomóc, napisz w języku angielskim lub szwedzkim i podaj kraj, z którego się łączysz.</string>
     <string name="username">Nazwa użytkownika</string>
     <string name="verification_failed_dialog_message">Nie udało nam się zweryfikować Twojego najnowszego zakupu. Sprawdź połączenie internetowe i spróbuj ponownie. Jeśli problem nie ustąpi, skontaktuj się z pomocą techniczną.</string>
     <string name="verifying_api_method">Weryfikowanie metody interfejsu API...</string>
@@ -562,7 +539,6 @@
     <string name="vpn_permission_error_notification_title">Błąd uprawnienia VPN</string>
     <string name="vpn_settings_not_available">Ustawienia VPN są niedostępne na urządzeniu</string>
     <string name="warning">Ostrzeżenie</string>
-    <string name="we_will_look_into_this">Sprawdzimy to.</string>
     <string name="when_needed">W razie potrzeby</string>
     <string name="wireguard_custom_port_title">Niestandardowy</string>
     <string name="wireguard_mtu_footer">Ustaw wartość MTU WireGuard. Prawidłowy zakres: %1$d–%2$d.</string>
