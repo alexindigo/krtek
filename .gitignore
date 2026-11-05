@@ -41,4 +41,5 @@
 android/.idea
 .vscode/
 .direnv/
+.envrc
 .zed/
