@@ -24,6 +24,7 @@ pub enum InactiveReason {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RuleState {
     ConditionsMet,
+    Forwarding,
     Inactive(InactiveReason),
 }
 
@@ -37,6 +38,10 @@ pub struct LocalRuleStatus {
 pub enum ForwardingAvailability {
     #[default]
     NotAvailable,
+    Off,
+    Active,
+    PausedWhileConnected,
+    Failed,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -138,6 +143,21 @@ pub fn current_wifi(observation: Option<&NetworkObservation>) -> ConnectedWifi {
 }
 
 impl LocalNetworkStatus {
+    /// Delivery readiness is supplied by the frontend's lifecycle owner, never observation alone.
+    pub fn with_forwarding(mut self, availability: ForwardingAvailability) -> Self {
+        self.forwarding = availability;
+        for rule in &mut self.rules {
+            if matches!(rule.state, RuleState::ConditionsMet | RuleState::Forwarding) {
+                rule.state = if availability == ForwardingAvailability::Active {
+                    RuleState::Forwarding
+                } else {
+                    RuleState::ConditionsMet
+                };
+            }
+        }
+        self
+    }
+
     /// Revision is assigned only by the daemon's single publication owner.
     pub fn from_observation(
         policy: &LocalNetworkAccess,
@@ -186,6 +206,7 @@ mod tests {
     }
     fn observation() -> NetworkObservation {
         NetworkObservation {
+            sequence: 0,
             permissions: Some(PermissionState {
                 local_network: true,
                 precise_location: true,
@@ -249,6 +270,73 @@ mod tests {
             inactive(InactiveReason::WaitingForNetworkDetails)
         );
         assert!(!LocalNetworkStatus::from_observation(&policy, None).observer_available);
+    }
+
+    #[test]
+    fn only_active_forwarding_promotes_met_conditions_and_preserves_other_status_facts() {
+        let original = LocalNetworkStatus::from_observation(&policy(false), Some(&observation()));
+        for availability in [
+            ForwardingAvailability::NotAvailable,
+            ForwardingAvailability::Off,
+            ForwardingAvailability::Active,
+            ForwardingAvailability::PausedWhileConnected,
+            ForwardingAvailability::Failed,
+        ] {
+            let status = original.clone().with_forwarding(availability);
+            assert_eq!(status.forwarding, availability);
+            assert_eq!(status.revision, original.revision);
+            assert_eq!(status.observer_available, original.observer_available);
+            assert_eq!(status.current_wifi, original.current_wifi);
+            assert_eq!(status.rules[0].id, original.rules[0].id);
+            assert_eq!(
+                status.rules[0].state,
+                if availability == ForwardingAvailability::Active {
+                    RuleState::Forwarding
+                } else {
+                    RuleState::ConditionsMet
+                }
+            );
+            assert_eq!(
+                original
+                    .clone()
+                    .with_forwarding(ForwardingAvailability::Active)
+                    .with_forwarding(availability),
+                status
+            );
+        }
+        assert_eq!(
+            original
+                .clone()
+                .with_forwarding(ForwardingAvailability::NotAvailable),
+            original
+        );
+    }
+
+    #[test]
+    fn active_keeps_every_inactive_reason_including_observer_unavailability() {
+        for reason in [
+            InactiveReason::PolicyOff,
+            InactiveReason::RuleOff,
+            InactiveReason::LocalPermissionMissing,
+            InactiveReason::LocationPermissionMissing,
+            InactiveReason::BackgroundLocationMissing,
+            InactiveReason::LocationOff,
+            InactiveReason::NoEligibleNetwork,
+            InactiveReason::WaitingForNetworkDetails,
+            InactiveReason::DifferentWifi,
+            InactiveReason::WifiNameUnknown,
+            InactiveReason::MultipleNetworks,
+            InactiveReason::ObserverUnavailable,
+        ] {
+            let mut original = LocalNetworkStatus::from_observation(&policy(false), None);
+            original.rules[0].state = RuleState::Inactive(reason);
+            let status = original
+                .clone()
+                .with_forwarding(ForwardingAvailability::Active);
+            assert_eq!(status.rules, original.rules);
+            assert!(!status.observer_available);
+            assert_eq!(status.forwarding, ForwardingAvailability::Active);
+        }
     }
 
     #[test]

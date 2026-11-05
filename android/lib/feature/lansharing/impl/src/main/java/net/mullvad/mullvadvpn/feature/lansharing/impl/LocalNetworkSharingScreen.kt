@@ -12,7 +12,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -87,6 +89,8 @@ fun SharedTransitionScope.LocalNetworkSharing(
             onDiscard = viewModel::discard,
             onKeep = viewModel::keepEditing,
             onDelete = viewModel::delete,
+            onRequestDelete = viewModel::requestDelete,
+            onCancelDelete = { viewModel.requestDelete(null) },
             onConnectedWifi = viewModel::useConnectedWifi,
             onRequestAccess = requestAccess,
         )
@@ -128,27 +132,33 @@ fun LocalNetworkSharingScreen(
         },
     ) { contentModifier ->
         val scrollState = rememberScrollState()
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier =
-                contentModifier
-                    .drawVerticalScrollbar(
-                        state = scrollState,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = AlphaScrollbar),
-                    )
-                    .verticalScroll(state = scrollState),
-        ) {
-            when (state) {
-                is Lc.Loading -> {
-                    Loading()
+        Column(modifier = contentModifier) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier =
+                    Modifier.weight(1f)
+                        .drawVerticalScrollbar(
+                            state = scrollState,
+                            color =
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = AlphaScrollbar),
+                        )
+                        .verticalScroll(state = scrollState),
+            ) {
+                when (state) {
+                    is Lc.Loading -> {
+                        Loading()
+                    }
+                    is Lc.Content -> {
+                        LocalNetworkSharingContent(
+                            state = state.value,
+                            onLanSharingEnabled = onLocalNetworkSharingEnable,
+                            policyActions = policyActions,
+                        )
+                    }
                 }
-                is Lc.Content -> {
-                    LocalNetworkSharingContent(
-                        state = state.value,
-                        onLanSharingEnabled = onLocalNetworkSharingEnable,
-                        policyActions = policyActions,
-                    )
-                }
+            }
+            if (state is Lc.Content && editing && !state.value.saving) {
+                LocalRuleEditorActions(state.value, policyActions)
             }
         }
     }
@@ -171,16 +181,22 @@ private fun LocalNetworkSharingContent(
             contentDescription = stringResource(R.string.local_network_sharing),
         )
 
+        Text(
+            text = stringResource(R.string.local_access_connected_title),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(top = Dimens.mediumPadding),
+        )
         ScreenDescription(
             modifier = Modifier.padding(vertical = Dimens.mediumPadding),
             text =
                 buildAnnotatedString {
                     appendLine(annotatedStringResource(R.string.local_network_sharing_info))
-                    append(
+                    appendLine(
                         annotatedStringResource(
                             R.string.local_network_sharing_info_block_connections_warning
                         )
                     )
+                    append(annotatedStringResource(R.string.local_access_connected_warning))
                     appendLine()
                     appendLine()
                     append(annotatedStringResource(R.string.local_network_sharing_info2))
@@ -193,7 +209,7 @@ private fun LocalNetworkSharingContent(
             title = stringResource(R.string.how_it_works),
             expandedText =
                 buildAnnotatedString {
-                    appendLine(annotatedStringResource(R.string.local_network_sharing_info3))
+                    appendLine(annotatedStringResource(R.string.local_access_connected_details))
                     appendLine()
                     append(annotatedStringResource(R.string.local_network_sharing_info4))
                     appendLine()
@@ -207,10 +223,11 @@ private fun LocalNetworkSharingContent(
 
         SwitchListItem(
             modifier = Modifier.padding(vertical = Dimens.screenBottomMarginNew),
-            title = stringResource(R.string.enable),
+            title = stringResource(R.string.local_access_connected_enable),
             isToggled = state.lanSharingEnabled,
             onCellClicked = onLanSharingEnabled,
         )
+        HorizontalDivider(modifier = Modifier.padding(bottom = Dimens.mediumPadding))
         LocalPolicyControls(state, policyActions)
     }
 }

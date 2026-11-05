@@ -97,7 +97,9 @@ class MullvadVpnService : TalpidVpnService() {
             managementService.tunnelState
                 .filterIsInstance<TunnelState.Error>()
                 .filter { !it.errorState.isBlocking }
-                .collect { foregroundNotificationHandler.stopForeground() }
+                .collect {
+                    withoutLocalFrontend { foregroundNotificationHandler.stopForeground() }
+                }
         }
     }
 
@@ -111,6 +113,10 @@ class MullvadVpnService : TalpidVpnService() {
         // Always promote to foreground if connect/disconnect actions are provided to mitigate cases
         // where the service would potentially otherwise be too slow running `startForeground`.
         when {
+            intent.isFromSystem() && isLocalFrontendActive() -> {
+                foregroundNotificationHandler.startForeground()
+            }
+
             keyguardManager.isKeyguardLocked -> {
                 Logger.i("Keyguard is locked, ignoring command")
             }
@@ -138,7 +144,7 @@ class MullvadVpnService : TalpidVpnService() {
                 // If disconnect intent is received and no one is using this service, simply stop
                 // foreground and let system stop service when it deems it not to be necessary.
                 if (bindCount.get() == 0) {
-                    foregroundNotificationHandler.stopForeground()
+                    withoutLocalFrontend { foregroundNotificationHandler.stopForeground() }
                 }
             }
         }
@@ -193,6 +199,7 @@ class MullvadVpnService : TalpidVpnService() {
         }
 
     override fun onRevoke() {
+        super.onRevoke()
         Logger.d("onRevoke")
         runBlocking { connectionProxy.disconnect(DisconnectReason.SYSTEM_REVOKE) }
     }
@@ -204,7 +211,7 @@ class MullvadVpnService : TalpidVpnService() {
         // Foreground?
         if (intent.isFromSystem()) {
             Logger.i("onUnbind from system")
-            foregroundNotificationHandler.stopForeground()
+            withoutLocalFrontend { foregroundNotificationHandler.stopForeground() }
         }
 
         return true
@@ -220,6 +227,13 @@ class MullvadVpnService : TalpidVpnService() {
         MullvadDaemon.shutdown()
 
         Logger.i("Shutdown complete")
+    }
+
+    override fun onLocalFrontendChanged(active: Boolean) {
+        if (active) foregroundNotificationHandler.startForeground()
+        else if (bindCount.get() == 0 && !hasOpenTun()) {
+            foregroundNotificationHandler.stopForeground()
+        }
     }
 
     // If an intent is from the system it is because of the OS starting/stopping the VPN.

@@ -38,6 +38,7 @@ import net.mullvad.talpid.util.UnderlyingConnectivityStatusResolver
 @Suppress("TooManyFunctions")
 open class TalpidVpnService : LifecycleVpnService() {
     private lateinit var localNetworkWatcher: LocalNetworkWatcher
+    private val localFrontendOwnership = LocalFrontendOwnership()
     private var activeTunStatus by
         observable<CreateTunResult?>(null) { _, oldTunStatus, _ ->
             val oldTunFd =
@@ -82,9 +83,86 @@ open class TalpidVpnService : LifecycleVpnService() {
     @Suppress("Unused")
     fun detachLocalNetwork(registration: Long): Boolean = localNetworkWatcher.detach(registration)
 
+    // Used by JNI. Native receives the sole descriptor; Kotlin retains only ownership state.
+    @Suppress("Unused")
+    fun openLocalFrontend(routes: Array<String>): CreateTunResult =
+        synchronized(this) {
+            val config = LocalFrontendConfig.parse(routes) ?: return EstablishError
+            if (!localFrontendOwnership.tryFrontend()) return EstablishError
+            val result =
+                try {
+                    createLocalFrontend(config)
+                } catch (_: RuntimeException) {
+                    EstablishError
+                }
+            if (result !is CreateTunResult.Success) localFrontendOwnership.frontendFinished()
+            result
+        }
+
+    private fun createLocalFrontend(config: LocalFrontendConfig): CreateTunResult = either {
+        prepareVpnSafe().mapLeft { it.toCreateTunError() }.bind()
+        val builder = Builder()
+        config.configure(
+            { address, prefix -> builder.addAddress(address, prefix) },
+            { builder.addRoute(InetAddress.getByAddress(it.networkBytes()), it.prefix) },
+        )
+        builder.setMtu(BLOCKING_MTU)
+        builder.setBlocking(false)
+        builder.setMeteredIfSupported(false)
+        val descriptor = builder.establishSafe().mapLeft { EstablishError }.bind()
+        descriptor.use {
+            onLocalFrontendChanged(true)
+            CreateTunResult.Success(it.detachFd())
+        }
+    }
+        .merge()
+
+    @Suppress("Unused")
+    fun finishLocalFrontend(): Unit =
+        synchronized(this) {
+            if (localFrontendOwnership.frontendActive) {
+                localFrontendOwnership.frontendFinished()
+                onLocalFrontendChanged(false)
+            }
+        }
+
+    @Suppress("Unused")
+    fun isLocalFrontendActive(): Boolean =
+        synchronized(this) { localFrontendOwnership.frontendActive }
+
+    @Suppress("Unused")
+    fun prepareLocalSocket(
+        fd: Int,
+        networkHandle: Long,
+        sequence: Long,
+        needsWifiName: Boolean,
+    ): Int =
+        synchronized(this) {
+            if (!localFrontendOwnership.canPrepare) return LocalSocketPreparation.INACTIVE
+            localNetworkWatcher.withCurrentNetwork(networkHandle, sequence, needsWifiName) {
+                LocalSocketPreparation.prepare(fd, it, ::protect)
+            }
+        }
+
+    protected open fun onLocalFrontendChanged(active: Boolean) = Unit
+
+    protected fun hasOpenTun(): Boolean = synchronized(this) { activeTunStatus?.isOpen == true }
+
+    /** Serialize foreground demotion with native frontend opening and finishing. */
+    protected fun withoutLocalFrontend(action: () -> Unit): Unit =
+        synchronized(this) {
+            if (!localFrontendOwnership.frontendActive) action()
+        }
+
+    @CallSuper
+    override fun onRevoke(): Unit = synchronized(this) { localFrontendOwnership.revoke() }
+
     // Used by JNI
     fun openTun(config: TunConfig): CreateTunResult =
-        synchronized(this) { createTun(config).merge().also { activeTunStatus = it } }
+        synchronized(this) {
+            if (!localFrontendOwnership.tryUpstream()) return EstablishError
+            createTun(config).merge().also { activeTunStatus = it }
+        }
 
     // Used by JNI
     @Suppress("Unused")
@@ -92,6 +170,7 @@ open class TalpidVpnService : LifecycleVpnService() {
         synchronized(this) {
             connectivityListener.invalidateNetworkStateCache()
             activeTunStatus = null
+            localFrontendOwnership.upstreamClosed()
         }
 
     // Used by JNI

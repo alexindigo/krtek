@@ -14,7 +14,18 @@ log = { workspace = true }
 talpid-routing = { path = "../talpid-routing" }
 talpid-types = { path = "../talpid-types" }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["fs", "process", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["fs", "process", "rt-multi-thread", "net", "sync", "time", "macros"] }
+
+[target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
+talpid-lan-forwarder = { path = "../talpid-lan-forwarder" }
+nix = { workspace = true, features = ["fs"] }
+
+[target.'cfg(any(target_os = "android", target_os = "linux"))'.dev-dependencies]
+nix = { workspace = true, features = ["socket"] }
+socket2 = { workspace = true }
+smoltcp = { version = "0.13", default-features = false, features = [
+  "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "std",
+] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 tun = { workspace = true }

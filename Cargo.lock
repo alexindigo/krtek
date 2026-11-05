@@ -3489,15 +3489,18 @@ dependencies = [
  "rand 0.9.4",
  "serde",
  "serde_json",
+ "socket2",
  "talpid-core",
  "talpid-dbus",
  "talpid-dns",
  "talpid-error",
  "talpid-future",
+ "talpid-lan-forwarder",
  "talpid-macos",
  "talpid-platform-metadata",
  "talpid-routing",
  "talpid-time",
+ "talpid-tunnel",
  "talpid-types",
  "talpid-windows",
  "thiserror 2.0.19",
@@ -6114,6 +6117,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "talpid-lan-forwarder"
+version = "0.0.0"
+dependencies = [
+ "log",
+ "smoltcp",
+ "socket2",
+ "tokio",
+]
+
+[[package]]
 name = "talpid-macos"
 version = "0.0.0"
 dependencies = [
@@ -6203,8 +6216,12 @@ dependencies = [
  "netlink-packet-core",
  "netlink-packet-route",
  "netlink-sys",
+ "nix 0.31.3",
  "rtnetlink",
+ "smoltcp",
+ "socket2",
  "talpid-error",
+ "talpid-lan-forwarder",
  "talpid-routing",
  "talpid-types",
  "talpid-windows",

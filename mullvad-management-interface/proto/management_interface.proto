@@ -849,6 +849,10 @@ message LocalNetworkStatus {
   bool observer_available = 2;
   enum ForwardingAvailability {
     NOT_AVAILABLE = 0;
+    OFF = 1;
+    ACTIVE = 2;
+    PAUSED_WHILE_CONNECTED = 3;
+    FAILED = 4;
   }
   ForwardingAvailability forwarding = 3;
   ConnectedWifi current_wifi = 4;
@@ -874,6 +878,7 @@ message LocalRuleStatus {
   enum State {
     INACTIVE = 0;
     CONDITIONS_MET = 1;
+    FORWARDING = 2;
   }
   State state = 2;
   optional LocalRuleInactiveReason reason = 3;

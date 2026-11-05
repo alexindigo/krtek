@@ -246,6 +246,38 @@ impl LocalNetworkAccess {
             rule.ssid_ids.retain(|ssid| ssids.insert(ssid.clone()));
         }
     }
+
+    pub fn matching_rules(&self, destination: IpAddr) -> impl Iterator<Item = &LocalBypassRule> {
+        self.rules.iter().filter(move |rule| {
+            self.enabled && rule.enabled && rule.cidrs.iter().any(|cidr| cidr.contains(destination))
+        })
+    }
+
+    /// Capture destinations, not delivery grants. Conditions never affect routes.
+    /// Keep overlapping prefixes intact: widening or merging changes policy.
+    pub fn announced_routes(&self) -> Vec<LocalCidr> {
+        if !self.enabled || self.validate().is_err() {
+            return vec![];
+        }
+        let mut routes: Vec<_> = self
+            .rules
+            .iter()
+            .filter(|rule| rule.enabled)
+            .flat_map(|rule| rule.cidrs.iter().copied())
+            .collect();
+        routes.sort_unstable_by_key(|cidr| (cidr.network().network(), cidr.network().prefix()));
+        routes.dedup();
+        routes
+    }
+}
+
+/// Physical link prefixes define broadcasts, not the policy's authorization CIDRs.
+/// Point-to-point /31 and host /32 prefixes have no directed broadcast.
+pub fn is_directed_broadcast(destination: IpAddr, physical_links: &[IpNetwork]) -> bool {
+    destination.is_ipv4()
+        && physical_links
+            .iter()
+            .any(|link| link.is_ipv4() && link.prefix() < 31 && link.broadcast() == destination)
 }
 
 #[cfg(test)]
@@ -263,6 +295,120 @@ mod tests {
                 ssid_ids: vec![SsidIdentity::from_bytes(b"test-wifi".to_vec()).unwrap()],
             }],
         }
+    }
+
+    #[test]
+    fn matching_rules_require_both_switches_and_exact_destination_membership() {
+        let mut policy = policy();
+        let destination = "192.168.240.10".parse().unwrap();
+        assert_eq!(policy.matching_rules(destination).count(), 1);
+        assert_eq!(
+            policy
+                .matching_rules("192.168.240.16".parse().unwrap())
+                .count(),
+            0
+        );
+        assert_eq!(
+            policy.matching_rules("fe80::10".parse().unwrap()).count(),
+            0
+        );
+        policy.rules[0].enabled = false;
+        assert_eq!(policy.matching_rules(destination).count(), 0);
+        policy.rules[0].enabled = true;
+        policy.enabled = false;
+        assert_eq!(policy.matching_rules(destination).count(), 0);
+    }
+
+    #[test]
+    fn announcements_preserve_exact_ipv4_ipv6_mixed_and_overlapping_prefixes() {
+        for prefixes in [
+            vec!["10.0.2.2/32"],
+            vec!["fd42::/64", "fe80::10/128"],
+            vec!["10.0.0.0/8", "10.0.2.2/32", "fd42::/64"],
+        ] {
+            let mut policy = policy();
+            policy.rules[0].cidrs = prefixes.iter().map(|text| text.parse().unwrap()).collect();
+            let routes = policy.announced_routes();
+            assert_eq!(routes, policy.rules[0].cidrs);
+            assert!(routes.iter().all(|cidr| cidr.network().prefix() != 0));
+        }
+    }
+
+    #[test]
+    fn announcements_ignore_names_order_duplicates_and_wifi_conditions() {
+        let mut policy = policy();
+        policy.rules[0].cidrs = vec!["fd42::/64".parse().unwrap(), "10.0.2.2/32".parse().unwrap()];
+        let mut other = policy.rules[0].clone();
+        other.id = Uuid::from_u128(1);
+        policy.rules.push(other);
+        let routes = policy.announced_routes();
+        assert_eq!(
+            routes,
+            vec!["10.0.2.2/32".parse().unwrap(), "fd42::/64".parse().unwrap()]
+        );
+        policy.rules.reverse();
+        for rule in &mut policy.rules {
+            rule.name = "renamed".into();
+            rule.cidrs.reverse();
+            rule.cidrs.push(rule.cidrs[0]);
+            rule.ssid_ids.clear();
+        }
+        assert_eq!(policy.announced_routes(), routes);
+    }
+
+    #[test]
+    fn announcements_track_enabled_destination_edits_additions_and_deletions() {
+        let mut policy = policy();
+        let original = policy.announced_routes();
+        policy.rules[0].enabled = false;
+        assert!(policy.announced_routes().is_empty());
+        policy.rules[0].enabled = true;
+        assert_eq!(policy.announced_routes(), original);
+        policy.rules[0].cidrs[0] = "10.0.2.2/32".parse().unwrap();
+        let edited = policy.announced_routes();
+        assert_ne!(edited, original);
+        let mut extra = policy.rules[0].clone();
+        extra.id = Uuid::from_u128(1);
+        extra.cidrs = vec!["fd42::/64".parse().unwrap()];
+        policy.rules.push(extra);
+        assert_eq!(policy.announced_routes().len(), 2);
+        policy.rules.pop();
+        assert_eq!(policy.announced_routes(), edited);
+        policy.rules.clear();
+        assert!(policy.announced_routes().is_empty());
+    }
+
+    #[test]
+    fn announcements_are_empty_for_off_or_invalid_policy_even_with_enabled_rules() {
+        let mut policy = policy();
+        policy.enabled = false;
+        assert!(policy.announced_routes().is_empty());
+        policy.enabled = true;
+        policy.rules.push(policy.rules[0].clone());
+        assert!(policy.announced_routes().is_empty());
+    }
+
+    #[test]
+    fn directed_broadcast_uses_physical_prefixes_not_authorization_ranges() {
+        let links = ["192.168.240.105/24".parse().unwrap()];
+        assert!(is_directed_broadcast(
+            "192.168.240.255".parse().unwrap(),
+            &links
+        ));
+        assert!(!is_directed_broadcast(
+            "192.168.240.15".parse().unwrap(),
+            &links
+        ));
+        for prefix in ["192.168.240.10/31", "192.168.240.11/32"] {
+            assert!(!is_directed_broadcast(
+                "192.168.240.11".parse().unwrap(),
+                &[prefix.parse().unwrap()]
+            ));
+        }
+        assert!(!is_directed_broadcast(
+            "fe80::ffff".parse().unwrap(),
+            &links
+        ));
     }
 
     #[test]

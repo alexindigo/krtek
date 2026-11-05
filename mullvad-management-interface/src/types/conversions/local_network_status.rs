@@ -6,11 +6,8 @@ impl From<&LocalNetworkStatus> for proto::LocalNetworkStatus {
         Self {
             revision: status.revision,
             observer_available: status.observer_available,
-            forwarding: match status.forwarding {
-                ForwardingAvailability::NotAvailable => {
-                    proto::local_network_status::ForwardingAvailability::NotAvailable as i32
-                }
-            },
+            forwarding: proto::local_network_status::ForwardingAvailability::from(status.forwarding)
+                as i32,
             current_wifi: Some(proto::ConnectedWifi {
                 identity: Some(match &status.current_wifi {
                     ConnectedWifi::Known(ssid) => {
@@ -28,10 +25,11 @@ impl From<&LocalNetworkStatus> for proto::LocalNetworkStatus {
                     id: rule.id.to_string(),
                     state: match rule.state {
                         RuleState::ConditionsMet => proto::local_rule_status::State::ConditionsMet,
+                        RuleState::Forwarding => proto::local_rule_status::State::Forwarding,
                         RuleState::Inactive(_) => proto::local_rule_status::State::Inactive,
                     } as i32,
                     reason: match rule.state {
-                        RuleState::ConditionsMet => None,
+                        RuleState::ConditionsMet | RuleState::Forwarding => None,
                         RuleState::Inactive(reason) => {
                             Some(proto::LocalRuleInactiveReason::from(reason) as i32)
                         }
@@ -47,13 +45,9 @@ impl TryFrom<proto::LocalNetworkStatus> for LocalNetworkStatus {
     fn try_from(status: proto::LocalNetworkStatus) -> Result<Self, Self::Error> {
         let invalid = || FromProtobufTypeError::invalid_argument("invalid local network status");
         let forwarding =
-            match proto::local_network_status::ForwardingAvailability::try_from(status.forwarding)
+            proto::local_network_status::ForwardingAvailability::try_from(status.forwarding)
                 .map_err(|_| invalid())?
-            {
-                proto::local_network_status::ForwardingAvailability::NotAvailable => {
-                    ForwardingAvailability::NotAvailable
-                }
-            };
+                .into();
         let current_wifi = match status
             .current_wifi
             .and_then(|wifi| wifi.identity)
@@ -79,6 +73,7 @@ impl TryFrom<proto::LocalNetworkStatus> for LocalNetworkStatus {
                     (proto::local_rule_status::State::ConditionsMet, None) => {
                         RuleState::ConditionsMet
                     }
+                    (proto::local_rule_status::State::Forwarding, None) => RuleState::Forwarding,
                     (proto::local_rule_status::State::Inactive, Some(reason)) => {
                         RuleState::Inactive(
                             proto::LocalRuleInactiveReason::try_from(reason)
@@ -114,6 +109,15 @@ macro_rules! enum_conversion {
         }
     };
 }
+enum_conversion!(
+    ForwardingAvailability,
+    proto::local_network_status::ForwardingAvailability,
+    NotAvailable,
+    Off,
+    Active,
+    PausedWhileConnected,
+    Failed
+);
 enum_conversion!(
     InactiveReason,
     proto::LocalRuleInactiveReason,
@@ -211,6 +215,34 @@ mod tests {
                 matches!(crate::client::DaemonEvent::try_from(event.event.unwrap()).unwrap(), crate::client::DaemonEvent::LocalNetworkStatus(status) if status == sample)
             );
         }
+    }
+
+    #[test]
+    fn forwarding_values_and_rule_states_round_trip_without_changing_legacy_fixtures() {
+        for availability in [
+            ForwardingAvailability::NotAvailable,
+            ForwardingAvailability::Off,
+            ForwardingAvailability::Active,
+            ForwardingAvailability::PausedWhileConnected,
+            ForwardingAvailability::Failed,
+        ] {
+            for state in [
+                RuleState::ConditionsMet,
+                RuleState::Forwarding,
+                RuleState::Inactive(InactiveReason::ObserverUnavailable),
+            ] {
+                let mut sample = samples().remove(0);
+                sample.forwarding = availability;
+                sample.rules[0].state = state;
+                let encoded = proto::LocalNetworkStatus::from(&sample).encode_to_vec();
+                let wire = proto::LocalNetworkStatus::decode(encoded.as_slice()).unwrap();
+                assert_eq!(LocalNetworkStatus::try_from(wire).unwrap(), sample);
+            }
+        }
+        let mut wire = proto::LocalNetworkStatus::from(&samples()[0]);
+        wire.rules[0].state = proto::local_rule_status::State::Forwarding as i32;
+        wire.rules[0].reason = Some(0);
+        assert!(LocalNetworkStatus::try_from(wire).is_err());
     }
 
     #[test]

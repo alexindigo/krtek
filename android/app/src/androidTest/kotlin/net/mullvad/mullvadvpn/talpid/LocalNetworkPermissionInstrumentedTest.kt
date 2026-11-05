@@ -76,6 +76,16 @@ class LocalNetworkPermissionInstrumentedTest {
             it.viewIdResourceName == "com.android.permissioncontroller:id/$id"
         }
 
+    private fun requireLocationPage() {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
+        while (System.nanoTime() < deadline) {
+            val texts = systemNodes("com.android.permissioncontroller").map { it.text?.toString() }
+            if ("Location permission" in texts && "Allow all the time" in texts) return
+            Thread.sleep(25)
+        }
+        error("Background request did not open the location permission page")
+    }
+
     private suspend fun awaitRuleReason(id: UUID, reason: LocalRuleInactiveReason) {
         withTimeout(10_000) {
             repository.localNetworkStatus.first { status ->
@@ -131,7 +141,7 @@ class LocalNetworkPermissionInstrumentedTest {
                     throw error
                 } finally {
                     try {
-                        driver.returnFromSystemSettings()
+                        driver.returnFromSystemSettings("cleanup")
                         val current =
                             checkNotNull(repository.settingsUpdates.value?.localNetworkAccess)
                         // Remove only this exact owned UUID through full-policy CAS; preserve
@@ -201,7 +211,7 @@ class LocalNetworkPermissionInstrumentedTest {
             "Device must be staged with denied location permissions before this test"
         }
         withRestrictionEdit { driver, rule ->
-            driver.click(copy(R.string.local_access_continue), false)
+            driver.click(copy(R.string.local_access_request_location), false)
             driver.settleAction()
             permissionControl("permission_deny_button")
             runBlocking {
@@ -209,7 +219,7 @@ class LocalNetworkPermissionInstrumentedTest {
             }
             driver.requireRenderedText(copy(R.string.local_access_fine_missing))
             driver.click(copy(R.string.local_access_retry), false)
-            driver.click(copy(R.string.local_access_continue), false)
+            driver.click(copy(R.string.local_access_request_location), false)
             driver.settleAction()
             systemClick("com.android.permissioncontroller") { it.text?.toString() == "Approximate" }
             permissionControl("permission_allow_foreground_only_button")
@@ -232,21 +242,34 @@ class LocalNetworkPermissionInstrumentedTest {
             "Device must be staged with denied precise and background location before this test"
         }
         withRestrictionEdit { driver, rule ->
-            driver.click(copy(R.string.local_access_continue), false)
+            driver.click(copy(R.string.local_access_request_location), false)
             driver.settleAction()
             systemClick("com.android.permissioncontroller") { it.text?.toString() == "Precise" }
             permissionControl("permission_allow_foreground_only_button")
             runBlocking {
                 awaitRuleReason(rule.id, LocalRuleInactiveReason.BackgroundLocationMissing)
             }
-            driver.click(copy(R.string.local_access_continue), false)
+            val saved = checkNotNull(repository.settingsUpdates.value?.localNetworkAccess)
+            driver.click(copy(R.string.local_access_location_permission), false)
             driver.settleAction()
-            systemClick("com.android.settings") { it.text?.toString() == "Permissions" }
-            systemClick("com.android.permissioncontroller") { it.text?.toString() == "Location" }
+            requireLocationPage()
+            driver.returnFromSystemSettings("refusal")
+            runBlocking {
+                awaitRuleReason(rule.id, LocalRuleInactiveReason.BackgroundLocationMissing)
+                assertTrue(!granted("ACCESS_BACKGROUND_LOCATION"))
+                assertEquals(saved, repository.settingsUpdates.value?.localNetworkAccess)
+            }
+            driver.requireRenderedText(
+                copy(R.string.local_access_background_settings_help, copy(R.string.app_name))
+            )
+            driver.click(copy(R.string.local_access_retry), false)
+            driver.click(copy(R.string.local_access_location_permission), false)
+            driver.settleAction()
+            requireLocationPage()
             systemClick("com.android.permissioncontroller") {
                 it.text?.toString() == "Allow all the time"
             }
-            driver.returnFromSystemSettings()
+            driver.returnFromSystemSettings("grant")
             runBlocking {
                 awaitKnownWifi()
                 assertTrue(granted("ACCESS_BACKGROUND_LOCATION"))

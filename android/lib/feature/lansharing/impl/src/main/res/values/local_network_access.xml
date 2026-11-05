@@ -1,20 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="local_access_connected_title">Sharing while connected</string>
+    <string name="local_access_connected_warning">This warning applies only to the connected
+    bypass, not to local network rules below.</string>
+    <string name="local_access_connected_details">The connected bypass allows local multicast and
+    broadcast traffic, and traffic to and from private IP ranges, to bypass the Mullvad
+    tunnel.</string>
+    <string name="local_access_connected_enable">Bypass while connected</string>
     <string name="local_access_title">Local network rules</string>
     <string name="local_access_scope_help">Save local addresses, optionally for a specific
     Wi-Fi.</string>
-    <string name="local_access_enable">Enable local network rules</string>
+    <string name="local_access_enable">Local network rules</string>
     <string name="local_access_enable_title">Enable local network rules?</string>
-    <string name="local_access_confirmation">Rules are saved now. Local forwarding is not available
-    in this version yet.</string>
+    <string name="local_access_confirmation">You can add rules now. Local forwarding is not
+    available in this version yet.</string>
     <string name="local_access_forwarding_unavailable">Local forwarding is not available in this
     version yet.</string>
+    <string name="local_access_delivery_confirmation">While Mullvad is disconnected, only the
+    addresses in enabled rules go through %1$s. %1$s delivers traffic only when a rule’s conditions
+    are met. Android handles everything else as it would without %1$s: other connections stay
+    blocked with “Block connections without VPN” on, and go out normally with it off.</string>
+    <string name="local_access_forwarding_active">Local rules are ready. Traffic is delivered only
+    when a rule’s conditions are met.</string>
+    <string name="local_access_forwarding_paused">Local delivery is paused while Mullvad is
+    connecting or connected.</string>
+    <string name="local_access_forwarding_failed">Local delivery could not start. Change a rule or
+    reconnect Mullvad to try again.</string>
+    <string name="local_access_forwarding_off">Local delivery is off. Turn on local network rules
+    and enable at least one rule to use it.</string>
+    <string name="local_access_forwarding">Forwarding</string>
     <string name="local_access_empty">Add a rule to choose local addresses.</string>
     <string name="local_access_add_rule">Add rule</string>
     <string name="local_access_edit_rule">Edit rule</string>
     <string name="local_access_edit">Edit</string>
     <string name="local_access_delete">Delete</string>
     <string name="local_access_delete_title">Delete rule?</string>
+    <string name="local_access_delete_description">Delete “%s”?</string>
     <string name="local_access_unnamed">Unnamed rule</string>
     <string name="local_access_any_network">Any Wi-Fi or wired network</string>
     <string name="local_access_wifi">Wi-Fi: %s</string>
@@ -40,6 +61,10 @@
     <string name="local_access_keep_editing">Keep editing</string>
     <string name="local_access_conditions_met">Conditions met</string>
     <string name="local_access_policy_off">Local network rules are off</string>
+    <string name="local_access_policy_on">Local network rules are on</string>
+    <string name="local_access_finish_editing">Finish editing to change local network
+    rules.</string>
+    <string name="local_access_saving">Saving rules…</string>
     <string name="local_access_rule_off">Rule is off</string>
     <string name="local_access_local_missing">Needs local network access</string>
     <string name="local_access_fine_missing">Needs precise location access</string>
@@ -58,18 +83,23 @@
     <string name="local_access_multiple_wifi">More than one Wi-Fi is connected</string>
     <string name="local_access_waiting_wifi">Waiting for the Wi-Fi name</string>
     <string name="local_access_wifi_limit">Remove a Wi-Fi name before adding another.</string>
-    <string name="local_access_retry">Retry access</string>
+    <string name="local_access_retry">Allow access</string>
     <string name="local_access_fine_title">Allow precise location?</string>
     <string name="local_access_fine_help">Android needs precise location access to read Wi-Fi
     names. %s uses the name only to check your rules.</string>
     <string name="local_access_background_title">Allow location all the time?</string>
-    <string name="local_access_background_help">Choose Allow all the time so Wi-Fi rules can be
-    checked while %s is in the background.</string>
-    <string name="local_access_continue">Continue</string>
+    <string name="local_access_background_help">On the location permission page, choose Allow all
+    the time so Wi-Fi rules can be checked while %s is in the background.</string>
+    <string name="local_access_background_dialog_help">Choose Allow all the time in the Android
+    permission dialog so Wi-Fi rules can be checked while %s is in the background.</string>
+    <string name="local_access_background_settings_help">In App info, open Permissions → Location →
+    Allow all the time so Wi-Fi rules can be checked while %s is in the background.</string>
+    <string name="local_access_location_permission">Open location permission</string>
+    <string name="local_access_request_location">Request location</string>
     <string name="local_access_approximate">Choose precise location so Android can share Wi-Fi
     names.</string>
     <string name="local_access_settings_unavailable">Could not open Android settings. Try
     again.</string>
-    <string name="local_access_app_settings">Open app settings</string>
+    <string name="local_access_app_settings">Open App info</string>
     <string name="local_access_location_settings">Open Location settings</string>
 </resources>

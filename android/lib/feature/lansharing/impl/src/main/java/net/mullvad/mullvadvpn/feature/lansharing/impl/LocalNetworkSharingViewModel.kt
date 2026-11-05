@@ -31,6 +31,8 @@ class LocalNetworkSharingViewModel(
 ) : ViewModel() {
 
     private val editor = savedStateHandle.getStateFlow("local-rule-editor", LocalEditorState())
+    private val deleteTarget =
+        savedStateHandle.getStateFlow<LocalRuleDeleteTarget?>("local-rule-delete", null)
     private val saving = MutableStateFlow(false)
     private val error = MutableStateFlow<Int?>(null)
     private val effects = Channel<LocalNetworkSharingSideEffect>(Channel.BUFFERED)
@@ -51,10 +53,10 @@ class LocalNetworkSharingViewModel(
         combine(
                 settingsRepository.settingsUpdates.filterNotNull(),
                 settingsRepository.localNetworkStatus,
-                editor,
+                combine(editor, deleteTarget) { edit, target -> edit to target },
                 saving,
                 error,
-            ) { settings, status, edit, busy, failure ->
+            ) { settings, status, (edit, target), busy, failure ->
                 LocalNetworkSharingUiState(
                         lanSharingEnabled = settings.allowLan,
                         isModal = isModal,
@@ -63,6 +65,7 @@ class LocalNetworkSharingViewModel(
                         editor = edit,
                         saving = busy,
                         error = failure,
+                        deleteTarget = target,
                     )
                     .toLc<Boolean, LocalNetworkSharingUiState>()
             }
@@ -125,7 +128,19 @@ class LocalNetworkSharingViewModel(
 
     fun setPolicyEnabled(enabled: Boolean) = changePolicy { it.copy(enabled = enabled) }
 
+    fun requestDelete(rule: LocalBypassRule?) {
+        if (saving.value || editor.value.draft != null) return
+        val current =
+            settingsRepository.settingsUpdates.value?.localNetworkAccess?.rules?.find {
+                it.id == rule?.id
+            }
+        savedStateHandle["local-rule-delete"] = current?.let {
+            LocalRuleDeleteTarget(it.id.toString(), it.name)
+        }
+    }
+
     fun delete(id: UUID) = changePolicy {
+        requestDelete(null)
         it.copy(rules = it.rules.filterNot { rule -> rule.id == id })
     }
 

@@ -35,6 +35,8 @@ internal class AndroidLocalNetworkSource(private val context: Context) : LocalNe
 
     override fun readAccess(): LocalIdentityAccess = accessReader.read()
 
+    override fun network(handle: Long): Network? = Network.fromNetworkHandle(handle)
+
     override fun start(
         includeLocation: Boolean,
         onEvent: (LocalNetworkEvent) -> Unit,

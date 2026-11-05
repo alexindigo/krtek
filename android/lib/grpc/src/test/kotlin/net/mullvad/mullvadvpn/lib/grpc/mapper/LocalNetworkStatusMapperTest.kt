@@ -56,6 +56,41 @@ class LocalNetworkStatusMapperTest {
     }
 
     @Test
+    fun `should decode every forwarding availability and the forwarding rule state`() {
+        val expected =
+            listOf(
+                ForwardingAvailability.NotAvailable,
+                ForwardingAvailability.Off,
+                ForwardingAvailability.Active,
+                ForwardingAvailability.PausedWhileConnected,
+                ForwardingAvailability.Failed,
+            )
+        for ((index, availability) in
+            LocalNetworkStatus.ForwardingAvailability.entries.withIndex()) {
+            val wire =
+                LocalNetworkStatus(
+                    forwarding = availability,
+                    current_wifi =
+                        ConnectedWifi(
+                            identity =
+                                ConnectedWifi.Identity.Unknown(ConnectedWifi.UnknownReason.PENDING)
+                        ),
+                    rules =
+                        listOf(
+                            LocalRuleStatus(
+                                id = UUID(0, 0).toString(),
+                                state = LocalRuleStatus.State.FORWARDING,
+                            )
+                        ),
+                )
+            val status = LocalNetworkStatus.ADAPTER.decode(wire.encode()).toDomain()
+            assertEquals(expected[index], status.forwarding)
+            assertEquals(LocalRuleState.Forwarding, status.rules.single().state)
+        }
+        assertEquals(expected.size, LocalNetworkStatus.ForwardingAvailability.entries.size)
+    }
+
+    @Test
     fun `should reject incoherent rule states without echoing identity bytes`() {
         val wire =
             LocalNetworkStatus(
@@ -73,6 +108,11 @@ class LocalNetworkStatusMapperTest {
                     reason = LocalRuleInactiveReason.POLICY_OFF,
                 ),
                 LocalRuleStatus(id = UUID(0, 0).toString(), state = LocalRuleStatus.State.INACTIVE),
+                LocalRuleStatus(
+                    id = UUID(0, 0).toString(),
+                    state = LocalRuleStatus.State.FORWARDING,
+                    reason = LocalRuleInactiveReason.POLICY_OFF,
+                ),
             )) {
             assertFailsWith<IllegalArgumentException> { wire.copy(rules = listOf(rule)).toDomain() }
         }

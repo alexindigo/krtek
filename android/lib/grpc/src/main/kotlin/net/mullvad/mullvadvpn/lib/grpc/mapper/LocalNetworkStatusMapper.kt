@@ -21,6 +21,11 @@ internal fun LocalNetworkStatus.toDomain(): ModelLocalNetworkStatus =
             when (forwarding) {
                 LocalNetworkStatus.ForwardingAvailability.NOT_AVAILABLE ->
                     ForwardingAvailability.NotAvailable
+                LocalNetworkStatus.ForwardingAvailability.OFF -> ForwardingAvailability.Off
+                LocalNetworkStatus.ForwardingAvailability.ACTIVE -> ForwardingAvailability.Active
+                LocalNetworkStatus.ForwardingAvailability.PAUSED_WHILE_CONNECTED ->
+                    ForwardingAvailability.PausedWhileConnected
+                LocalNetworkStatus.ForwardingAvailability.FAILED -> ForwardingAvailability.Failed
             },
         currentWifi = requireNotNull(current_wifi) { "Missing current Wi-Fi status" }.toDomain(),
         rules = rules.map { it.toDomain() },
@@ -54,6 +59,10 @@ internal fun LocalRuleStatus.toDomain(): ModelLocalRuleStatus {
             LocalRuleStatus.State.CONDITIONS_MET -> {
                 require(reason == null) { "Conditions-met rule has an inactive reason" }
                 LocalRuleState.ConditionsMet
+            }
+            LocalRuleStatus.State.FORWARDING -> {
+                require(reason == null) { "Forwarding rule has an inactive reason" }
+                LocalRuleState.Forwarding
             }
             LocalRuleStatus.State.INACTIVE ->
                 LocalRuleState.Inactive(

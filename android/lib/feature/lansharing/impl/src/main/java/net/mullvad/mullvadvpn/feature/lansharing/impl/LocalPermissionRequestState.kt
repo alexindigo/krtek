@@ -38,16 +38,12 @@ internal enum class LocalPermissionStep {
     ExplainFine,
     Fine,
     ExplainBackground,
+    ExplainBackgroundFallback,
     Background,
     AppSettings,
     LocationSettings,
     Local,
 }
-
-internal fun LocalPermissionStep.platformStep(sdk: Int): LocalPermissionStep =
-    if (this == LocalPermissionStep.Background && sdk >= Build.VERSION_CODES.R)
-        LocalPermissionStep.AppSettings
-    else this
 
 internal enum class LocalPermissionFailure {
     LocalMissing,
@@ -67,6 +63,7 @@ internal data class LocalPermissionRequestState(
     val step: LocalPermissionStep = LocalPermissionStep.Idle,
     val flight: LocalPermissionStep? = null,
     val flightToken: Long? = null,
+    val leftForeground: Boolean = false,
     val failure: LocalPermissionFailure? = null,
 ) : Parcelable {
     fun begin(needsWifi: Boolean, grants: LocalPermissionGrants): LocalPermissionRequestState =
@@ -77,31 +74,45 @@ internal data class LocalPermissionRequestState(
         when (step) {
             LocalPermissionStep.ExplainFine -> copy(step = LocalPermissionStep.Fine)
             LocalPermissionStep.ExplainBackground -> copy(step = LocalPermissionStep.Background)
+            LocalPermissionStep.ExplainBackgroundFallback ->
+                copy(step = LocalPermissionStep.AppSettings)
             else -> this
         }
 
     fun launched(actual: LocalPermissionStep = step): LocalPermissionRequestState =
         if (!active || flight != null) this
-        else copy(step = LocalPermissionStep.Idle, flight = actual, flightToken = token)
+        else
+            copy(
+                step = LocalPermissionStep.Idle,
+                flight = actual,
+                flightToken = token,
+                leftForeground = false,
+            )
+
+    fun foregroundLeft(requestToken: Long): LocalPermissionRequestState =
+        if (
+            active &&
+                token == requestToken &&
+                flightToken == requestToken &&
+                flight == LocalPermissionStep.Background
+        )
+            copy(leftForeground = true)
+        else this
 
     fun result(resultToken: Long, grants: LocalPermissionGrants): LocalPermissionRequestState {
         if (flightToken != resultToken) return this
-        val drained = copy(flight = null, flightToken = null)
+        val drained = copy(flight = null, flightToken = null, leftForeground = false)
         return if (!active || token != resultToken) drained
         else {
-            val denied =
-                when (flight) {
-                    LocalPermissionStep.Fine -> grants.fineFailure
-                    LocalPermissionStep.Background -> grants.backgroundFailure
-                    LocalPermissionStep.AppSettings ->
-                        if (wifi) grants.fineFailure ?: grants.backgroundFailure
-                        else grants.localFailure
-                    LocalPermissionStep.LocationSettings ->
-                        if (!grants.location) LocalPermissionFailure.LocationOff else null
-                    LocalPermissionStep.Local -> grants.localFailure
-                    else -> null
-                }
-            if (denied == null) drained.next(grants) else drained.finish(denied)
+            val denied = flightFailure(grants)
+            when {
+                denied == null -> drained.next(grants)
+                flight == LocalPermissionStep.Background &&
+                    grants.sdk >= Build.VERSION_CODES.R &&
+                    !leftForeground ->
+                    drained.copy(step = LocalPermissionStep.ExplainBackgroundFallback)
+                else -> drained.finish(denied)
+            }
         }
     }
 
@@ -109,7 +120,8 @@ internal data class LocalPermissionRequestState(
         copy(token = token + 1, active = false, step = LocalPermissionStep.Idle, failure = null)
 
     fun unavailable(): LocalPermissionRequestState =
-        copy(flight = null, flightToken = null).finish(LocalPermissionFailure.SettingsUnavailable)
+        copy(flight = null, flightToken = null, leftForeground = false)
+            .finish(LocalPermissionFailure.SettingsUnavailable)
 
     fun settings(): LocalPermissionRequestState =
         if (active || flight != null) this
@@ -123,6 +135,18 @@ internal data class LocalPermissionRequestState(
                         LocalPermissionStep.LocationSettings
                     else LocalPermissionStep.AppSettings,
             )
+
+    private fun flightFailure(grants: LocalPermissionGrants): LocalPermissionFailure? =
+        when (flight) {
+            LocalPermissionStep.Fine -> grants.fineFailure
+            LocalPermissionStep.Background -> grants.backgroundFailure
+            LocalPermissionStep.AppSettings ->
+                if (wifi) grants.fineFailure ?: grants.backgroundFailure else grants.localFailure
+            LocalPermissionStep.LocationSettings ->
+                if (!grants.location) LocalPermissionFailure.LocationOff else null
+            LocalPermissionStep.Local -> grants.localFailure
+            else -> null
+        }
 
     private fun next(grants: LocalPermissionGrants): LocalPermissionRequestState =
         when {

@@ -1,5 +1,10 @@
 package net.mullvad.mullvadvpn.feature.lansharing.impl
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -12,6 +17,7 @@ import net.mullvad.mullvadvpn.lib.ui.component.listitem.SwitchListItem
 import net.mullvad.mullvadvpn.lib.ui.component.textfield.CustomTextField
 import net.mullvad.mullvadvpn.lib.ui.designsystem.PrimaryButton
 import net.mullvad.mullvadvpn.lib.ui.designsystem.PrimaryTextButton
+import net.mullvad.mullvadvpn.lib.ui.theme.Dimens
 
 @Composable
 internal fun LocalRuleEditorControls(
@@ -66,17 +72,29 @@ internal fun LocalRuleEditorControls(
         isEnabled = enabled,
         onCellClicked = { value -> actions.onUpdate { it.copy(enabled = value) } },
     )
-    state.error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
-    PrimaryButton(
-        text = stringResource(R.string.local_access_save),
-        isEnabled = enabled,
-        onClick = actions.onSave,
-    )
-    PrimaryTextButton(
-        onClick = actions.onClose,
-        isEnabled = enabled,
-        text = stringResource(android.R.string.cancel),
-    )
+}
+
+@Composable
+internal fun LocalRuleEditorActions(
+    state: LocalNetworkSharingUiState,
+    actions: LocalPolicyActions,
+) {
+    Column(
+        Modifier.fillMaxWidth()
+            .padding(horizontal = Dimens.sideMarginNew, vertical = Dimens.smallPadding),
+        verticalArrangement = Arrangement.spacedBy(Dimens.smallPadding),
+    ) {
+        HorizontalDivider()
+        state.error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
+        PrimaryButton(
+            text = stringResource(R.string.local_access_save),
+            onClick = actions.onSave,
+        )
+        PrimaryTextButton(
+            onClick = actions.onClose,
+            text = stringResource(android.R.string.cancel),
+        )
+    }
 }
 
 @Composable
@@ -115,11 +133,12 @@ private fun LocalWifiFields(
             text = stringResource(R.string.local_access_remove_wifi),
         )
     }
-    PrimaryTextButton(
-        onClick = { onUpdate { it.copy(wifiNames = it.wifiNames + LocalWifiDraft("")) } },
-        isEnabled = enabled && draft.wifiNames.size < LocalNetworkAccess.MAX_SSIDS_PER_RULE,
-        text = stringResource(R.string.local_access_add_wifi),
-    )
+    if (draft.wifiNames.size < LocalNetworkAccess.MAX_SSIDS_PER_RULE)
+        PrimaryTextButton(
+            onClick = { onUpdate { it.copy(wifiNames = it.wifiNames + LocalWifiDraft("")) } },
+            isEnabled = enabled,
+            text = stringResource(R.string.local_access_add_wifi),
+        )
     Text(
         stringResource(R.string.local_access_wifi_help),
         style = MaterialTheme.typography.bodyMedium,

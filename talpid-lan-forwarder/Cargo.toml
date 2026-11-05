@@ -1,0 +1,25 @@
+[package]
+name = "talpid-lan-forwarder"
+edition.workspace = true
+rust-version.workspace = true
+description = "Bounded local TCP and UDP delivery through an injected socket authority"
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+log = { workspace = true }
+socket2 = { workspace = true }
+tokio = { workspace = true, features = ["net", "rt", "sync", "time", "macros"] }
+smoltcp = { version = "0.13", default-features = false, features = [
+  "medium-ip",
+  "proto-ipv4",
+  "proto-ipv6",
+  "socket-tcp",
+  "std",
+] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

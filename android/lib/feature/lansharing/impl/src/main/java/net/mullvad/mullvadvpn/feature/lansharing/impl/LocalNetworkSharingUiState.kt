@@ -11,4 +11,5 @@ data class LocalNetworkSharingUiState(
     val editor: LocalEditorState = LocalEditorState(),
     val saving: Boolean = false,
     val error: Int? = null,
+    val deleteTarget: LocalRuleDeleteTarget? = null,
 )
