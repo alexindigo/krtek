@@ -6,8 +6,10 @@
 pub mod address_translation;
 pub mod buffer_budget;
 pub mod connection_tracker;
+mod fragment_state;
 mod icmp_quotation;
 pub mod ip_mux;
+pub mod packet_sizing;
 pub mod raw_packet;
 pub mod smoltcp_network;
 

@@ -6,9 +6,11 @@
 //! ESP is opaque passthrough (tunnel-mode IPsec works; transport mode without
 //! NAT-T is not supported). NAT-T UDP 4500 uses the ordinary UDP path.
 use std::{net::IpAddr, sync::Arc};
+#[cfg(test)]
+use talpid_types::relay_flow::RelayPacket;
 use talpid_types::relay_flow::{
     BUFFER_OVERHEAD, MAX_RELAY_PACKET_SIZE, RelayAttempt, RelayBuffer, RelayBufferAllocator,
-    RelayBufferReservation, RelayFlowError, RelayPacket, RelaySources,
+    RelayBufferReservation, RelayFlowError, RelaySources,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -38,6 +40,11 @@ pub enum TranslationError {
     Fragment,
     Full,
     Stale,
+    RejectedFragment,
+    PacketTooBig,
+    FeedbackFull,
+    RateLimited,
+    Suppressed,
 }
 
 impl From<RelayFlowError> for TranslationError {
@@ -54,7 +61,7 @@ impl From<RelayFlowError> for TranslationError {
 #[derive(Clone, Debug, Default)]
 pub struct TranslationSummary {
     pub translated: u64,
-    refusals: [u64; 9],
+    refusals: [u64; 14],
 }
 
 impl TranslationSummary {
@@ -114,6 +121,7 @@ impl AddressTranslator {
         self.summary.refuse(TranslationError::BackendRefused);
     }
 
+    #[cfg(test)]
     pub fn translate(
         &mut self,
         bytes: &[u8],
@@ -134,6 +142,17 @@ impl AddressTranslator {
         bytes: &[u8],
         direction: Direction,
     ) -> Result<RelayBuffer, TranslationError> {
+        let header = self.validate_packet(bytes, direction)?;
+        let (old, new) = self.endpoints(&header, direction)?;
+        let quote = crate::icmp_quotation::inspect(bytes, &header, direction, old, new)?;
+        self.rewrite_buffer(bytes, direction, header, old, new, quote)
+    }
+
+    fn validate_packet(
+        &self,
+        bytes: &[u8],
+        direction: Direction,
+    ) -> Result<Header, TranslationError> {
         if !self.attempt.current() {
             return Err(TranslationError::Stale);
         }
@@ -141,7 +160,19 @@ impl AddressTranslator {
         let (old, new) = self.endpoints(&header, direction)?;
         validate_transport(bytes, &header)?;
         // Quotations are validated before any output allocation too.
-        let quote = crate::icmp_quotation::inspect(bytes, &header, direction, old, new)?;
+        crate::icmp_quotation::inspect(bytes, &header, direction, old, new)?;
+        Ok(header)
+    }
+
+    fn rewrite_buffer(
+        &self,
+        bytes: &[u8],
+        direction: Direction,
+        header: Header,
+        old: IpAddr,
+        new: IpAddr,
+        quote: Option<crate::icmp_quotation::Quotation>,
+    ) -> Result<RelayBuffer, TranslationError> {
         let mut output = RelayBuffer::copy_from(bytes, self.buffers.as_ref())?;
         rewrite_endpoint(&mut output, &header, direction == Direction::Outbound, new)?;
         if let Some(quote) = quote {
@@ -203,11 +234,37 @@ pub(crate) struct Header {
     pub declared: usize,
     pub non_initial: bool,
     pub fragmented: bool,
+    pub fragment: Option<FragmentHeader>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FragmentHeader {
+    pub boundary: usize,
+    pub next_field: usize,
+    pub offset: usize,
+    pub more: bool,
+    pub id: u32,
 }
 
 impl Header {
     /// Quotes may end before the original datagram; never pad absent bytes.
     pub(crate) fn parse(bytes: &[u8], quoted: bool) -> Result<Self, TranslationError> {
+        Self::parse_inner(bytes, quoted, false)
+    }
+
+    pub(crate) fn parse_fragment(bytes: &[u8]) -> Result<Self, TranslationError> {
+        let header = Self::parse_inner(bytes, true, true)?;
+        if header.declared != bytes.len() {
+            return Err(TranslationError::Malformed);
+        }
+        Ok(header)
+    }
+
+    fn parse_inner(
+        bytes: &[u8],
+        quoted: bool,
+        stop_fragment: bool,
+    ) -> Result<Self, TranslationError> {
         let malformed = TranslationError::Malformed;
         if bytes.len() > MAX_RELAY_PACKET_SIZE {
             return Err(malformed);
@@ -238,6 +295,7 @@ impl Header {
                     declared,
                     non_initial: flags & 0x1fff != 0,
                     fragmented: flags & 0x3fff != 0,
+                    fragment: None,
                 }
             }
             Some(6) if bytes.len() >= 40 => Self {
@@ -250,6 +308,7 @@ impl Header {
                 declared: 40 + usize::from(word(bytes, 4)),
                 non_initial: false,
                 fragmented: false,
+                fragment: None,
             },
             _ => return Err(malformed),
         };
@@ -259,6 +318,7 @@ impl Header {
         if !header.ipv4 {
             let end = bytes.len().min(header.declared);
             let mut extensions = 0;
+            let mut next_field = 6;
             while matches!(header.protocol, 0 | 43 | 44 | 60) {
                 extensions += 1;
                 if extensions > 8 || header.transport + 8 > header.declared {
@@ -301,6 +361,17 @@ impl Header {
                         }
                         header.non_initial = present >= 4 && word(bytes, offset + 2) & 0xfff8 != 0;
                         header.fragmented = true;
+                        if present == 8 {
+                            header.fragment = Some(FragmentHeader {
+                                boundary: offset,
+                                next_field,
+                                offset: usize::from(word(bytes, offset + 2) & 0xfff8),
+                                more: bytes[offset + 3] & 1 != 0,
+                                id: u32::from_be_bytes(
+                                    bytes[offset + 4..offset + 8].try_into().unwrap(),
+                                ),
+                            });
+                        }
                     }
                     _ => (),
                 }
@@ -313,7 +384,8 @@ impl Header {
                 }
                 header.protocol = bytes[offset];
                 header.transport += length;
-                if header.non_initial {
+                next_field = offset;
+                if header.non_initial || (protocol == 44 && stop_fragment) {
                     break;
                 }
             }
@@ -605,6 +677,11 @@ pub(crate) fn validate_transport(bytes: &[u8], header: &Header) -> Result<(), Tr
 }
 
 #[cfg(test)]
+mod path_tests;
+#[cfg(test)]
 mod quotation_tests;
 #[cfg(test)]
 mod tests;
+
+mod path;
+pub use path::{TargetPacketPath, TranslationOutcome};
