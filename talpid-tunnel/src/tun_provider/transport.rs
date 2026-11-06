@@ -1,12 +1,15 @@
 //! Android userspace transport selection, before any native descriptor operation.
 use super::TunConfig;
 use crate::packet_attachment::{
-    AttachmentBroker, AttachmentError, AttachmentMode, ConfigurationRequest,
+    AttachmentBroker, AttachmentError, AttachmentMode, ConfigurationRequest, TransportCleanup,
 };
 
 pub enum TransportMode {
     Native,
-    Managed(AttachmentBroker),
+    Managed {
+        broker: AttachmentBroker,
+        cleanup: TransportCleanup,
+    },
 }
 
 pub enum UserspaceTun<T> {
@@ -59,7 +62,10 @@ impl TransportMode {
                     state.closed || state.mode == AttachmentMode::ManagedRequired
                 } =>
             {
-                Self::Managed(broker.clone())
+                Self::Managed {
+                    broker: broker.clone(),
+                    cleanup: broker.transport_cleanup(),
+                }
             }
             _ => Self::Native,
         }
@@ -72,7 +78,7 @@ impl TransportMode {
         native: impl FnOnce() -> Result<T, E>,
     ) -> Result<UserspaceTun<T>, E> {
         match self {
-            Self::Managed(broker) => ManagedTun::request(broker, config)
+            Self::Managed { broker, .. } => ManagedTun::request(broker, config)
                 .map(UserspaceTun::Managed)
                 .map_err(managed_error),
             Self::Native => native().map(UserspaceTun::Native),
@@ -85,8 +91,8 @@ impl TransportMode {
         native: impl FnOnce(bool) -> Result<(), E>,
     ) -> Result<(), E> {
         match self {
-            Self::Managed(broker) => {
-                broker.retire_transport();
+            Self::Managed { cleanup, .. } => {
+                cleanup.cancel();
                 Ok(())
             }
             Self::Native => native(forced),
@@ -95,7 +101,7 @@ impl TransportMode {
 
     pub fn close(self, native: impl FnOnce()) {
         match self {
-            Self::Managed(broker) => broker.retire_transport(),
+            Self::Managed { cleanup, .. } => cleanup.cancel(),
             Self::Native => native(),
         }
     }

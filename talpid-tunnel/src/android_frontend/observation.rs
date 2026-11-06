@@ -162,11 +162,10 @@ impl Observation {
 
     pub fn current(&self) -> bool {
         matches!(*self.updates.borrow(), CaptureNetworkState::Ready(_))
-            && self.managed.as_ref().is_none_or(|(broker, request)| {
+            && self.managed.as_ref().is_none_or(|(broker, _)| {
                 let snapshot = broker.snapshot();
                 snapshot.capture_generation == Some(self.generation as u64)
                     && snapshot.capture_ready
-                    && snapshot.request.is_none_or(|id| id == request.id())
             })
     }
 

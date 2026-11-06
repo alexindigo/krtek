@@ -735,20 +735,27 @@ async fn actual_enobufs_bind_retries_with_fresh_request_capture_attempt_and_cont
     let mut config = config();
     let (remote, mut observed) = remote(&mut config, false).await;
     let source = PendingManaged::request(broker.clone(), tun_config(&config)).unwrap();
+    let first_request = broker.pending_request().unwrap().id();
     let first_capture = acknowledge(&broker, &config);
     let actor_broker = broker.clone();
-    let actor_config = config.clone();
     let (stop, stopped) = tokio::sync::oneshot::channel();
     let actor = tokio::spawn(async move {
-        let mut capture = first_capture;
+        let capture = first_capture;
+        let mut requests = vec![first_request];
         let mut changes = actor_broker.changes();
         tokio::pin!(stopped);
         loop {
             let state = *changes.borrow_and_update();
-            if state.request.is_some() && state.capture_generation.is_none() {
-                capture = acknowledge(&actor_broker, &actor_config);
+            if let Some(request) = actor_broker.pending_request() {
+                assert!(
+                    request.id() > *requests.last().unwrap(),
+                    "retry reused request"
+                );
+                requests.push(request.id());
+                assert!(state.capture_ready, "ENOBUFS retired capture");
+                capture.acknowledge_request(&request).unwrap();
             }
-            tokio::select! { _ = &mut stopped => return capture, result = changes.changed() => result.unwrap() }
+            tokio::select! { _ = &mut stopped => return (capture, requests), result = changes.changed() => result.unwrap() }
         }
     });
     let bypass = Arc::new(FirstBindEnobufs {
@@ -771,7 +778,7 @@ async fn actual_enobufs_bind_retries_with_fresh_request_capture_attempt_and_cont
     .unwrap();
     let attempts = bypass.attempts.lock().unwrap().clone();
     assert!(attempts.len() >= 2);
-    assert_ne!(attempts[0].0, attempts[1].0, "old capture receipt reused");
+    assert_eq!(attempts[0].0, attempts[1].0, "ENOBUFS replaced capture");
     assert_ne!(
         attempts[0].1, attempts[1].1,
         "consumed attempt/queues reused"
@@ -784,7 +791,11 @@ async fn actual_enobufs_bind_retries_with_fresh_request_capture_attempt_and_cont
         .await
         .unwrap();
     stop.send(()).unwrap();
-    let capture = actor.await.unwrap();
+    let (capture, requests) = actor.await.unwrap();
+    assert!(
+        requests.len() >= 2,
+        "retry did not request fresh target configuration"
+    );
     let bytes = ipv4(17, b"fresh-enobufs-attempt-nonce");
     capture.try_send(&bytes).unwrap();
     assert_eq!(
@@ -832,12 +843,13 @@ async fn cancelled_setup_owner_and_cancelled_shutdown_keep_joined_cleanup() {
         .await
         .is_err()
     );
-    let _capture = acknowledge(&broker, &config);
+    let capture = acknowledge(&broker, &config);
     // An unclaimed completed tunnel is dropped by its supervised setup owner,
     // which revokes and joins both GotaTun and control work before refund.
     tokio::time::timeout(Duration::from_secs(2), async {
         loop {
-            if broker.snapshot().capture_generation.is_none() && control.used() == 0 {
+            let state = broker.snapshot();
+            if state.attachment.is_none() && !state.ordinary_ready && control.used() == 0 {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(2)).await;
@@ -846,8 +858,15 @@ async fn cancelled_setup_owner_and_cancelled_shutdown_keep_joined_cleanup() {
     .await
     .unwrap();
     assert!(!broker.snapshot().ordinary_ready);
+    assert!(
+        capture.capability().unwrap().current(),
+        "cancelled setup retired capture"
+    );
+    assert!(capture.try_send(&ipv4(17, b"cancelled-ordinary")).is_err());
     let source = PendingManaged::request(broker.clone(), tun_config(&config)).unwrap();
-    let _next_capture = acknowledge(&broker, &config);
+    capture
+        .acknowledge_request(&broker.pending_request().unwrap())
+        .unwrap();
     let mut client = GotaTun::new(
         PlaintextSource::Managed(source),
         Arc::new(NoopBypass),

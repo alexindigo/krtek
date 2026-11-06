@@ -4,6 +4,9 @@ use crate::{
     tun_provider::{TunConfig, blocking_config},
 };
 
+#[path = "router_tests.rs"]
+mod router_tests;
+
 fn assigned() -> TunConfig {
     let mut config = blocking_config();
     config.addresses = vec!["10.64.42.2".parse().unwrap(), "fc00:42::2".parse().unwrap()];
@@ -107,7 +110,7 @@ fn managed(broker: &AttachmentBroker) -> (ConfigurationRequest, CaptureConfig) {
             if destination.is_loopback() {
                 CaptureDisposition::Local
             } else {
-                CaptureDisposition::Relay
+                CaptureDisposition::Tunnel(talpid_types::relay_flow::RelayTargetId::MULLVAD)
             }
         }),
     };
@@ -368,7 +371,7 @@ async fn raw_fatal_sink_joins_physical_work_and_retains_failed_release() {
 async fn secured_local_output_never_uses_partial_guard_while_transport_is_pending() {
     let (platform, peer) = Platform::new();
     let authority = Arc::new(Authority::default());
-    let mut forwarder = managed_forwarder(authority);
+    let mut forwarder = managed_forwarder(authority.clone());
     let (address, mut hits, echo) = udp_echo(false).await;
     let local = Flow {
         source: "10.64.42.2:48011".parse().unwrap(),
@@ -394,12 +397,27 @@ async fn secured_local_output_never_uses_partial_guard_while_transport_is_pendin
     let receipt = request.configured().await.unwrap();
     let transport = broker.acquire(&receipt).unwrap();
     assert!(!transport.control.current());
+    let bytes = bounded(receive(&peer)).await;
+    assert_eq!(
+        packet::parse(&bytes).unwrap().payload,
+        b"unready-queued-local-nonce"
+    );
+    send(&peer, &raw(253, b"unready-public-never-replayed")).await;
     assert!(
         tokio::time::timeout(Duration::from_millis(100), receive(&peer))
             .await
-            .is_err(),
-        "unready Secured output used Partial authority"
+            .is_err()
     );
+    authority.available.store(false, SeqCst);
+    authority.revision.fetch_add(1, SeqCst);
+    send(&peer, &udp(local, b"revoked-local-never-partial")).await;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), receive(&peer))
+            .await
+            .is_err()
+    );
+    assert!(hits.try_recv().is_err());
+    assert!(receipt.current(), "physical revocation retired capture");
     transport.control.detach();
     request.transport_joined();
     owner.stop().await.unwrap();
@@ -591,7 +609,7 @@ async fn mixed_backpressure_rotates_both_consumers_and_revokes_only_blocked_loca
     let receipt = request.configured().await.unwrap();
     let transport = broker.acquire(&receipt).unwrap();
     transport.control.activate().unwrap();
-    let attempt = transport.control.capability();
+    let attempt = observation.lease.as_ref().unwrap().capability().unwrap();
     let authority = Arc::new(Authority::default());
     let mut forwarder = managed_forwarder(authority.clone());
     let (address, mut hits, echo) = udp_echo(false).await;

@@ -872,7 +872,7 @@ async fn managed_teardown_revokes_now_but_releases_only_after_transport_join() {
             // Process a further ordinary settings event while the close is held.
             h.policy.rules[0].name = "latest settings while closing".into();
             assert_eq!(bounded(h.advance()).await.unwrap(), None);
-            bounded(h.runtime.notifications().1).await;
+            bounded(h.runtime.notifications().2).await;
             h.runtime.owner_changed(&h.policy, h.target, h.phase);
             assert!(h.runtime.has_owner());
             assert_eq!(
@@ -988,7 +988,7 @@ async fn joined_internal_transport_retry_replaces_capture_without_a_tsm_handover
     let old_request = h.request.take().unwrap();
     let transport = h.transport.take().unwrap();
     transport.control.detach();
-    bounded(h.runtime.notifications().1).await;
+    bounded(h.runtime.notifications().2).await;
     h.runtime.owner_changed(&h.policy, h.target, h.phase);
     let mut next_request = broker.request_capture(config).unwrap();
     // A successor request is not proof that old device/control cleanup joined.

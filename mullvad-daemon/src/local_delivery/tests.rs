@@ -222,9 +222,14 @@ async fn assigned_sources_and_capture_identity_are_required_at_prepare_and_outpu
         receipt.generation()
     );
     let pair = broker.acquire(&receipt).unwrap();
+    let before_target = authority.authorize(assigned).unwrap();
     assert!(
-        authority.authorize(assigned).is_err(),
-        "capture receipt is not ordinary readiness"
+        authority.current(&before_target),
+        "Local depends on target readiness"
+    );
+    assert!(
+        !pair.control.current(),
+        "Local authorization activated ordinary traffic"
     );
     pair.control.activate().unwrap();
     authority.endpoint(false);
@@ -234,6 +239,17 @@ async fn assigned_sources_and_capture_identity_are_required_at_prepare_and_outpu
     );
     authority.endpoint(true);
     let grant = authority.authorize(assigned).unwrap();
+    pair.control.detach();
+    assert!(
+        authority.current(&grant),
+        "target detach revoked Local grant"
+    );
+    let pair = broker.acquire(&receipt).unwrap();
+    pair.control.activate().unwrap();
+    assert!(
+        authority.current(&grant),
+        "target replacement revoked Local grant"
+    );
     assert_eq!(grant.generation, Some(receipt.generation()));
     assert!(authority.authorize(flow(Transport::Udp, 40102)).is_err());
     assigned.source.set_ip(config.addresses[1]);

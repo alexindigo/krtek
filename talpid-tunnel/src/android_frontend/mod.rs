@@ -9,7 +9,7 @@ mod fd_name;
 pub use fd_name::interface_name;
 mod config;
 mod observation;
-pub use config::{CaptureConfig, CaptureDisposition};
+pub use config::{CaptureConfig, CaptureDisposition, CaptureDropReason};
 use observation::Observation;
 
 use crate::packet_attachment::AttachmentReply;
@@ -24,7 +24,7 @@ use std::{
 };
 use talpid_lan_forwarder::{Forwarder, LocalAuthority};
 use talpid_types::capture_network::{CaptureExpectation, CaptureNetworkFeed};
-use talpid_types::relay_flow::{RelayAttempt, RelayWriteOutcome};
+use talpid_types::relay_flow::{RelayCapture, RelayWriteOutcome};
 use tokio::{
     io::{Interest, unix::AsyncFd},
     sync::{oneshot, watch},
@@ -325,23 +325,13 @@ async fn drive<A: LocalAuthority>(
     });
     let lease = session.and_then(|(_, o)| o.lease.as_deref());
     let mut reply: Option<AttachmentReply> = None;
-    let mut local_attempt: Option<RelayAttempt> = None;
+    let local_capture = lease.and_then(|lease| lease.capability());
     let mut raw_first = false;
     loop {
         if session.is_some_and(|(_, observation)| !observation.current()) {
             return FrontendState::Failed;
         }
-        if local_attempt
-            .as_ref()
-            .is_some_and(|attempt| !attempt.current())
-        {
-            return FrontendState::Failed;
-        }
-        if local_attempt.is_none() {
-            local_attempt = lease.and_then(|lease| lease.ordinary_attempt());
-        }
-        let wants_write = (forwarder.has_output() && (lease.is_none() || local_attempt.is_some()))
-            || reply.is_some();
+        let wants_write = forwarder.has_output() || reply.is_some();
         tokio::select! {
             _ = &mut stop => return FrontendState::Stopped,
             _ = async { match &mut observation_updates { Some(updates) => { let _ = updates.changed().await; }, None => std::future::pending().await } } => {},
@@ -361,8 +351,7 @@ async fn drive<A: LocalAuthority>(
                     match ready.try_io(|fd| nix::unistd::read(fd.get_ref(), &mut packet).map_err(io::Error::from)) {
                         Ok(Ok(0)) => return FrontendState::Failed,
                         Ok(Ok(len)) => {
-                            if local_attempt.is_none() { local_attempt = lease.and_then(|lease| lease.ordinary_attempt()); }
-                            ingest(forwarder, &packet[..len], session, local_attempt.as_ref());
+                            ingest(forwarder, &packet[..len], session);
                         },
                         Ok(Err(error)) if error.kind() == io::ErrorKind::Interrupted => continue,
                         Err(_) => break,
@@ -378,9 +367,6 @@ async fn drive<A: LocalAuthority>(
         if session.is_some_and(|(_, observation)| !observation.current()) {
             return FrontendState::Failed;
         }
-        if local_attempt.is_none() {
-            local_attempt = lease.and_then(|lease| lease.ordinary_attempt());
-        }
         forwarder.process();
         // Rotate priority after actual progress. Blocked/spurious wakes cannot
         // reset the next class; every owned pending class gets one checked write.
@@ -389,7 +375,7 @@ async fn drive<A: LocalAuthority>(
                 capture,
                 forwarder,
                 observation,
-                local_attempt.as_ref(),
+                local_capture.as_ref(),
                 &mut reply,
                 &mut raw_first,
             ),
@@ -404,17 +390,17 @@ async fn drive<A: LocalAuthority>(
 fn drain_checked_local<A: LocalAuthority>(
     capture: &AsyncFd<BorrowedFd<'_>>,
     forwarder: &mut Forwarder<A>,
-    attempt: Option<&RelayAttempt>,
+    session: Option<&RelayCapture>,
 ) -> io::Result<bool> {
     let write = |bytes: &[u8]| {
         capture.try_io(Interest::WRITABLE, |fd| {
             nix::unistd::write(fd, bytes).map_err(io::Error::from)
         })
     };
-    match forwarder.write_output(|bytes| match attempt {
-        Some(attempt) => attempt
+    match forwarder.write_output(|bytes| match session {
+        Some(session) => session
             .with_current(|| write(bytes))
-            .map_err(|_| io::Error::other("Capture attempt retired"))?,
+            .map_err(|_| io::Error::other("Capture session retired"))?,
         None => write(bytes),
     }) {
         Ok(written) => Ok(written),
@@ -427,7 +413,6 @@ fn ingest<A: LocalAuthority>(
     forwarder: &mut Forwarder<A>,
     bytes: &[u8],
     session: Option<(&CaptureConfig, &Observation)>,
-    attempt: Option<&RelayAttempt>,
 ) {
     let Some((config, observation)) = session else {
         forwarder.ingest(bytes);
@@ -445,18 +430,14 @@ fn ingest<A: LocalAuthority>(
     match config {
         CaptureConfig::Partial(_) => forwarder.ingest(bytes),
         CaptureConfig::Secured { disposition, .. } => {
-            // Local is paused until the transport's authenticated readiness.
-            if !attempt.is_some_and(RelayAttempt::current) {
-                return;
-            }
             match ip.destination().map(|ip| disposition(ip)) {
                 Some(CaptureDisposition::Local) => forwarder.ingest(bytes),
-                Some(CaptureDisposition::Relay) => {
+                Some(CaptureDisposition::Tunnel(target)) => {
                     let _ = observation
                         .lease
                         .as_ref()
                         .expect("managed lease")
-                        .try_send(bytes);
+                        .try_send_to(target, bytes);
                 }
                 _ => {}
             }
@@ -493,7 +474,7 @@ fn drain_fair<A: LocalAuthority>(
     capture: &AsyncFd<BorrowedFd<'_>>,
     forwarder: &mut Forwarder<A>,
     observation: &Observation,
-    local_attempt: Option<&RelayAttempt>,
+    local_capture: Option<&RelayCapture>,
     reply: &mut Option<AttachmentReply>,
     raw_first: &mut bool,
 ) -> io::Result<()> {
@@ -505,10 +486,10 @@ fn drain_fair<A: LocalAuthority>(
         let written = if raw {
             drain_reply(capture, reply)?
         } else {
-            match local_attempt {
+            match local_capture {
                 None => Ok(false),
-                Some(attempt) => observation
-                    .checked(|| drain_checked_local(capture, forwarder, Some(attempt)))
+                Some(session) => observation
+                    .checked(|| drain_checked_local(capture, forwarder, Some(session)))
                     .unwrap_or_else(|| Err(io::Error::other("Capture lost"))),
             }?
         };

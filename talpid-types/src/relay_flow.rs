@@ -169,7 +169,49 @@ struct Capture {
 
 struct CaptureState {
     live: bool,
-    attempt: Weak<Attempt>,
+    attempts: [Weak<Attempt>; MAX_TARGETS],
+}
+
+/// Routing identity, separate from the unrepeatable lifetime of an attempt.
+/// Only Mullvad is installed in production. The bounded second slot also lets
+/// lifetime tests exercise an unrelated target without a plugin registry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RelayTargetId(u64);
+
+pub const MAX_TARGETS: usize = 2;
+
+impl RelayTargetId {
+    pub const MULLVAD: Self = Self(1);
+
+    pub fn new(id: u64) -> Result<Self, RelayFlowError> {
+        if id == 0 {
+            return Err(RelayFlowError::Invalid);
+        }
+        Ok(Self(id))
+    }
+
+    pub fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// A logical capture capability. Local output borrows this, never a transport
+/// attempt. Only the sole owner can retire it.
+#[derive(Clone)]
+pub struct RelayCapture(Arc<Capture>);
+
+impl RelayCapture {
+    pub fn with_current<T>(&self, operation: impl FnOnce() -> T) -> Result<T, RelayFlowError> {
+        let state = self.0.state.lock().expect("capture state");
+        if !state.live {
+            return Err(RelayFlowError::Stale);
+        }
+        Ok(operation())
+    }
+
+    pub fn current(&self) -> bool {
+        self.with_current(|| ()).is_ok()
+    }
 }
 
 /// Sole lifecycle owner. Dropping it revokes all retained packets, but their
@@ -207,7 +249,7 @@ impl RelayCaptureOwner {
             },
             state: Mutex::new(CaptureState {
                 live: true,
-                attempt: Weak::new(),
+                attempts: std::array::from_fn(|_| Weak::new()),
             }),
             _charge: charge,
         })))
@@ -221,28 +263,66 @@ impl RelayCaptureOwner {
         self.0.state.lock().expect("capture state").live = false;
     }
 
-    /// A capture has at most one non-retired transport attempt. Replacement
-    /// requires explicit retirement; identical addresses do not reuse authority.
+    pub fn capability(&self) -> RelayCapture {
+        RelayCapture(self.0.clone())
+    }
+
     pub fn open_attempt(
         &self,
         buffers: &dyn RelayBufferAllocator,
     ) -> Result<RelayAttemptOwner, RelayFlowError> {
+        self.open_target(
+            RelayTargetId::MULLVAD,
+            self.0.identity.sources,
+            self.0.identity.mtu,
+            buffers,
+        )
+    }
+
+    /// Each target has its own immutable source configuration and attempt. A
+    /// replacement requires that exact target's explicit retirement; identical
+    /// addresses never reuse authority or affect another target or Local.
+    pub fn open_target(
+        &self,
+        target: RelayTargetId,
+        sources: RelaySources,
+        mtu: u16,
+        buffers: &dyn RelayBufferAllocator,
+    ) -> Result<RelayAttemptOwner, RelayFlowError> {
+        if (sources.ipv4.is_none() && sources.ipv6.is_none()) || mtu == 0 {
+            return Err(RelayFlowError::Invalid);
+        }
         let mut capture = self.0.state.lock().expect("capture state");
         if !capture.live {
             return Err(RelayFlowError::Stale);
         }
-        if let Some(old) = capture.attempt.upgrade()
-            && *old.phase.lock().expect("attempt state") != AttemptPhase::Retired
+        let live = |weak: &Weak<Attempt>| {
+            weak.upgrade()
+                .filter(|old| *old.phase.lock().expect("attempt state") != AttemptPhase::Retired)
+        };
+        if capture
+            .attempts
+            .iter()
+            .filter_map(live)
+            .any(|old| old.target == target)
         {
             return Err(RelayFlowError::Invalid);
         }
+        let slot = capture
+            .attempts
+            .iter_mut()
+            .find(|slot| live(slot).is_none())
+            .ok_or(RelayFlowError::Full)?;
         let charge = buffers.try_reserve(BUFFER_OVERHEAD)?;
         let attempt = Arc::new(Attempt {
             capture: self.0.clone(),
+            target,
+            sources,
+            mtu,
             phase: Mutex::new(AttemptPhase::Pending),
             _charge: charge,
         });
-        capture.attempt = Arc::downgrade(&attempt);
+        *slot = Arc::downgrade(&attempt);
         Ok(RelayAttemptOwner(RelayAttempt(attempt)))
     }
 }
@@ -262,6 +342,9 @@ enum AttemptPhase {
 
 struct Attempt {
     capture: Arc<Capture>,
+    target: RelayTargetId,
+    sources: RelaySources,
+    mtu: u16,
     phase: Mutex<AttemptPhase>,
     _charge: Arc<dyn RelayBufferReservation>,
 }
@@ -303,6 +386,18 @@ pub struct RelayAttempt(Arc<Attempt>);
 impl RelayAttempt {
     pub fn identity(&self) -> &RelayCaptureIdentity {
         &self.0.capture.identity
+    }
+
+    pub fn target(&self) -> RelayTargetId {
+        self.0.target
+    }
+
+    pub fn sources(&self) -> RelaySources {
+        self.0.sources
+    }
+
+    pub fn mtu(&self) -> u16 {
+        self.0.mtu
     }
 
     pub fn current(&self) -> bool {

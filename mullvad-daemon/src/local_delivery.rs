@@ -145,10 +145,7 @@ impl CaptureAuthority {
             None => Ok(None),
             Some(broker) => {
                 let state = broker.snapshot();
-                if state.mode != AttachmentMode::ManagedRequired
-                    || !state.capture_ready
-                    || !state.ordinary_ready
-                {
+                if state.mode != AttachmentMode::ManagedRequired || !state.capture_ready {
                     return Err(Refused::Stale);
                 }
                 state.capture_generation.map(Some).ok_or(Refused::Stale)
@@ -397,7 +394,7 @@ impl DeliveryConfig {
                     if classifier.disposition(destination) == Disposition::Local {
                         CaptureDisposition::Local
                     } else {
-                        CaptureDisposition::Relay
+                        CaptureDisposition::Tunnel(talpid_types::relay_flow::RelayTargetId::MULLVAD)
                     }
                 }),
             },

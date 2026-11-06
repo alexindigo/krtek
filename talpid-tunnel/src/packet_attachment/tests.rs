@@ -217,11 +217,19 @@ async fn cancelled_wait_retains_owner_and_stale_ack_cannot_satisfy_identical_new
     );
     assert!(f.broker.snapshot().capture_ready);
     request.cancel();
-    assert!(!old_receipt.current());
+    assert!(
+        old_receipt.current(),
+        "request cancellation retired capture"
+    );
     assert!(matches!(
         request.configured().await,
         Err(AttachmentError::Closed)
     ));
+    lease.retire();
+    assert!(
+        !old_receipt.current(),
+        "capture retirement retained old sink"
+    );
     let (mut next, pending) = f.request();
     let (_next_lease, receipt) = f.bind(&pending);
     assert_eq!(
@@ -343,6 +351,81 @@ async fn reply_and_outbound_waits_are_event_driven_for_one_real_second() {
         .unwrap()
         .handoff(|bytes| assert_eq!(bytes, b"wake transport"))
         .unwrap();
+}
+
+#[tokio::test]
+async fn reply_wait_remains_quiescent_without_a_target_then_accepts_only_its_successor() {
+    let f = Fixture::new();
+    let (request, lease, pair) = f.active().await;
+    let polls = AtomicUsize::new(0);
+    pair.control.detach();
+    let mut reply = pin!(lease.reply());
+    let wait = poll_fn(|cx| {
+        polls.fetch_add(1, Ordering::Relaxed);
+        assert!(reply.as_mut().poll(cx).is_pending());
+        Poll::<()>::Pending
+    });
+    assert!(
+        tokio::time::timeout(Duration::from_secs(1), wait)
+            .await
+            .is_err()
+    );
+    assert!(
+        polls.load(Ordering::Relaxed) <= 3,
+        "no-target reply wait spun"
+    );
+    assert!(lease.capability().unwrap().current());
+    let receipt = match &*request.status.borrow() {
+        RequestStatus::Ready(receipt) => receipt.clone(),
+        _ => panic!("configured request"),
+    };
+    let next = f.broker.acquire(&receipt).unwrap();
+    next.control.activate().unwrap();
+    drop(pair);
+    assert!(next.control.current());
+    next.send.try_send(b"next-target").unwrap();
+    assert!(matches!(
+        reply.await.unwrap().write(|bytes| {
+            assert_eq!(bytes, b"next-target");
+            Ok(bytes.len())
+        }),
+        RelayWriteOutcome::Written
+    ));
+}
+
+#[tokio::test]
+async fn provider_pause_retires_only_mullvad_while_local_and_another_target_stay_live() {
+    let f = Fixture::new();
+    let (mut request, lease, first) = f.active().await;
+    let receipt = request.configured().await.unwrap();
+    let second = RelayTargetId::new(2).unwrap();
+    let mut pair = f
+        .broker
+        .acquire_target(&receipt, second, sources(), 1300)
+        .unwrap();
+    pair.control.activate().unwrap();
+    f.broker.pause_transport();
+    assert!(lease.capability().unwrap().current());
+    assert!(!first.control.current());
+    lease.try_send_to(second, b"not-mullvad").unwrap();
+    pair.receive
+        .recv()
+        .await
+        .unwrap()
+        .handoff(|bytes| assert_eq!(bytes, b"not-mullvad"))
+        .unwrap();
+    pair.send.try_send(b"independent-return").unwrap();
+    assert!(matches!(
+        lease.reply().await.unwrap().write(|bytes| {
+            assert_eq!(bytes, b"independent-return");
+            Ok(bytes.len())
+        }),
+        RelayWriteOutcome::Written
+    ));
+    assert!(matches!(
+        f.broker.acquire(&receipt),
+        Err(AttachmentError::OrdinaryUnready)
+    ));
 }
 
 #[tokio::test]
@@ -476,6 +559,19 @@ async fn storage_refusal_is_immediate_and_dropping_a_half_revokes_queued_packets
     let receipt = CaptureReceipt {
         inner: Arc::downgrade(&f.broker.inner),
         generation: lease.generation(),
+        configuration: Arc::downgrade(
+            f.broker
+                .inner
+                .state
+                .lock()
+                .unwrap()
+                .capture
+                .as_ref()
+                .unwrap()
+                .config
+                .as_ref()
+                .unwrap(),
+        ),
     };
     assert!(matches!(
         f.broker.acquire(&receipt),

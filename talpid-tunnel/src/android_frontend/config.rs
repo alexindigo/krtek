@@ -3,13 +3,20 @@ use crate::{
     tun_provider::TunConfig,
 };
 use std::{net::IpAddr, sync::Arc};
+use talpid_types::relay_flow::RelayTargetId;
 
 /// Destination policy is supplied by the daemon, before the Local parser runs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CaptureDisposition {
     Local,
-    Relay,
-    Drop,
+    Tunnel(RelayTargetId),
+    Drop(CaptureDropReason),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CaptureDropReason {
+    Policy,
+    NoTarget,
 }
 
 #[derive(Clone)]

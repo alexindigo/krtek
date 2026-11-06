@@ -8,9 +8,9 @@ use std::{
     sync::{Arc, Mutex, Weak},
 };
 use talpid_types::relay_flow::{
-    RelayAttempt, RelayAttemptOwner, RelayBuffer, RelayBufferAllocator, RelayBufferReservation,
-    RelayCaptureGeneration, RelayCaptureOwner, RelayFlowError, RelayPacket, RelaySources,
-    RelayWriteOutcome,
+    MAX_TARGETS, RelayAttempt, RelayAttemptOwner, RelayBuffer, RelayBufferAllocator,
+    RelayBufferReservation, RelayCapture, RelayCaptureGeneration, RelayCaptureOwner,
+    RelayFlowError, RelayPacket, RelaySources, RelayTargetId, RelayWriteOutcome,
 };
 use tokio::sync::{Notify, watch};
 
@@ -107,6 +107,13 @@ pub struct ConfigurationRequest {
     status: watch::Receiver<RequestStatus>,
 }
 
+/// Provider cleanup borrows one exact request. It cannot cancel a later request
+/// or choose whichever target happens to be current when cleanup finally runs.
+pub struct TransportCleanup {
+    inner: Weak<Inner>,
+    request: Weak<Configuration>,
+}
+
 /// Actor-side request capability. An old acknowledgement cannot satisfy a new
 /// request, even when configurations compare equal.
 #[derive(Clone)]
@@ -125,6 +132,8 @@ struct Queues {
 
 struct Attempt {
     id: u64,
+    target: RelayTargetId,
+    request: Arc<Configuration>,
     owner: RelayAttemptOwner,
     queues: Mutex<Queues>,
     outbound: Notify,
@@ -150,16 +159,31 @@ struct State {
     next_attempt: u64,
     request: Option<Arc<Configuration>>,
     capture: Option<Capture>,
-    attempt: Option<Arc<Attempt>>,
+    attempts: [Option<Arc<Attempt>>; MAX_TARGETS],
     local_routes: Vec<ipnetwork::IpNetwork>,
     route_storage: Option<Arc<dyn RelayBufferReservation>>,
     paused: bool,
+    next_reply: usize,
 }
 
 impl State {
+    fn attempt(&self, target: RelayTargetId) -> Option<&Arc<Attempt>> {
+        self.attempts.iter().flatten().find(|a| a.target == target)
+    }
+    fn detach_target(&mut self, target: RelayTargetId) {
+        if let Some(slot) = self
+            .attempts
+            .iter_mut()
+            .find(|a| a.as_ref().is_some_and(|a| a.target == target))
+        {
+            slot.take().expect("matched target").retire();
+        }
+    }
     fn detach(&mut self) {
-        if let Some(attempt) = self.attempt.take() {
-            attempt.retire();
+        for slot in &mut self.attempts {
+            if let Some(attempt) = slot.take() {
+                attempt.retire();
+            }
         }
     }
     fn retire_capture(&mut self) {
@@ -189,10 +213,9 @@ impl State {
             request: self.request.as_ref().map(|r| r.id),
             capture_generation: self.capture.as_ref().map(|c| c.generation),
             capture_ready: self.capture.as_ref().is_some_and(|c| c.owner.is_some()),
-            attachment: self.attempt.as_ref().map(|a| a.id),
+            attachment: self.attempt(RelayTargetId::MULLVAD).map(|a| a.id),
             ordinary_ready: self
-                .attempt
-                .as_ref()
+                .attempt(RelayTargetId::MULLVAD)
                 .is_some_and(|a| a.owner.capability().current()),
         }
     }
@@ -240,6 +263,7 @@ pub struct CaptureLease {
 pub struct CaptureReceipt {
     inner: Weak<Inner>,
     generation: u64,
+    configuration: Weak<Configuration>,
 }
 
 pub struct AttemptControl {
@@ -279,10 +303,11 @@ impl AttachmentBroker {
             next_attempt: 0,
             request: None,
             capture: None,
-            attempt: None,
+            attempts: std::array::from_fn(|_| None),
             local_routes: Vec::new(),
             route_storage: None,
             paused: false,
+            next_reply: 0,
         };
         let changes = watch::channel(state.snapshot()).0;
         Ok(Self {
@@ -335,7 +360,10 @@ impl AttachmentBroker {
         if state.closed {
             return Err(AttachmentError::Closed);
         }
-        if state.request.is_some() || state.capture.is_some() || state.attempt.is_some() {
+        if state.request.is_some()
+            || state.capture.is_some()
+            || state.attempts.iter().any(Option::is_some)
+        {
             return Err(AttachmentError::Busy);
         }
         state.local_routes = routes;
@@ -515,6 +543,11 @@ impl AttachmentBroker {
         let receipt = CaptureReceipt {
             inner: Arc::downgrade(&self.inner),
             generation: lease.generation,
+            configuration: capture
+                .config
+                .as_ref()
+                .map(Arc::downgrade)
+                .unwrap_or_default(),
         };
         self.inner.publish(&state);
         Ok(receipt)
@@ -537,36 +570,83 @@ impl AttachmentBroker {
                 .capture
                 .as_ref()
                 .and_then(|c| c.config.as_ref())
-                .is_some_and(|r| Arc::ptr_eq(r, &request.0))
+                .is_some_and(|r| r.config == request.0.config)
         {
             return Err(AttachmentError::Stale);
         }
-        request
-            .0
-            .status
-            .send_replace(RequestStatus::Ready(receipt.clone()));
+        let receipt = CaptureReceipt {
+            inner: receipt.inner.clone(),
+            generation: receipt.generation,
+            configuration: Arc::downgrade(&request.0),
+        };
+        request.0.status.send_replace(RequestStatus::Ready(receipt));
+        state.capture.as_mut().expect("matching receipt").config = Some(request.0.clone());
         state.request.take();
         self.inner.publish(&state);
         Ok(())
     }
 
     pub fn acquire(&self, receipt: &CaptureReceipt) -> Result<TransportPair, AttachmentError> {
+        let request = receipt
+            .configuration
+            .upgrade()
+            .ok_or(AttachmentError::CaptureUnready)?;
+        let config = &request.config;
+        let sources = RelaySources {
+            ipv4: config.addresses.iter().find_map(|ip| {
+                if let std::net::IpAddr::V4(ip) = ip {
+                    Some(*ip)
+                } else {
+                    None
+                }
+            }),
+            ipv6: config.addresses.iter().find_map(|ip| {
+                if let std::net::IpAddr::V6(ip) = ip {
+                    Some(*ip)
+                } else {
+                    None
+                }
+            }),
+        };
+        self.acquire_target(receipt, RelayTargetId::MULLVAD, sources, config.mtu)
+    }
+
+    /// Attach an independently owned target to this session. Source/MTU belong
+    /// to the target, not to the app-facing capture identity.
+    pub fn acquire_target(
+        &self,
+        receipt: &CaptureReceipt,
+        target: RelayTargetId,
+        sources: RelaySources,
+        mtu: u16,
+    ) -> Result<TransportPair, AttachmentError> {
         let storage = self.inner.capture.try_reserve(CHANNEL_STORAGE)?;
         let mut state = self.inner.state.lock().expect("attachment state");
-        if state.paused {
+        if state.paused && target == RelayTargetId::MULLVAD {
             return Err(AttachmentError::OrdinaryUnready);
         }
         if !receipt.matches(&self.inner, &state) {
             return Err(AttachmentError::CaptureUnready);
         }
-        if state.attempt.is_some() {
+        if state.attempt(target).is_some() {
             return Err(AttachmentError::Busy);
         }
+        let slot = state
+            .attempts
+            .iter()
+            .position(Option::is_none)
+            .ok_or(AttachmentError::Full)?;
         if !state
             .capture
             .as_ref()
             .and_then(|c| c.config.as_ref())
-            .is_some_and(|r| matches!(*r.status.borrow(), RequestStatus::Ready(_)))
+            .is_some_and(|r| {
+                receipt
+                    .configuration
+                    .upgrade()
+                    .is_some_and(|expected| Arc::ptr_eq(r, &expected))
+                    && matches!(*r.status.borrow(), RequestStatus::Ready(_))
+            })
         {
             return Err(AttachmentError::CaptureUnready);
         }
@@ -579,7 +659,7 @@ impl AttachmentBroker {
             .as_ref()
             .and_then(|c| c.owner.as_ref())
             .ok_or(AttachmentError::CaptureUnready)?
-            .open_attempt(self.inner.capture.as_ref())?;
+            .open_target(target, sources, mtu, self.inner.capture.as_ref())?;
         state
             .capture
             .as_ref()
@@ -588,6 +668,11 @@ impl AttachmentBroker {
             .update_release(|release| release.transport_joined = false);
         let attempt = Arc::new(Attempt {
             id,
+            target,
+            request: receipt
+                .configuration
+                .upgrade()
+                .ok_or(AttachmentError::CaptureUnready)?,
             owner,
             queues: Mutex::new(Queues {
                 outbound: VecDeque::with_capacity(PACKET_CAPACITY),
@@ -607,7 +692,7 @@ impl AttachmentBroker {
             send: TransportSend { control: control() },
         };
         state.next_attempt = id;
-        state.attempt = Some(attempt);
+        state.attempts[slot] = Some(attempt);
         self.inner.publish(&state);
         Ok(pair)
     }
@@ -623,16 +708,20 @@ impl AttachmentBroker {
         self.inner.replies.notify_one();
     }
 
-    /// Provider-side reconfiguration in the selected managed mode. Platform
-    /// descriptor release remains the capture actor's joined responsibility.
-    pub fn retire_transport(&self) {
-        let mut state = self.inner.state.lock().expect("attachment state");
-        state.retire_capture();
-        if let Some(request) = state.request.take() {
-            request.status.send_replace(RequestStatus::Cancelled);
+    /// Capture the provider's cleanup authority before dispatching its operation.
+    /// An empty selection stays empty even if a later request opens a target.
+    pub fn transport_cleanup(&self) -> TransportCleanup {
+        let state = self.inner.state.lock().expect("attachment state");
+        let request = state.request.as_ref().or_else(|| {
+            state
+                .capture
+                .as_ref()
+                .and_then(|capture| capture.config.as_ref())
+        });
+        TransportCleanup {
+            inner: Arc::downgrade(&self.inner),
+            request: request.map(Arc::downgrade).unwrap_or_default(),
         }
-        self.inner.publish(&state);
-        self.inner.replies.notify_one();
     }
 
     /// Revoke ordinary output before requesting TSM teardown. Capture/platform
@@ -651,7 +740,7 @@ impl AttachmentBroker {
             request.update_release(|release| release.handover_joined = false);
             request.status.send_replace(RequestStatus::Cancelled);
         }
-        state.detach();
+        state.detach_target(RelayTargetId::MULLVAD);
         self.inner.publish(&state);
         self.inner.replies.notify_one();
     }
@@ -670,6 +759,13 @@ impl CaptureReceipt {
         self.inner.upgrade().is_some_and(|inner| {
             self.matches(&inner, &inner.state.lock().expect("attachment state"))
         })
+    }
+
+    /// Borrow the existing fd epoch only when its full observed configuration
+    /// matches the new request. A route/DNS/source change needs a fresh epoch.
+    pub fn acknowledge(&self, request: &PendingCaptureRequest) -> Result<(), AttachmentError> {
+        let inner = self.inner.upgrade().ok_or(AttachmentError::Closed)?;
+        AttachmentBroker { inner }.acknowledge(request, self)
     }
     pub fn generation(&self) -> u64 {
         self.generation
@@ -735,27 +831,37 @@ impl ConfigurationRequest {
         }
     }
     pub fn cancel(&self) {
-        if let Some(inner) = self.inner.upgrade() {
-            let mut state = inner.state.lock().expect("attachment state");
-            if state
-                .request
-                .as_ref()
-                .is_some_and(|r| Arc::ptr_eq(r, &self.request))
-            {
-                state.request.take();
-            }
-            if state
-                .capture
-                .as_ref()
-                .and_then(|c| c.config.as_ref())
-                .is_some_and(|r| Arc::ptr_eq(r, &self.request))
-            {
-                state.retire_capture();
-            }
-            self.request.status.send_replace(RequestStatus::Cancelled);
-            inner.publish(&state);
-            inner.replies.notify_one();
+        cancel_configuration(&self.inner, &self.request);
+    }
+}
+
+impl TransportCleanup {
+    pub fn cancel(&self) {
+        if let Some(request) = self.request.upgrade() {
+            cancel_configuration(&self.inner, &request);
         }
+    }
+}
+
+fn cancel_configuration(inner: &Weak<Inner>, request: &Arc<Configuration>) {
+    if let Some(inner) = inner.upgrade() {
+        let mut state = inner.state.lock().expect("attachment state");
+        if state
+            .request
+            .as_ref()
+            .is_some_and(|r| Arc::ptr_eq(r, request))
+        {
+            state.request.take();
+        }
+        if state
+            .attempt(RelayTargetId::MULLVAD)
+            .is_some_and(|a| Arc::ptr_eq(&a.request, request))
+        {
+            state.detach_target(RelayTargetId::MULLVAD);
+        }
+        request.status.send_replace(RequestStatus::Cancelled);
+        inner.publish(&state);
+        inner.replies.notify_one();
     }
 }
 impl Drop for ConfigurationRequest {
@@ -767,6 +873,20 @@ impl Drop for ConfigurationRequest {
 impl CaptureLease {
     pub fn generation(&self) -> u64 {
         self.generation
+    }
+
+    /// A new target request may borrow this already observed fd epoch only for
+    /// an exactly equal configuration. Changes need the owner's handover path.
+    pub fn acknowledge_request(
+        &self,
+        request: &PendingCaptureRequest,
+    ) -> Result<(), AttachmentError> {
+        let receipt = CaptureReceipt {
+            inner: Arc::downgrade(&self.inner),
+            generation: self.generation,
+            configuration: Weak::new(),
+        };
+        receipt.acknowledge(request)
     }
     /// A feed retains this weak revoker, never the capture owner itself.
     pub fn revoker(&self) -> impl Fn() + Send + Sync + 'static {
@@ -814,6 +934,10 @@ impl CaptureLease {
         self.inner.replies.notify_one();
     }
     pub fn try_send(&self, bytes: &[u8]) -> Result<(), AttachmentError> {
+        self.try_send_to(RelayTargetId::MULLVAD, bytes)
+    }
+
+    pub fn try_send_to(&self, target: RelayTargetId, bytes: &[u8]) -> Result<(), AttachmentError> {
         let state = self.inner.state.lock().expect("attachment state");
         if !state
             .capture
@@ -823,14 +947,12 @@ impl CaptureLease {
             return Err(AttachmentError::Stale);
         }
         let attempt = state
-            .attempt
-            .as_ref()
+            .attempt(target)
             .ok_or(AttachmentError::OrdinaryUnready)?;
         enqueue(&self.inner, attempt, bytes, true)
     }
-    /// Snapshot the exact active attempt for checked Local sink operations.
-    /// The returned capability must not be replaced on a live frontend.
-    pub fn ordinary_attempt(&self) -> Option<RelayAttempt> {
+    /// Checked Local sink authority, independent of every target's readiness.
+    pub fn capability(&self) -> Option<RelayCapture> {
         let state = self.inner.state.lock().expect("attachment state");
         if !state
             .capture
@@ -839,8 +961,7 @@ impl CaptureLease {
         {
             return None;
         }
-        let attempt = state.attempt.as_ref()?.owner.capability();
-        attempt.current().then_some(attempt)
+        Some(state.capture.as_ref()?.owner.as_ref()?.capability())
     }
     /// Event-driven, cancellation-safe receive. An empty queue never polls on a
     /// timer; configuration, cancellation and new replies wake the capture owner.
@@ -848,7 +969,7 @@ impl CaptureLease {
         loop {
             let wake = self.inner.replies.notified();
             {
-                let state = self.inner.state.lock().expect("attachment state");
+                let mut state = self.inner.state.lock().expect("attachment state");
                 if !state
                     .capture
                     .as_ref()
@@ -856,10 +977,11 @@ impl CaptureLease {
                 {
                     return Err(AttachmentError::Stale);
                 }
-                if let Some(attempt) = &state.attempt {
-                    if *attempt.cancelled.borrow() {
-                        return Err(AttachmentError::Stale);
-                    }
+                for offset in 0..MAX_TARGETS {
+                    let index = (state.next_reply + offset) % MAX_TARGETS;
+                    let Some(attempt) = state.attempts[index].clone() else {
+                        continue;
+                    };
                     let packet = attempt
                         .queues
                         .lock()
@@ -867,6 +989,7 @@ impl CaptureLease {
                         .inbound
                         .pop_front();
                     if let Some(packet) = packet {
+                        state.next_reply = (index + 1) % MAX_TARGETS;
                         return Ok(AttachmentReply {
                             inner: Arc::downgrade(&self.inner),
                             attempt: attempt.clone(),
@@ -933,8 +1056,7 @@ impl AttemptControl {
         let inner = self.inner.upgrade().ok_or(AttachmentError::Closed)?;
         let state = inner.state.lock().expect("attachment state");
         if !state
-            .attempt
-            .as_ref()
+            .attempt(self.attempt.target)
             .is_some_and(|a| Arc::ptr_eq(a, &self.attempt))
         {
             return Err(AttachmentError::Stale);
@@ -955,11 +1077,10 @@ impl AttemptControl {
         if let Some(inner) = self.inner.upgrade() {
             let mut state = inner.state.lock().expect("attachment state");
             if state
-                .attempt
-                .as_ref()
+                .attempt(self.attempt.target)
                 .is_some_and(|a| Arc::ptr_eq(a, &self.attempt))
             {
-                state.detach();
+                state.detach_target(self.attempt.target);
             }
             inner.publish(&state);
             inner.replies.notify_one();
@@ -1006,8 +1127,7 @@ impl TransportSend {
             .ok_or(AttachmentError::Closed)?;
         let state = inner.state.lock().expect("attachment state");
         if !state
-            .attempt
-            .as_ref()
+            .attempt(self.control.attempt.target)
             .is_some_and(|a| Arc::ptr_eq(a, &self.control.attempt))
         {
             return Err(AttachmentError::Stale);
