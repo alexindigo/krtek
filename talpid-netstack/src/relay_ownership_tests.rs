@@ -26,8 +26,9 @@ fn capture_identity_is_immutable_full_width_and_replacement_is_distinct() {
     let first = capture(&budget);
     let second = capture(&budget);
     assert_ne!(first.identity().generation, second.identity().generation);
-    assert_eq!(first.identity().interface, "tun0");
-    assert_eq!(first.identity().network_handle, 0x1234_5678_0000_0063);
+    let sink = first.capability().sink().unwrap();
+    assert_eq!(sink.identity().interface, "tun0");
+    assert_eq!(sink.identity().network_handle, Some(0x1234_5678_0000_0063));
     assert_eq!(first.identity().mtu, 1420);
     assert!(
         first
@@ -49,6 +50,252 @@ fn capture_identity_is_immutable_full_width_and_replacement_is_distinct() {
     );
     drop(first);
     drop(second);
+    drop(sink);
+    assert_eq!(budget.used(), 0);
+}
+
+#[test]
+fn sink_handover_preserves_session_and_exact_target_but_never_old_sink_authority() {
+    let budget = BufferBudget::new(8192);
+    let owner = capture(&budget);
+    let local = owner.capability();
+    let first = local.sink().unwrap();
+    let target = owner.open_attempt(&budget).unwrap();
+    target.activate().unwrap();
+    let attempt = target.capability();
+    let sources = owner.identity().sources;
+    let session = owner.identity().generation.get();
+    let mut consumer = Vec::new();
+    local
+        .with_sink(&first, || consumer.extend_from_slice(b"before"))
+        .unwrap();
+
+    owner.suspend_sink(&first).unwrap();
+    assert!(local.current(), "expected fd loss retired Local's session");
+    assert!(
+        !attempt.current(),
+        "target ran without a checked current sink"
+    );
+    assert!(
+        local
+            .with_sink(&first, || panic!("suspended fd write"))
+            .is_err()
+    );
+    // Positive pre-establish retention may restore only this exact predecessor.
+    owner.resume_sink(&first).unwrap();
+    assert!(attempt.current());
+    owner.suspend_sink(&first).unwrap();
+    let invalid_sources = RelaySources {
+        ipv4: None,
+        ipv6: sources.ipv6,
+    };
+    assert!(
+        owner
+            .bind_sink(
+                RelayCaptureGeneration::fresh().unwrap(),
+                "tun1",
+                Some(42),
+                invalid_sources,
+                1420,
+                &budget
+            )
+            .is_err()
+    );
+    assert!(
+        owner
+            .bind_sink(
+                RelayCaptureGeneration::fresh().unwrap(),
+                "tun1",
+                Some(42),
+                sources,
+                1280,
+                &budget
+            )
+            .is_err()
+    );
+    assert!(
+        owner
+            .bind_sink(
+                RelayCaptureGeneration::fresh().unwrap(),
+                "tun1",
+                Some(0),
+                sources,
+                1420,
+                &budget
+            )
+            .is_err()
+    );
+    let next = owner
+        .bind_sink(
+            RelayCaptureGeneration::fresh().unwrap(),
+            "tun1",
+            Some(0x8765_4321_0000_0042),
+            sources,
+            1420,
+            &budget,
+        )
+        .unwrap();
+    assert_eq!(owner.identity().generation.get(), session);
+    assert_eq!(owner.identity().sources, sources);
+    assert!(attempt.current());
+    assert_eq!(attempt.sink().unwrap().identity().interface, "tun1");
+    assert_eq!(next.identity().network_handle, Some(0x8765_4321_0000_0042));
+    assert!(
+        owner.suspend_sink(&first).is_err(),
+        "late old cleanup suspended successor"
+    );
+    assert!(owner.resume_sink(&first).is_err(), "old epoch resurrected");
+    assert!(
+        local
+            .with_sink(&first, || panic!("old sink received successor bytes"))
+            .is_err()
+    );
+    local
+        .with_sink(&next, || consumer.extend_from_slice(b"after"))
+        .unwrap();
+    assert_eq!(consumer, b"beforeafter");
+    owner.suspend_sink(&next).unwrap();
+    assert!(
+        owner.resume_sink(&first).is_err(),
+        "old epoch resumed after a successor existed"
+    );
+    owner.resume_sink(&next).unwrap();
+    let packet = attempt
+        .packet(RelayBuffer::copy_from(b"old-target", &budget).unwrap())
+        .unwrap();
+    target.retire();
+    let replacement = owner.open_attempt(&budget).unwrap();
+    replacement.activate().unwrap();
+    assert!(
+        packet
+            .handoff(|_| panic!("old target revived by sink change"))
+            .is_err()
+    );
+    owner.retire();
+    assert!(!local.current());
+    assert!(owner.resume_sink(&next).is_err());
+    assert!(
+        local
+            .with_sink(&next, || panic!("retired session write"))
+            .is_err()
+    );
+    drop(replacement);
+    drop(target);
+    drop(attempt);
+    drop(owner);
+    drop(local);
+    assert!(budget.used() > 0, "retained sink metadata lost its charge");
+    drop(first);
+    drop(next);
+    assert_eq!(budget.used(), 0);
+}
+
+#[test]
+fn partial_sink_has_no_managed_handle_and_sink_reservations_are_bounded() {
+    let budget = BufferBudget::new(8 * BUFFER_OVERHEAD);
+    let sources = RelaySources {
+        ipv4: Some("192.0.2.2".parse().unwrap()),
+        ipv6: None,
+    };
+    let owner = RelayCaptureOwner::session(
+        RelayCaptureGeneration::fresh().unwrap(),
+        sources,
+        1280,
+        &budget,
+    )
+    .unwrap();
+    let local = owner.capability();
+    assert!(local.current());
+    assert!(local.sink().is_none());
+    let mut held = Vec::new();
+    loop {
+        match owner.bind_sink(
+            RelayCaptureGeneration::fresh().unwrap(),
+            "tun-partial",
+            None,
+            sources,
+            1280,
+            &budget,
+        ) {
+            Ok(sink) => {
+                assert_eq!(sink.identity().network_handle, None);
+                owner.suspend_sink(&sink).unwrap();
+                held.push(sink);
+            }
+            Err(RelayFlowError::Full) => break,
+            other => panic!("unexpected binding: {other:?}"),
+        }
+    }
+    assert!(!held.is_empty());
+    assert!(budget.used() <= 8 * BUFFER_OVERHEAD);
+    drop(held);
+    let sink = owner
+        .bind_sink(
+            RelayCaptureGeneration::fresh().unwrap(),
+            "tun-partial",
+            None,
+            sources,
+            1280,
+            &budget,
+        )
+        .unwrap();
+    local.with_sink(&sink, || ()).unwrap();
+    drop(sink);
+    drop(local);
+    drop(owner);
+    assert_eq!(budget.used(), 0);
+}
+
+#[test]
+fn sink_selection_waits_for_inflight_checked_write_then_refuses_old_descriptor() {
+    use std::sync::mpsc;
+    let budget = BufferBudget::new(8192);
+    let owner = Arc::new(capture(&budget));
+    let session = owner.capability();
+    let sink = session.sink().unwrap();
+    let (entered, in_write) = mpsc::channel();
+    let (release, released) = mpsc::channel();
+    let (output, consumed) = std::os::unix::net::UnixDatagram::pair().unwrap();
+    consumed
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let writer = session.clone();
+    let selected = sink.clone();
+    let write = std::thread::spawn(move || {
+        writer.with_sink(&selected, || {
+            entered.send(()).unwrap();
+            released.recv_timeout(Duration::from_secs(2)).unwrap();
+            output.send(b"inflight-sink-nonce").unwrap();
+        })
+    });
+    in_write.recv_timeout(Duration::from_secs(2)).unwrap();
+    let switcher = owner.clone();
+    let old = sink.clone();
+    let (attempted, attempt) = mpsc::channel();
+    let (suspended, suspension) = mpsc::channel();
+    let switch = std::thread::spawn(move || {
+        attempted.send(()).unwrap();
+        switcher.suspend_sink(&old).unwrap();
+        suspended.send(()).unwrap();
+    });
+    attempt.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(suspension.recv_timeout(Duration::from_millis(50)).is_err());
+    release.send(()).unwrap();
+    write.join().unwrap().unwrap();
+    let mut bytes = [0; 64];
+    let count = consumed.recv(&mut bytes).unwrap();
+    assert_eq!(&bytes[..count], b"inflight-sink-nonce");
+    suspension.recv_timeout(Duration::from_secs(2)).unwrap();
+    switch.join().unwrap();
+    assert!(session.current());
+    assert!(
+        session
+            .with_sink(&sink, || panic!("old fd wrote after suspension"))
+            .is_err()
+    );
+    drop(session);
+    drop(sink);
+    drop(owner);
     assert_eq!(budget.used(), 0);
 }
 

@@ -17,7 +17,9 @@ use std::{
 };
 use talpid_lan_forwarder::{Disposition, Flow, LocalAuthority, Refused};
 use talpid_netstack::buffer_budget::BufferBudget;
-use talpid_tunnel::packet_attachment::{AttachmentBroker, AttachmentMode, PendingCaptureRequest};
+#[cfg(test)]
+use talpid_tunnel::packet_attachment::AttachmentMode;
+use talpid_tunnel::packet_attachment::{AttachmentBroker, PendingCaptureRequest};
 use talpid_types::relay_flow::{RelayBufferAllocator, RelayBufferReservation};
 use tokio::sync::watch;
 
@@ -101,22 +103,23 @@ struct Inputs {
     endpoint: bool,
 }
 
-/// Immutable source ownership for one frontend incarnation. Physical network
-/// identity alone cannot authorize a reply into a replacement VPN interface.
+/// Logical capture ownership, independent of descriptor/observation epochs.
+/// Physical network identity alone cannot authorize a reply into a new session.
 #[derive(Clone)]
 struct CaptureAuthority {
     identity: u64,
     sources: Vec<IpAddr>,
-    managed: Option<AttachmentBroker>,
+    broker: Option<AttachmentBroker>,
     reserved: Vec<ipnetwork::IpNetwork>,
 }
 
 impl CaptureAuthority {
     fn new(
-        sources: Vec<IpAddr>,
-        managed: Option<AttachmentBroker>,
+        mut sources: Vec<IpAddr>,
+        broker: Option<AttachmentBroker>,
         reserved: Vec<ipnetwork::IpNetwork>,
     ) -> Self {
+        sources.sort();
         static NEXT: AtomicU64 = AtomicU64::new(1);
         let identity = NEXT
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1))
@@ -124,7 +127,7 @@ impl CaptureAuthority {
         Self {
             identity,
             sources,
-            managed,
+            broker,
             reserved,
         }
     }
@@ -141,14 +144,11 @@ impl CaptureAuthority {
     }
 
     fn generation(&self) -> Result<Option<u64>, Refused> {
-        match &self.managed {
+        match &self.broker {
             None => Ok(None),
             Some(broker) => {
                 let state = broker.snapshot();
-                if state.mode != AttachmentMode::ManagedRequired || !state.capture_ready {
-                    return Err(Refused::Stale);
-                }
-                state.capture_generation.map(Some).ok_or(Refused::Stale)
+                state.session_generation.map(Some).ok_or(Refused::Stale)
             }
         }
     }
@@ -202,6 +202,33 @@ impl DeliveryAuthority {
 
     fn install(&self, capture: CaptureAuthority) {
         self.inputs.write().unwrap().capture = Some(capture);
+        self.wake();
+    }
+
+    /// Only the retained owner can reconcile an epoch without minting a new
+    /// permission identity. During establish, protect both reserved sets.
+    fn reconcile_capture(&self, capture: CaptureAuthority, establishing: bool) {
+        let mut inputs = self.inputs.write().unwrap();
+        if let Some(current) = inputs.capture.as_mut() {
+            assert_eq!(current.sources, capture.sources);
+            assert!(
+                current
+                    .broker
+                    .as_ref()
+                    .zip(capture.broker.as_ref())
+                    .is_some_and(|(a, b)| a.same_broker(b))
+            );
+            if establishing {
+                for prefix in capture.reserved {
+                    if !current.reserved.contains(&prefix) {
+                        current.reserved.push(prefix);
+                    }
+                }
+            } else {
+                current.reserved = capture.reserved;
+            }
+        }
+        drop(inputs);
         self.wake();
     }
 
@@ -317,6 +344,8 @@ impl LocalAuthority for DeliveryAuthority {
 // owner. Fakes implement this boundary only in tests; there is no runtime hook.
 pub trait DeliveryOwner {
     fn ready(&mut self) -> impl Future<Output = io::Result<()>> + Send;
+    fn handover(&mut self, config: DeliveryConfig) -> io::Result<()>;
+    fn retry_handover_release(&mut self) -> io::Result<()>;
     fn stop(&mut self) -> impl Future<Output = io::Result<()>> + Send;
     fn retry_release(&mut self) -> io::Result<()>;
     fn state(&self) -> OwnerState;
@@ -332,6 +361,7 @@ pub trait FrontendFactory: Send + Sync {
         config: DeliveryConfig,
         authority: Arc<DeliveryAuthority>,
         buffers: Arc<dyn RelayBufferAllocator>,
+        broker: AttachmentBroker,
     ) -> io::Result<Self::Owner>;
 }
 
@@ -355,10 +385,14 @@ impl DeliveryConfig {
         }
     }
 
-    fn authority(&self) -> CaptureAuthority {
+    fn authority(&self, broker: &AttachmentBroker) -> CaptureAuthority {
         match self {
-            Self::Partial(_) => CaptureAuthority::partial(),
-            Self::Secured { broker, request } => {
+            Self::Partial(_) => {
+                let mut authority = CaptureAuthority::partial();
+                authority.broker = Some(broker.clone());
+                authority
+            }
+            Self::Secured { request, .. } => {
                 let config = request.config();
                 let reserved = config
                     .gateways()
@@ -371,7 +405,24 @@ impl DeliveryConfig {
         }
     }
 
-    #[cfg(any(target_os = "android", test))]
+    fn compatible(&self, other: &Self, broker: &AttachmentBroker) -> bool {
+        let sources = |config: &Self| {
+            let mut sources = config.authority(broker).sources;
+            sources.sort();
+            sources
+        };
+        let own_broker = |config: &Self| match config {
+            Self::Partial(_) => true,
+            Self::Secured {
+                broker: selected, ..
+            } => broker.same_broker(selected),
+        };
+        own_broker(self)
+            && own_broker(other)
+            && sources(self) == sources(other)
+            && self.mtu() == other.mtu()
+    }
+
     fn mtu(&self) -> u16 {
         match self {
             Self::Partial(_) => 1280,
@@ -410,7 +461,26 @@ pub struct Delivery<F: FrontendFactory> {
     last_start_failed: bool,
     release_outstanding: bool,
     owner_ready: bool,
+    pending: Option<Readiness>,
+    desired: Option<DeliveryConfig>,
+    handover_failed: bool,
+    // A coalesced external retry belongs to the pending operation, not to an
+    // internal readiness/state notification. Consume it only after that join.
+    retry_requested: bool,
+    // TSM release authority is not configuration/readiness authority. Keep both
+    // exact requests through pending readiness and predecessor cleanup.
+    releases: [Option<PendingCaptureRequest>; 2],
     buffers: Arc<dyn RelayBufferAllocator>,
+    broker: AttachmentBroker,
+}
+
+enum Readiness {
+    Initial,
+    Handover {
+        config: DeliveryConfig,
+        predecessor: Option<u64>,
+    },
+    Release,
 }
 
 impl<F: FrontendFactory> Delivery<F> {
@@ -422,25 +492,60 @@ impl<F: FrontendFactory> Delivery<F> {
         self.applied.clone()
     }
     pub fn release_ready(&self) -> bool {
-        match &self.applied {
-            Some(DeliveryConfig::Secured { request, .. }) => request.release_ready(),
-            _ => true,
-        }
+        self.releases
+            .iter()
+            .flatten()
+            .all(PendingCaptureRequest::release_ready)
     }
     pub fn defer_release(&self) {
-        if let Some(DeliveryConfig::Secured { request, .. }) = &self.applied {
+        for request in self.releases.iter().flatten() {
             request.defer_release();
         }
     }
     pub fn transport_joined(&self) {
-        if let Some(DeliveryConfig::Secured { request, .. }) = &self.applied {
+        for request in self.releases.iter().flatten() {
             request.handover_joined();
         }
+    }
+
+    fn retain_release(&mut self, config: &DeliveryConfig) -> io::Result<()> {
+        let applied = match &self.applied {
+            Some(DeliveryConfig::Secured { request, .. }) => Some(request.id()),
+            _ => None,
+        };
+        // A joined predecessor no longer needs a future TSM acknowledgement.
+        // Keep the applied request even when no target has acquired it yet.
+        for slot in &mut self.releases {
+            if slot
+                .as_ref()
+                .is_some_and(|request| Some(request.id()) != applied && request.release_ready())
+            {
+                *slot = None;
+            }
+        }
+        if let DeliveryConfig::Secured { request, .. } = config {
+            if self
+                .releases
+                .iter()
+                .flatten()
+                .any(|held| held.id() == request.id())
+            {
+                return Ok(());
+            }
+            let slot = self
+                .releases
+                .iter_mut()
+                .find(|slot| slot.is_none())
+                .ok_or_else(|| io::Error::from(io::ErrorKind::WouldBlock))?;
+            *slot = Some(request.clone());
+        }
+        Ok(())
     }
     pub fn new(
         factory: F,
         authority: Arc<DeliveryAuthority>,
         buffers: Arc<dyn RelayBufferAllocator>,
+        broker: AttachmentBroker,
     ) -> Self {
         Self {
             factory,
@@ -450,7 +555,13 @@ impl<F: FrontendFactory> Delivery<F> {
             last_start_failed: false,
             release_outstanding: false,
             owner_ready: false,
+            pending: None,
+            desired: None,
+            handover_failed: false,
+            retry_requested: false,
+            releases: [None, None],
             buffers,
+            broker,
         }
     }
 
@@ -483,18 +594,63 @@ impl<F: FrontendFactory> Delivery<F> {
     }
 
     pub async fn changed(&mut self) {
-        match self.owner.as_mut() {
-            Some(owner) if !self.owner_ready && !self.last_start_failed => {
-                match owner.ready().await {
-                    Ok(()) => self.owner_ready = true,
-                    Err(_) => {
+        let reconcile = match self.owner.as_mut() {
+            Some(owner) if self.pending.is_some() => {
+                let result = owner.ready().await;
+                let success = result.is_ok();
+                self.received_ready(result);
+                success
+            }
+            Some(owner) => {
+                owner.changed().await;
+                true
+            }
+            None => std::future::pending().await,
+        };
+        // A settings event may supersede the in-flight request. Reconcile the
+        // latest intent after its exact acknowledgement, without another event
+        // or a closed-channel readiness loop. Failures wait for an external retry.
+        if self.retry_requested || reconcile && !self.failed() {
+            self.reconcile_config(self.desired.clone()).await;
+        }
+    }
+
+    fn received_ready(&mut self, result: io::Result<()>) {
+        match self.pending.take().expect("retained readiness owner") {
+            Readiness::Initial => {
+                self.owner_ready = result.is_ok();
+                if result.is_err() {
+                    self.last_start_failed = true;
+                    self.authority.revoke();
+                }
+            }
+            Readiness::Handover {
+                config,
+                predecessor,
+            } => {
+                if result.is_ok() {
+                    self.authority
+                        .reconcile_capture(config.authority(&self.broker), false);
+                    self.applied = Some(config);
+                } else {
+                    self.handover_failed = !result
+                        .as_ref()
+                        .is_err_and(|error| error.kind() == io::ErrorKind::WouldBlock);
+                    let snapshot = self.broker.snapshot();
+                    if snapshot.capture_ready && snapshot.capture_generation == predecessor {
+                        self.authority.reconcile_capture(
+                            self.applied.as_ref().unwrap().authority(&self.broker),
+                            false,
+                        );
+                    } else {
                         self.last_start_failed = true;
                         self.authority.revoke();
                     }
                 }
             }
-            Some(owner) => owner.changed().await,
-            None => std::future::pending().await,
+            Readiness::Release => {
+                self.handover_failed = result.is_err();
+            }
         }
     }
 
@@ -529,8 +685,30 @@ impl<F: FrontendFactory> Delivery<F> {
     }
 
     pub async fn maintain_config(&mut self, wanted: Option<DeliveryConfig>) {
+        self.maintain_config_inner(wanted, true).await;
+    }
+
+    pub async fn reconcile_config(&mut self, wanted: Option<DeliveryConfig>) {
+        self.maintain_config_inner(wanted, false).await;
+    }
+
+    async fn maintain_config_inner(&mut self, wanted: Option<DeliveryConfig>, external: bool) {
         use futures::FutureExt;
-        let retry_allowed = self.can_retry_release();
+        if wanted.as_ref().is_some_and(|config| {
+            matches!(config,
+            DeliveryConfig::Secured { broker, .. } if !self.broker.same_broker(broker))
+        }) {
+            self.handover_failed = true;
+            return;
+        }
+        self.desired = wanted.clone();
+        if self.pending.is_some() {
+            self.retry_requested |= external;
+            return;
+        }
+        let external_retry = std::mem::take(&mut self.retry_requested) || external;
+        self.handover_failed = false;
+        let retry_allowed = external_retry && self.can_retry_release();
         let healthy = self
             .owner
             .as_ref()
@@ -539,6 +717,51 @@ impl<F: FrontendFactory> Delivery<F> {
             .as_ref()
             .zip(self.applied.as_ref())
             .is_some_and(|(a, b)| a.same_capture(b));
+        if healthy && self.owner_ready {
+            let compatible = wanted
+                .as_ref()
+                .zip(self.applied.as_ref())
+                .is_some_and(|(a, b)| a.compatible(b, &self.broker));
+            if compatible {
+                if self.retain_release(wanted.as_ref().unwrap()).is_err() {
+                    return;
+                }
+                let owner = self.owner.as_mut().unwrap();
+                if owner.release_failed() {
+                    if external_retry && owner.retry_handover_release().is_ok() {
+                        self.pending = Some(Readiness::Release);
+                    }
+                } else if !same {
+                    let config = wanted.as_ref().unwrap();
+                    let predecessor = self.broker.snapshot().capture_generation;
+                    // The owner can run on another runtime thread immediately
+                    // after dispatch. Publish restrictive policy first, without
+                    // retaining the authority lock over the command boundary.
+                    self.authority
+                        .reconcile_capture(config.authority(&self.broker), true);
+                    if owner.handover(config.clone()).is_ok() {
+                        self.pending = Some(Readiness::Handover {
+                            config: config.clone(),
+                            predecessor,
+                        });
+                    } else {
+                        self.authority.reconcile_capture(
+                            self.applied.as_ref().unwrap().authority(&self.broker),
+                            false,
+                        );
+                    }
+                }
+                if self.pending.is_some()
+                    && let Some(result) = self.owner.as_mut().unwrap().ready().now_or_never()
+                {
+                    self.received_ready(result);
+                }
+                return;
+            }
+        }
+        if self.can_retry_release() && !external_retry {
+            return;
+        }
         if self.has_owner() && (!same || !healthy || retry_allowed) && !self.release_ready() {
             self.authority.revoke();
             return;
@@ -552,30 +775,35 @@ impl<F: FrontendFactory> Delivery<F> {
             return;
         }
         if let Some(config) = wanted.filter(|_| self.factory.supported() && !self.has_owner()) {
-            self.authority.install(config.authority());
-            match self
-                .factory
-                .start(config.clone(), self.authority.clone(), self.buffers.clone())
-            {
+            // Retain before dispatch: the native actor can establish/acknowledge
+            // on another runtime thread before Delivery receives readiness.
+            self.retain_release(&config)
+                .expect("no owner retains a release");
+            self.authority.install(config.authority(&self.broker));
+            match self.factory.start(
+                config.clone(),
+                self.authority.clone(),
+                self.buffers.clone(),
+                self.broker.clone(),
+            ) {
                 Ok(owner) => {
                     // Acquire the recovery handle before the first suspension.
                     self.owner = Some(owner);
                     self.owner_ready = false;
+                    self.pending = Some(Readiness::Initial);
                     self.applied = Some(config);
                     // Never hold the daemon actor waiting for an Android callback
                     // or transport request. Retain pending readiness for select.
-                    match self.owner.as_mut().unwrap().ready().now_or_never() {
-                        Some(Ok(())) => self.owner_ready = true,
-                        Some(Err(_)) => {
-                            self.last_start_failed = true;
-                            if self.release_ready() {
-                                let _ = self.stop_owner(false).await;
-                            }
+                    if let Some(result) = self.owner.as_mut().unwrap().ready().now_or_never() {
+                        let failed = result.is_err();
+                        self.received_ready(result);
+                        if failed && self.release_ready() {
+                            let _ = self.stop_owner(false).await;
                         }
-                        None => {}
                     }
                 }
                 Err(_) => {
+                    self.releases = [None, None];
                     self.last_start_failed = true;
                     self.authority.revoke();
                 }
@@ -604,12 +832,16 @@ impl<F: FrontendFactory> Delivery<F> {
         }
         self.owner = None;
         self.owner_ready = false;
+        self.pending = None;
         self.applied = None;
+        self.releases = [None, None];
         self.release_outstanding = false;
         Ok(())
     }
 
     pub async fn stop(&mut self) -> io::Result<()> {
+        self.desired = None;
+        self.retry_requested = false;
         let result = self.stop_owner(self.can_retry_release()).await;
         if !result
             .as_ref()
@@ -635,6 +867,8 @@ impl<F: FrontendFactory> Delivery<F> {
 
     pub fn failed(&self) -> bool {
         self.last_start_failed
+            || self.handover_failed
+            || self.release_failed()
             || self.release_outstanding
             || self
                 .owner
@@ -652,7 +886,8 @@ impl<F: FrontendFactory> Delivery<F> {
 
     pub fn ready(&self) -> bool {
         self.owner_ready
-            && !self.failed()
+            && !self.last_start_failed
+            && !self.release_outstanding
             && self
                 .owner
                 .as_ref()
@@ -685,6 +920,7 @@ mod platform {
     pub struct PlatformFactory(pub Arc<LocalNetworkPlatform>);
     pub struct PlatformOwner {
         owner: FrontendOwner,
+        authority: Arc<DeliveryAuthority>,
         receiver: watch::Receiver<FrontendState>,
         open: bool,
     }
@@ -715,17 +951,19 @@ mod platform {
             config: DeliveryConfig,
             authority: Arc<DeliveryAuthority>,
             buffers: Arc<dyn RelayBufferAllocator>,
+            broker: AttachmentBroker,
         ) -> io::Result<PlatformOwner> {
             let updates = authority.subscribe();
             let mtu = config.mtu();
             let classifier = authority.clone();
-            let forwarder = Forwarder::with_mtu(authority, buffers, usize::from(mtu))
+            let forwarder = Forwarder::with_mtu(authority.clone(), buffers, usize::from(mtu))
                 .map_err(|_| io::Error::other("Local storage budget full"))?;
             let config = config.into_frontend(classifier);
-            let owner = FrontendOwner::start(self.0.clone(), config, forwarder, updates)?;
+            let owner = FrontendOwner::start(self.0.clone(), config, forwarder, updates, broker)?;
             let receiver = owner.state();
             Ok(PlatformOwner {
                 owner,
+                authority,
                 receiver,
                 open: true,
             })
@@ -733,6 +971,13 @@ mod platform {
     }
 
     impl DeliveryOwner for PlatformOwner {
+        fn handover(&mut self, config: DeliveryConfig) -> io::Result<()> {
+            self.owner
+                .handover(config.into_frontend(self.authority.clone()))
+        }
+        fn retry_handover_release(&mut self) -> io::Result<()> {
+            self.owner.retry_handover_release()
+        }
         async fn ready(&mut self) -> io::Result<()> {
             self.owner.ready().await
         }
@@ -782,11 +1027,18 @@ mod platform {
             _: DeliveryConfig,
             _: Arc<DeliveryAuthority>,
             _: Arc<dyn RelayBufferAllocator>,
+            _: AttachmentBroker,
         ) -> io::Result<PlatformOwner> {
             Err(io::ErrorKind::Unsupported.into())
         }
     }
     impl DeliveryOwner for PlatformOwner {
+        fn handover(&mut self, _: DeliveryConfig) -> io::Result<()> {
+            match *self {}
+        }
+        fn retry_handover_release(&mut self) -> io::Result<()> {
+            match *self {}
+        }
         async fn ready(&mut self) -> io::Result<()> {
             match *self {}
         }

@@ -458,6 +458,251 @@ async fn crypto(multihop: bool) {
 }
 
 #[tokio::test]
+async fn installed_managed_target_crosses_fd_epochs_without_reusing_the_old_receipt() {
+    for retire_session in [false, true] {
+        let (broker, _root, control) = broker();
+        let mut config = config();
+        let (remote, mut observed) = remote(&mut config, false).await;
+        let source = PendingManaged::request(broker.clone(), tun_config(&config)).unwrap();
+        let capture = acknowledge(&broker, &config);
+        let mut client = GotaTun::new(
+            PlaintextSource::Managed(source),
+            Arc::new(NoopBypass),
+            None,
+            &config,
+            None,
+            String::new(),
+        )
+        .await
+        .unwrap();
+        let owner = client.managed().unwrap();
+        let (_cancel, receiver) = CancelToken::new();
+        let mut check = Check::new_with_smoltcp(owner.pinger().unwrap(), 0, receiver);
+        tokio::time::timeout(
+            Duration::from_secs(5),
+            establish_and_observe(&mut check, &client, &owner, async { Ok(()) }),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let receipt = owner.receipt.clone();
+        let predecessor_lost = capture.revoker();
+        let target = broker.snapshot().attachment;
+        let session = broker.snapshot().session_generation;
+        let old_sink = owner.control.capability().sink().unwrap();
+        let mut successor = None;
+        let mut change = None;
+        for stage in 0..2 {
+            if stage == 1 {
+                let mut config = tun_config(&config);
+                config.dns_servers = Some(vec!["10.12.34.2".parse().unwrap()]);
+                config
+                    .excluded_packages
+                    .push("unrelated.excluded.app".into());
+                successor = Some(broker.request_capture(config).unwrap());
+                let pending = broker.pending_request().unwrap();
+                let capability = owner.control.capability();
+                let handover = capture
+                    .begin_handover(
+                        Some(&pending),
+                        capability.identity().sources,
+                        capability.identity().mtu,
+                    )
+                    .unwrap();
+                assert!(!receipt.current());
+                let next = handover
+                    .bind_identity(
+                        "tun18",
+                        Some(0xf123_4567_0000_0064),
+                        capability.identity().sources,
+                        capability.identity().mtu,
+                    )
+                    .unwrap();
+                broker.acknowledge(&pending, &next).unwrap();
+                successor.as_mut().unwrap().configured().await.unwrap();
+                assert!(
+                    !receipt.current(),
+                    "handover resurrected the predecessor receipt"
+                );
+                predecessor_lost();
+                assert_eq!(broker.snapshot().attachment, target);
+                assert_eq!(broker.snapshot().session_generation, session);
+                assert_eq!(owner.interface(), "tun18");
+                change = Some(handover);
+            }
+            let bytes = ipv4(
+                17,
+                if stage == 0 {
+                    b"before-epoch"
+                } else {
+                    b"after-epoch"
+                },
+            );
+            capture.try_send(&bytes).unwrap();
+            assert_eq!(
+                tokio::time::timeout(Duration::from_secs(2), observed.recv())
+                    .await
+                    .expect("installed Managed receive lost its target at fd handover")
+                    .unwrap(),
+                bytes
+            );
+            let mut reply = tokio::time::timeout(Duration::from_secs(2), capture.reply())
+                .await
+                .expect("installed Managed send lost its target at fd handover")
+                .unwrap();
+            if stage == 1 {
+                assert!(matches!(
+                    reply.write_to(&old_sink, |_| panic!("reply entered predecessor fd")),
+                    RelayWriteOutcome::Retry
+                ));
+            }
+            let sink = owner.control.capability().sink().unwrap();
+            let (fd, consumer) = std::os::unix::net::UnixDatagram::pair().unwrap();
+            consumer
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            assert!(matches!(
+                reply.write_to(&sink, |packet| fd.send(packet)),
+                RelayWriteOutcome::Written
+            ));
+            let mut received = vec![0; bytes.len()];
+            assert_eq!(consumer.recv(&mut received).unwrap(), bytes.len());
+            assert_eq!(received, bytes);
+            let prior = owner.ledger.lock().unwrap().highest;
+            assert!(check.establish_connectivity(&client).await.unwrap());
+            tokio::time::timeout(Duration::from_secs(2), async {
+                loop {
+                    {
+                        let ledger = owner.ledger.lock().unwrap();
+                        if ledger.highest > prior && ledger.live.is_empty() {
+                            break;
+                        }
+                    }
+                    tokio::time::sleep(Duration::from_millis(2)).await;
+                }
+            })
+            .await
+            .expect("private authenticated control did not cross the same target");
+            owner.activate().unwrap();
+        }
+        if retire_session {
+            change.as_ref().unwrap().revoker()();
+        } else {
+            owner.revoke();
+        }
+        assert!(!owner.live());
+        assert!(owner.activate().is_err());
+        assert!(
+            owner
+                .publish(|| panic!("retired target published Up"))
+                .is_err()
+        );
+        tokio::time::timeout(Duration::from_secs(1), owner.cancelled())
+            .await
+            .unwrap();
+        assert!(capture.try_send(&ipv4(17, b"retired-target")).is_err());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), observed.recv())
+                .await
+                .is_err()
+        );
+        assert!(
+            establish_and_observe(&mut check, &client, &owner, async { Ok(()) })
+                .await
+                .is_err()
+        );
+        client.shutdown().await;
+        let finished = change.as_mut().unwrap().finish();
+        if retire_session {
+            assert_eq!(
+                finished,
+                Err(talpid_tunnel::packet_attachment::AttachmentError::Stale)
+            );
+        } else {
+            finished.unwrap();
+        }
+        if let Some(successor) = &successor {
+            successor.transport_joined();
+        }
+        capture.retire();
+        drop((check, owner, client, successor, change, old_sink));
+        assert_eq!(control.used(), 0);
+        remote.stop().await;
+    }
+}
+
+#[tokio::test]
+async fn initial_activation_keeps_exact_epoch_and_retired_adapter_halves_refuse_consumers() {
+    for retire_session in [false, true] {
+        let (broker, _root, control) = broker();
+        let config = config();
+        let mut pending = PendingManaged::request(broker.clone(), tun_config(&config)).unwrap();
+        let capture = acknowledge(&broker, &config);
+        let mut pair = pending.create(&config).await.unwrap();
+        pair.owner.installed();
+        let successor = broker.request_capture(tun_config(&config)).unwrap();
+        let request = broker.pending_request().unwrap();
+        let mut change = capture
+            .begin_handover(
+                Some(&request),
+                pair.owner.control.capability().identity().sources,
+                config.mtu,
+            )
+            .unwrap();
+        assert!(
+            pair.owner.activate().is_err(),
+            "unbound successor activated an initial target"
+        );
+        let receipt = change
+            .bind_identity(
+                "tun18",
+                Some(0xf123_4567_0000_0064),
+                pair.owner.control.capability().identity().sources,
+                config.mtu,
+            )
+            .unwrap();
+        broker.acknowledge(&request, &receipt).unwrap();
+        assert!(!pair.owner.receipt.current());
+        assert!(
+            pair.owner.activate().is_err(),
+            "stale initial receipt activated through a different fd epoch"
+        );
+        assert!(!broker.snapshot().ordinary_ready);
+        if retire_session {
+            capture.retire();
+        } else {
+            pair.owner.revoke();
+        }
+        let mut pool = PacketBufPool::new(1);
+        assert!(pair.receive.recv(&mut pool).await.is_err());
+        assert!(
+            pair.send
+                .send(
+                    Packet::<[u8]>::copy_from(&ipv4(17, b"retired-return"))
+                        .try_into_ip()
+                        .unwrap()
+                )
+                .await
+                .is_err()
+        );
+        pair.owner.stop().await;
+        let finished = change.finish();
+        if retire_session {
+            assert_eq!(
+                finished,
+                Err(talpid_tunnel::packet_attachment::AttachmentError::Stale)
+            );
+        } else {
+            finished.unwrap();
+        }
+        successor.transport_joined();
+        capture.retire();
+        drop((pair, pending, successor, change));
+        assert_eq!(control.used(), 0);
+    }
+}
+
+#[tokio::test]
 async fn real_request_without_matching_receipt_never_creates_application_source() {
     let (broker, _root, control) = broker();
     let config = config();

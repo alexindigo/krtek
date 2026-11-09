@@ -180,6 +180,12 @@ struct State {
     closed: bool,
     last_generation: i64,
     generation: Option<Generation>,
+    predecessor: Option<Predecessor>,
+}
+
+struct Predecessor {
+    generation: Generation,
+    revoke: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 pub struct CaptureNetworkFeed {
@@ -195,6 +201,7 @@ impl CaptureNetworkFeed {
                 closed: registration <= 0,
                 last_generation: 0,
                 generation: None,
+                predecessor: None,
             }),
         })
     }
@@ -219,7 +226,11 @@ impl CaptureNetworkFeed {
     /// that still owes cleanup; invalidate must precede platform release.
     pub fn begin(&self, id: i64) -> Option<watch::Receiver<CaptureNetworkState>> {
         let mut state = self.state.lock().expect("capture feed");
-        if state.closed || id <= state.last_generation || state.generation.is_some() {
+        if state.closed
+            || id <= state.last_generation
+            || state.generation.is_some()
+            || state.predecessor.is_some()
+        {
             return None;
         }
         state.last_generation = id;
@@ -232,6 +243,72 @@ impl CaptureNetworkFeed {
             state: sender,
         });
         Some(receiver)
+    }
+
+    /// Freeze the predecessor's write authority before entering establish, while
+    /// retaining its observation and cleanup record. Expected old-interface loss
+    /// updates that record but cannot retire the logical session. No third epoch
+    /// is admitted until exact old cleanup or a proven pre-establish rollback.
+    /// A Partial successor deliberately has no managed feed generation.
+    pub fn begin_handover(
+        &self,
+        predecessor: i64,
+        successor: Option<i64>,
+    ) -> Option<Option<watch::Receiver<CaptureNetworkState>>> {
+        let mut state = self.state.lock().expect("capture feed");
+        if state.closed
+            || state.predecessor.is_some()
+            || successor.is_some_and(|id| id <= state.last_generation)
+            || !state.generation.as_ref().is_some_and(|g| {
+                g.id == predecessor && matches!(*g.state.borrow(), CaptureNetworkState::Ready(_))
+            })
+        {
+            return None;
+        }
+        let mut generation = state.generation.take().expect("checked predecessor");
+        let revoke = generation.revoke.take();
+        state.predecessor = Some(Predecessor { generation, revoke });
+        let receiver = successor.map(|id| {
+            state.last_generation = id;
+            let (sender, receiver) = watch::channel(CaptureNetworkState::Pending);
+            state.generation = Some(Generation {
+                id,
+                expected: None,
+                handle: None,
+                revoke: None,
+                state: sender,
+            });
+            receiver
+        });
+        Some(receiver)
+    }
+
+    /// The caller must also possess positive platform evidence that establish
+    /// was never entered. An observed lost predecessor is never restored here.
+    pub fn rollback_handover(&self, predecessor: i64) -> bool {
+        let mut state = self.state.lock().expect("capture feed");
+        if state.closed
+            || state
+                .generation
+                .as_ref()
+                .is_some_and(|g| g.revoke.is_some())
+            || !state.predecessor.as_ref().is_some_and(|old| {
+                old.generation.id == predecessor
+                    && matches!(
+                        *old.generation.state.borrow(),
+                        CaptureNetworkState::Ready(_)
+                    )
+            })
+        {
+            return false;
+        }
+        if let Some(generation) = state.generation.take() {
+            Self::set_state(&generation, CaptureNetworkState::Lost);
+        }
+        let mut old = state.predecessor.take().expect("checked predecessor");
+        old.generation.revoke = old.revoke.take();
+        state.generation = Some(old.generation);
+        true
     }
 
     /// After descriptor adoption and the borrowed TUNGETIFF query. Observations
@@ -287,7 +364,16 @@ impl CaptureNetworkFeed {
         observation.dns_servers.sort();
         observation.dns_servers.dedup();
         let mut state = self.state.lock().expect("capture feed");
-        let Some(generation) = state.generation.as_mut().filter(|g| g.id == id) else {
+        let generation = if state.generation.as_ref().is_some_and(|g| g.id == id) {
+            state.generation.as_mut()
+        } else {
+            state
+                .predecessor
+                .as_mut()
+                .map(|old| &mut old.generation)
+                .filter(|g| g.id == id)
+        };
+        let Some(generation) = generation else {
             return false;
         };
         // Registration/publication failures have no usable network identity.
@@ -362,6 +448,16 @@ impl CaptureNetworkFeed {
             Self::revoke(&mut generation);
             Self::set_state(&generation, CaptureNetworkState::Lost);
         }
+        if state
+            .predecessor
+            .as_ref()
+            .is_some_and(|old| old.generation.id == id)
+        {
+            let old = state.predecessor.take().expect("matched predecessor");
+            // Its revoker was disarmed by the same owner's handover transaction.
+            // Exact epoch cleanup must not revoke the successor/session.
+            Self::set_state(&old.generation, CaptureNetworkState::Lost);
+        }
     }
 
     pub fn close(&self) {
@@ -370,6 +466,12 @@ impl CaptureNetworkFeed {
         if let Some(mut generation) = state.generation.take() {
             Self::revoke(&mut generation);
             Self::set_state(&generation, CaptureNetworkState::Lost);
+        }
+        if let Some(mut old) = state.predecessor.take() {
+            if let Some(revoke) = old.revoke.take() {
+                revoke();
+            }
+            Self::set_state(&old.generation, CaptureNetworkState::Lost);
         }
     }
 }

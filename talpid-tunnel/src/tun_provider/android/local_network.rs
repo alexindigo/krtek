@@ -1,20 +1,21 @@
 //! JNI names and socket preparation codes shared with TalpidVpnService.
-use super::{CreateTunResult, Error, VpnServiceConfig};
+use super::{Error, VpnServiceConfig};
 use jnix::{
-    FromJava, IntoJava, JnixEnv,
+    IntoJava, JnixEnv,
     jni::objects::{JObject, JValue},
 };
-use std::os::fd::{FromRawFd, OwnedFd, RawFd};
+use std::os::fd::{OwnedFd, RawFd};
 use talpid_types::android::AndroidContext;
+mod descriptor;
 mod jni_call;
 use jni_call::handled;
 
-pub const METHODS: [(&str, &str); 6] = [
+pub const METHODS: [(&str, &str); 9] = [
     (
         "openLocalFrontend",
         "(J[Ljava/lang/String;)Lnet/mullvad/talpid/model/CreateTunResult;",
     ),
-    ("finishLocalFrontend", "()V"),
+    ("finishLocalFrontend", "(J)V"),
     ("isLocalFrontendActive", "()Z"),
     ("prepareLocalSocket", "(IJJZ)I"),
     (
@@ -22,7 +23,44 @@ pub const METHODS: [(&str, &str); 6] = [
         "(JLnet/mullvad/talpid/model/TunConfig;)Lnet/mullvad/talpid/model/CreateTunResult;",
     ),
     ("bindLocalFrontend", "(JLjava/lang/String;)Z"),
+    (
+        "handoverLocalFrontend",
+        "(JJ[Ljava/lang/String;)Lnet/mullvad/talpid/model/CaptureHandoverResult;",
+    ),
+    (
+        "handoverSecuredFrontend",
+        "(JJLnet/mullvad/talpid/model/TunConfig;)Lnet/mullvad/talpid/model/CaptureHandoverResult;",
+    ),
+    descriptor::TAKE,
 ];
+
+fn decode_error(error: descriptor::DecodeError) -> Error {
+    match error {
+        descriptor::DecodeError::Jni(error) => Error::CallMethod("capture result", error),
+        descriptor::DecodeError::InvalidResult => Error::TunnelDeviceError,
+    }
+}
+
+fn decode_descriptor(env: &jnix::jni::JNIEnv<'_>, result: JObject<'_>) -> Result<RawFd, Error> {
+    use descriptor::OpenResult;
+    match descriptor::decode(env, result).map_err(decode_error)? {
+        OpenResult::Descriptor(fd) => Ok(fd),
+        OpenResult::EstablishError => Err(Error::TunnelDeviceError),
+        OpenResult::OtherLegacyAlwaysOnVpn => Err(Error::OtherLegacyAlwaysOnVpn),
+        OpenResult::OtherAlwaysOnApp(app_name) => Err(Error::OtherAlwaysOnApp { app_name }),
+        OpenResult::NotPrepared => Err(Error::NotPrepared),
+    }
+}
+
+pub enum FrontendHandoverConfig<'a> {
+    Partial(&'a [String]),
+    Secured(crate::tun_provider::TunConfig),
+}
+
+pub struct FrontendHandoverResult {
+    pub descriptor: Result<OwnedFd, Error>,
+    pub predecessor_retained: bool,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum PrepareError {
@@ -102,13 +140,9 @@ impl LocalNetworkPlatform {
                 .and_then(|value| value.l())
                 .map_err(|e| Error::CallMethod(name, e))?;
             let result = env.auto_local(result);
-            let raw =
-                Result::<RawFd, Error>::from(CreateTunResult::from_java(&env, result.as_obj()))?;
-            if raw < 0 {
-                return Err(Error::TunnelDeviceError);
-            }
-            // SAFETY: Kotlin detached the sole descriptor and retains no cached/adopted copy.
-            Ok(unsafe { OwnedFd::from_raw_fd(raw) })
+            let raw = decode_descriptor(&env, result.as_obj())?;
+            descriptor::take(&env, self.context.vpn_service.as_obj(), generation, raw)
+                .map_err(decode_error)
         })
     }
 
@@ -136,13 +170,9 @@ impl LocalNetworkPlatform {
                 .and_then(|v| v.l())
                 .map_err(|e| Error::CallMethod(name, e))?;
             let result = env.auto_local(result);
-            let raw =
-                Result::<RawFd, Error>::from(CreateTunResult::from_java(&env, result.as_obj()))?;
-            if raw < 0 {
-                return Err(Error::TunnelDeviceError);
-            }
-            // SAFETY: The service detached this sole descriptor, without using its Native cache.
-            Ok(unsafe { OwnedFd::from_raw_fd(raw) })
+            let raw = decode_descriptor(&env, result.as_obj())?;
+            descriptor::take(&env, self.context.vpn_service.as_obj(), generation, raw)
+                .map_err(decode_error)
         })
     }
 
@@ -169,7 +199,87 @@ impl LocalNetworkPlatform {
         })
     }
 
-    pub fn finish_frontend(&self) -> Result<(), Error> {
+    pub fn handover_frontend(
+        &self,
+        predecessor: i64,
+        generation: i64,
+        config: FrontendHandoverConfig<'_>,
+    ) -> FrontendHandoverResult {
+        let call = || -> Result<(Result<OwnedFd, Error>, bool), Error> {
+            let env = JnixEnv::from(
+                self.context
+                    .jvm
+                    .attach_current_thread_as_daemon()
+                    .map_err(Error::AttachJvmToThread)?,
+            );
+            let (name, signature) = METHODS[match &config {
+                FrontendHandoverConfig::Partial(_) => 6,
+                FrontendHandoverConfig::Secured(_) => 7,
+            }];
+            handled(&env, name, || {
+                let argument = match config {
+                    FrontendHandoverConfig::Partial(routes) => {
+                        let size =
+                            i32::try_from(routes.len()).map_err(|_| Error::TunnelDeviceError)?;
+                        let array = env
+                            .new_object_array(size, "java/lang/String", JObject::null())
+                            .map_err(|e| Error::CallMethod(name, e))?;
+                        let array = env.auto_local(JObject::from(array));
+                        for (index, route) in routes.iter().enumerate() {
+                            let string = env
+                                .new_string(route)
+                                .map_err(|e| Error::CallMethod(name, e))?;
+                            let string = env.auto_local(JObject::from(string));
+                            env.set_object_array_element(
+                                array.as_obj().into_inner(),
+                                index as i32,
+                                string.as_obj(),
+                            )
+                            .map_err(|e| Error::CallMethod(name, e))?;
+                        }
+                        array
+                    }
+                    FrontendHandoverConfig::Secured(config) => {
+                        VpnServiceConfig::new(config).into_java(&env)
+                    }
+                };
+                let result = env
+                    .call_method(
+                        self.context.vpn_service.as_obj(),
+                        name,
+                        signature,
+                        &[
+                            JValue::Long(predecessor),
+                            JValue::Long(generation),
+                            JValue::Object(argument.as_obj()),
+                        ],
+                    )
+                    .and_then(|v| v.l())
+                    .map_err(|e| Error::CallMethod(name, e))?;
+                let result = env.auto_local(result);
+                descriptor::handover(
+                    &env,
+                    self.context.vpn_service.as_obj(),
+                    generation,
+                    result.as_obj(),
+                    |result| decode_descriptor(&env, result),
+                    decode_error,
+                )
+            })
+        };
+        match call() {
+            Ok((descriptor, predecessor_retained)) => FrontendHandoverResult {
+                descriptor,
+                predecessor_retained,
+            },
+            Err(error) => FrontendHandoverResult {
+                descriptor: Err(error),
+                predecessor_retained: false,
+            },
+        }
+    }
+
+    pub fn finish_frontend(&self, generation: i64) -> Result<(), Error> {
         let env = self
             .context
             .jvm
@@ -177,8 +287,13 @@ impl LocalNetworkPlatform {
             .map_err(Error::AttachJvmToThread)?;
         let (name, signature) = METHODS[1];
         handled(&env, name, || {
-            env.call_method(self.context.vpn_service.as_obj(), name, signature, &[])
-                .map_err(|e| Error::CallMethod(name, e))?;
+            env.call_method(
+                self.context.vpn_service.as_obj(),
+                name,
+                signature,
+                &[JValue::Long(generation)],
+            )
+            .map_err(|e| Error::CallMethod(name, e))?;
             Ok(())
         })
     }

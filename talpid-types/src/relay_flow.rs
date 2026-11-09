@@ -150,15 +150,42 @@ impl RelaySources {
     }
 }
 
-/// Bound only after the platform has identified the actual capture interface
-/// and its VPN Network. The full Android network handle is opaque, not an i32.
+/// App-facing identity belongs to the logical session, not to a descriptor.
 #[derive(Debug)]
 pub struct RelayCaptureIdentity {
     pub generation: RelayCaptureGeneration,
-    pub interface: String,
-    pub network_handle: u64,
     pub sources: RelaySources,
     pub mtu: u16,
+}
+
+/// One actual descriptor epoch. Partial captures have no NetworkCallback handle;
+/// managed captures require the first full-width observed Android handle.
+pub struct RelaySinkIdentity {
+    pub generation: u64,
+    pub interface: String,
+    pub network_handle: Option<u64>,
+    _charge: Arc<dyn RelayBufferReservation>,
+}
+
+impl fmt::Debug for RelaySinkIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RelaySinkIdentity")
+            .field("generation", &self.generation)
+            .field("interface", &self.interface)
+            .field("network_handle", &self.network_handle)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A selector receipt, never ownership of the fd itself. Only the session owner
+/// can install/resume it. A retained receipt cannot select a replacement sink.
+#[derive(Clone, Debug)]
+pub struct RelaySink(Arc<RelaySinkIdentity>);
+
+impl RelaySink {
+    pub fn identity(&self) -> &RelaySinkIdentity {
+        &self.0
+    }
 }
 
 struct Capture {
@@ -169,6 +196,8 @@ struct Capture {
 
 struct CaptureState {
     live: bool,
+    sink: Option<RelaySink>,
+    last_sink: u64,
     attempts: [Weak<Attempt>; MAX_TARGETS],
 }
 
@@ -212,6 +241,30 @@ impl RelayCapture {
     pub fn current(&self) -> bool {
         self.with_current(|| ()).is_ok()
     }
+
+    pub fn sink(&self) -> Option<RelaySink> {
+        let state = self.0.state.lock().expect("capture state");
+        state.live.then(|| state.sink.clone()).flatten()
+    }
+
+    /// Serialize the final nonblocking syscall with sink selection and session
+    /// retirement. No await, JNI or owner/broker reentry inside the callback.
+    pub fn with_sink<T>(
+        &self,
+        sink: &RelaySink,
+        operation: impl FnOnce() -> T,
+    ) -> Result<T, RelayFlowError> {
+        let state = self.0.state.lock().expect("capture state");
+        if !state.live
+            || !state
+                .sink
+                .as_ref()
+                .is_some_and(|current| Arc::ptr_eq(&current.0, &sink.0))
+        {
+            return Err(RelayFlowError::Stale);
+        }
+        Ok(operation())
+    }
 }
 
 /// Sole lifecycle owner. Dropping it revokes all retained packets, but their
@@ -227,28 +280,57 @@ impl RelayCaptureOwner {
         mtu: u16,
         buffers: &dyn RelayBufferAllocator,
     ) -> Result<Self, RelayFlowError> {
-        if interface.is_empty()
-            || interface.len() >= 16
-            || !interface
-                .bytes()
-                .all(|c| c.is_ascii_alphanumeric() || b"_.-".contains(&c))
-            || network_handle == 0
-            || (sources.ipv4.is_none() && sources.ipv6.is_none())
-            || mtu == 0
+        Self::with_identity(
+            generation,
+            interface,
+            Some(network_handle),
+            sources,
+            mtu,
+            buffers,
+        )
+    }
+
+    pub fn with_identity(
+        generation: RelayCaptureGeneration,
+        interface: &str,
+        network_handle: Option<u64>,
+        sources: RelaySources,
+        mtu: u16,
+        buffers: &dyn RelayBufferAllocator,
+    ) -> Result<Self, RelayFlowError> {
+        let epoch = generation.get();
+        let owner = Self::session(generation, sources, mtu, buffers)?;
+        // The initial owner reservation covers its fixed metadata and first sink.
+        // Every later sink has its own reservation, retained by old receipts too.
+        let sink = Self::checked_sink(epoch, interface, network_handle, owner.0._charge.clone())?;
         {
+            let mut state = owner.0.state.lock().expect("capture state");
+            state.last_sink = epoch;
+            state.sink = Some(sink);
+        }
+        Ok(owner)
+    }
+
+    pub fn session(
+        generation: RelayCaptureGeneration,
+        sources: RelaySources,
+        mtu: u16,
+        buffers: &dyn RelayBufferAllocator,
+    ) -> Result<Self, RelayFlowError> {
+        if (sources.ipv4.is_none() && sources.ipv6.is_none()) || mtu == 0 {
             return Err(RelayFlowError::Invalid);
         }
         let charge = buffers.try_reserve(BUFFER_OVERHEAD)?;
         Ok(Self(Arc::new(Capture {
             identity: RelayCaptureIdentity {
                 generation,
-                interface: interface.to_owned(),
-                network_handle,
                 sources,
                 mtu,
             },
             state: Mutex::new(CaptureState {
                 live: true,
+                sink: None,
+                last_sink: 0,
                 attempts: std::array::from_fn(|_| Weak::new()),
             }),
             _charge: charge,
@@ -257,6 +339,86 @@ impl RelayCaptureOwner {
 
     pub fn identity(&self) -> &RelayCaptureIdentity {
         &self.0.identity
+    }
+
+    fn checked_sink(
+        generation: u64,
+        interface: &str,
+        network_handle: Option<u64>,
+        charge: Arc<dyn RelayBufferReservation>,
+    ) -> Result<RelaySink, RelayFlowError> {
+        if generation == 0
+            || interface.is_empty()
+            || interface.len() >= 16
+            || !interface
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || b"_.-".contains(&c))
+            || network_handle == Some(0)
+        {
+            return Err(RelayFlowError::Invalid);
+        }
+        Ok(RelaySink(Arc::new(RelaySinkIdentity {
+            generation,
+            interface: interface.to_owned(),
+            network_handle,
+            _charge: charge,
+        })))
+    }
+
+    /// Bind only after descriptor/format/config validation (and, for managed
+    /// capture, exact observation). A new sink never changes app source identity.
+    pub fn bind_sink(
+        &self,
+        generation: RelayCaptureGeneration,
+        interface: &str,
+        network_handle: Option<u64>,
+        sources: RelaySources,
+        mtu: u16,
+        buffers: &dyn RelayBufferAllocator,
+    ) -> Result<RelaySink, RelayFlowError> {
+        let mut state = self.0.state.lock().expect("capture state");
+        if !state.live || state.sink.is_some() || generation.get() <= state.last_sink {
+            return Err(RelayFlowError::Stale);
+        }
+        if self.identity().sources != sources || self.identity().mtu != mtu {
+            return Err(RelayFlowError::Invalid);
+        }
+        let sink = Self::checked_sink(
+            generation.get(),
+            interface,
+            network_handle,
+            buffers.try_reserve(BUFFER_OVERHEAD)?,
+        )?;
+        state.last_sink = generation.get();
+        state.sink = Some(sink.clone());
+        Ok(sink)
+    }
+
+    /// Expected descriptor loss during establish suspends the selector, not the
+    /// logical session. The exact receipt prevents old cleanup suspending a new fd.
+    pub fn suspend_sink(&self, sink: &RelaySink) -> Result<(), RelayFlowError> {
+        let mut state = self.0.state.lock().expect("capture state");
+        if !state.live
+            || !state
+                .sink
+                .as_ref()
+                .is_some_and(|current| Arc::ptr_eq(&current.0, &sink.0))
+        {
+            return Err(RelayFlowError::Stale);
+        }
+        state.sink = None;
+        Ok(())
+    }
+
+    /// Only for positive pre-establish retention, with the predecessor's
+    /// observation rechecked by the caller. Cannot resurrect a replaced epoch.
+    pub fn resume_sink(&self, sink: &RelaySink) -> Result<(), RelayFlowError> {
+        let mut state = self.0.state.lock().expect("capture state");
+        if !state.live || state.sink.is_some() || state.last_sink != sink.identity().generation {
+            return Err(RelayFlowError::Stale);
+        }
+        state.sink = Some(sink.clone());
+        Ok(())
     }
 
     pub fn retire(&self) {
@@ -361,7 +523,7 @@ impl RelayAttemptOwner {
     pub fn activate(&self) -> Result<(), RelayFlowError> {
         let capture = self.0.0.capture.state.lock().expect("capture state");
         let mut phase = self.0.0.phase.lock().expect("attempt state");
-        if !capture.live || *phase == AttemptPhase::Retired {
+        if !capture.live || capture.sink.is_none() || *phase == AttemptPhase::Retired {
             return Err(RelayFlowError::Stale);
         }
         *phase = AttemptPhase::Active;
@@ -392,6 +554,10 @@ impl RelayAttempt {
         self.0.target
     }
 
+    pub fn sink(&self) -> Option<RelaySink> {
+        RelayCapture(self.0.capture.clone()).sink()
+    }
+
     pub fn sources(&self) -> RelaySources {
         self.0.sources
     }
@@ -410,7 +576,7 @@ impl RelayAttempt {
     pub fn with_current<T>(&self, operation: impl FnOnce() -> T) -> Result<T, RelayFlowError> {
         let capture = self.0.capture.state.lock().expect("capture state");
         let phase = self.0.phase.lock().expect("attempt state");
-        if !capture.live || *phase != AttemptPhase::Active {
+        if !capture.live || capture.sink.is_none() || *phase != AttemptPhase::Active {
             return Err(RelayFlowError::Stale);
         }
         Ok(operation())
@@ -461,14 +627,42 @@ impl RelayPacket {
         &mut self,
         operation: impl FnOnce(&[u8]) -> io::Result<usize>,
     ) -> RelayWriteOutcome {
+        self.write_selected(None, operation)
+    }
+
+    /// Capture injection checks the descriptor receipt as well as the exact
+    /// target/session. The general writer is also used at target-side sinks.
+    pub fn write_to(
+        &mut self,
+        sink: &RelaySink,
+        operation: impl FnOnce(&[u8]) -> io::Result<usize>,
+    ) -> RelayWriteOutcome {
+        self.write_selected(Some(sink), operation)
+    }
+
+    fn write_selected(
+        &mut self,
+        sink: Option<&RelaySink>,
+        operation: impl FnOnce(&[u8]) -> io::Result<usize>,
+    ) -> RelayWriteOutcome {
         if self.consumed {
             return RelayWriteOutcome::Stale;
         }
         let capture = self.attempt.0.capture.state.lock().expect("capture state");
         let mut phase = self.attempt.0.phase.lock().expect("attempt state");
-        if !capture.live || *phase != AttemptPhase::Active {
+        if !capture.live || capture.sink.is_none() || *phase != AttemptPhase::Active {
             self.consumed = true;
             return RelayWriteOutcome::Stale;
+        }
+        if sink.is_some_and(|sink| {
+            !capture
+                .sink
+                .as_ref()
+                .is_some_and(|current| Arc::ptr_eq(&current.0, &sink.0))
+        }) {
+            // A wrong selector never consumes a still-live packet or retires its
+            // target. Its owner may retry against the actual current sink.
+            return RelayWriteOutcome::Retry;
         }
         match operation(&self.storage) {
             Ok(n) if n == self.storage.len() && n != 0 => {

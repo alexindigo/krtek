@@ -5,6 +5,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import net.mullvad.talpid.model.CaptureHandoverResult
 import net.mullvad.talpid.model.CaptureNetworkObservation
 import net.mullvad.talpid.model.CaptureRoute
 import net.mullvad.talpid.model.CreateTunResult
@@ -17,10 +18,10 @@ class LocalFrontendTest {
         val owner = LocalFrontendOwnership()
         assertTrue(owner.tryUpstream())
         assertTrue(owner.tryUpstream())
-        assertFalse(owner.tryFrontend())
+        assertFalse(owner.tryFrontend(11))
         owner.upstreamClosed()
-        assertTrue(owner.tryFrontend())
-        assertFalse(owner.tryFrontend())
+        assertTrue(owner.tryFrontend(11))
+        assertFalse(owner.tryFrontend(12))
         assertFalse(owner.tryUpstream())
         assertTrue(owner.canPrepare)
         owner.revoke()
@@ -28,10 +29,10 @@ class LocalFrontendTest {
         assertFalse(owner.canPrepare)
         owner.upstreamClosed()
         assertFalse(owner.tryUpstream())
-        owner.frontendFinished()
-        assertTrue(owner.tryFrontend())
+        owner.frontendFinished(11)
+        assertTrue(owner.tryFrontend(12))
         assertTrue(owner.canPrepare)
-        owner.frontendFinished()
+        owner.frontendFinished(12)
         assertTrue(owner.tryUpstream())
     }
 
@@ -53,6 +54,31 @@ class LocalFrontendTest {
             assertEquals(routes, announced)
             assertEquals(listOf("192.0.2.2" to 32, "2001:db8::2" to 128), addresses)
         }
+    }
+
+    @Test
+    fun `should retain one session with at most two exact cleanup epochs and never undo revocation`() {
+        val owner = LocalFrontendOwnership()
+        assertTrue(owner.tryFrontend(11))
+        assertFalse(owner.tryHandover(10, 12))
+        assertFalse(owner.tryHandover(11, 11))
+        assertTrue(owner.tryHandover(11, 12))
+        assertTrue(owner.predecessorCurrent(11))
+        assertFalse(owner.tryHandover(11, 13))
+        owner.establishing(12)
+        assertFalse(owner.predecessorCurrent(11))
+        owner.frontendFinished(11)
+        owner.frontendFinished(11)
+        assertTrue(owner.predecessorCurrent(12))
+        assertFalse(owner.tryUpstream())
+        assertTrue(owner.tryHandover(12, 13))
+        owner.revoke()
+        owner.frontendFinished(13)
+        assertFalse(owner.canPrepare)
+        assertFalse(owner.tryHandover(12, 14))
+        assertTrue(owner.frontendActive)
+        owner.frontendFinished(12)
+        assertTrue(owner.tryUpstream())
     }
 
     @Test
@@ -117,6 +143,12 @@ class LocalFrontendTest {
         )
         val type = TalpidVpnService::class.java
         assertEquals(
+            Int::class.javaPrimitiveType,
+            type
+                .getDeclaredMethod("takeLocalFrontendDescriptor", Long::class.javaPrimitiveType)
+                .returnType,
+        )
+        assertEquals(
             CreateTunResult::class.java,
             type
                 .getDeclaredMethod(
@@ -126,7 +158,38 @@ class LocalFrontendTest {
                 )
                 .returnType,
         )
-        assertEquals(Void.TYPE, type.getDeclaredMethod("finishLocalFrontend").returnType)
+        assertEquals(
+            Void.TYPE,
+            type.getDeclaredMethod("finishLocalFrontend", Long::class.javaPrimitiveType).returnType,
+        )
+        for ((name, configType) in
+            listOf(
+                "handoverLocalFrontend" to Array<String>::class.java,
+                "handoverSecuredFrontend" to TunConfig::class.java,
+            )) {
+            assertEquals(
+                CaptureHandoverResult::class.java,
+                type
+                    .getDeclaredMethod(
+                        name,
+                        Long::class.javaPrimitiveType,
+                        Long::class.javaPrimitiveType,
+                        configType,
+                    )
+                    .returnType,
+            )
+        }
+        assertEquals(
+            CreateTunResult::class.java,
+            CaptureHandoverResult::class.java.getDeclaredMethod("getResult").returnType,
+        )
+        assertEquals(
+            Boolean::class.javaPrimitiveType,
+            CaptureHandoverResult::class
+                .java
+                .getDeclaredMethod("getPredecessorRetained")
+                .returnType,
+        )
         assertEquals(
             CreateTunResult::class.java,
             type

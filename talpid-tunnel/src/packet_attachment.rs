@@ -10,7 +10,7 @@ use std::{
 use talpid_types::relay_flow::{
     MAX_TARGETS, RelayAttempt, RelayAttemptOwner, RelayBuffer, RelayBufferAllocator,
     RelayBufferReservation, RelayCapture, RelayCaptureGeneration, RelayCaptureOwner,
-    RelayFlowError, RelayPacket, RelaySources, RelayTargetId, RelayWriteOutcome,
+    RelayFlowError, RelayPacket, RelaySink, RelaySources, RelayTargetId, RelayWriteOutcome,
 };
 use tokio::sync::{Notify, watch};
 
@@ -54,6 +54,7 @@ pub struct BrokerSnapshot {
     pub closed: bool,
     pub request: Option<u64>,
     pub capture_generation: Option<u64>,
+    pub session_generation: Option<u64>,
     pub capture_ready: bool,
     pub attachment: Option<u64>,
     pub ordinary_ready: bool,
@@ -121,6 +122,8 @@ pub struct PendingCaptureRequest(Arc<Configuration>);
 
 struct Capture {
     generation: u64,
+    epoch: u64,
+    predecessor: Option<u64>,
     config: Option<Arc<Configuration>>,
     owner: Option<RelayCaptureOwner>,
 }
@@ -211,8 +214,17 @@ impl State {
             mode: self.mode,
             closed: self.closed,
             request: self.request.as_ref().map(|r| r.id),
-            capture_generation: self.capture.as_ref().map(|c| c.generation),
-            capture_ready: self.capture.as_ref().is_some_and(|c| c.owner.is_some()),
+            capture_generation: self.capture.as_ref().map(|c| c.epoch),
+            session_generation: self
+                .capture
+                .as_ref()
+                .filter(|c| c.owner.is_some())
+                .map(|c| c.generation),
+            capture_ready: self
+                .capture
+                .as_ref()
+                .and_then(|c| c.owner.as_ref())
+                .is_some_and(|owner| owner.capability().sink().is_some()),
             attachment: self.attempt(RelayTargetId::MULLVAD).map(|a| a.id),
             ordinary_ready: self
                 .attempt(RelayTargetId::MULLVAD)
@@ -258,6 +270,19 @@ pub struct CaptureLease {
     unbound: Mutex<Option<RelayCaptureGeneration>>,
 }
 
+/// Retained transaction within one logical capture lease. Binding a fresh sink
+/// does not discharge predecessor cleanup. Drop before explicit completion is
+/// capture failure, never an implicit rollback or a new session.
+pub struct CaptureEpochChange {
+    inner: Arc<Inner>,
+    session: u64,
+    generation: u64,
+    predecessor: RelaySink,
+    previous_config: Option<Arc<Configuration>>,
+    unbound: Mutex<Option<RelayCaptureGeneration>>,
+    completed: bool,
+}
+
 /// Only the capture owner can issue this after actual identity observation.
 #[derive(Clone)]
 pub struct CaptureReceipt {
@@ -290,6 +315,9 @@ pub struct AttachmentReply {
 }
 
 impl AttachmentBroker {
+    pub fn same_broker(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
     pub fn new(
         application: Arc<dyn RelayBufferAllocator>,
         capture: Arc<dyn RelayBufferAllocator>,
@@ -481,6 +509,8 @@ impl AttachmentBroker {
         }
         state.capture = Some(Capture {
             generation: generation.get(),
+            epoch: generation.get(),
+            predecessor: None,
             config: request.map(|r| r.0.clone()),
             owner: None,
         });
@@ -497,7 +527,7 @@ impl AttachmentBroker {
         &self,
         lease: &CaptureLease,
         interface: &str,
-        network_handle: u64,
+        network_handle: Option<u64>,
         sources: RelaySources,
         mtu: u16,
     ) -> Result<CaptureReceipt, AttachmentError> {
@@ -525,13 +555,16 @@ impl AttachmentBroker {
         {
             return Err(AttachmentError::Invalid);
         }
+        if capture.config.is_some() && network_handle.is_none() {
+            return Err(AttachmentError::Invalid);
+        }
         let generation = lease
             .unbound
             .lock()
             .expect("capture generation")
             .take()
             .ok_or(AttachmentError::Stale)?;
-        let owner = RelayCaptureOwner::new(
+        let owner = RelayCaptureOwner::with_identity(
             generation,
             interface,
             network_handle,
@@ -752,7 +785,11 @@ impl CaptureReceipt {
             && !state.closed
             && state.mode == AttachmentMode::ManagedRequired
             && state.capture.as_ref().is_some_and(|c| {
-                c.generation == self.generation && c.owner.is_some() && c.config.is_some()
+                c.epoch == self.generation
+                    && c.owner
+                        .as_ref()
+                        .is_some_and(|owner| owner.capability().sink().is_some())
+                    && c.config.is_some()
             })
     }
     pub fn current(&self) -> bool {
@@ -875,6 +912,78 @@ impl CaptureLease {
         self.generation
     }
 
+    /// Allocate the successor epoch before platform work. Sources/MTU are the
+    /// session's immutable app-side identity; a change requires a new session.
+    pub fn begin_handover(
+        &self,
+        request: Option<&PendingCaptureRequest>,
+        sources: RelaySources,
+        mtu: u16,
+    ) -> Result<CaptureEpochChange, AttachmentError> {
+        let generation = RelayCaptureGeneration::fresh()?;
+        let mut state = self.inner.state.lock().expect("attachment state");
+        if state.closed {
+            return Err(AttachmentError::Closed);
+        }
+        if let Some(request) = request
+            && (state.mode != AttachmentMode::ManagedRequired
+                || !state
+                    .request
+                    .as_ref()
+                    .is_some_and(|r| Arc::ptr_eq(r, &request.0)))
+        {
+            return Err(AttachmentError::Stale);
+        }
+        let capture = state
+            .capture
+            .as_mut()
+            .filter(|c| c.generation == self.generation)
+            .ok_or(AttachmentError::Stale)?;
+        if capture.predecessor.is_some() {
+            return Err(AttachmentError::Busy);
+        }
+        let owner = capture
+            .owner
+            .as_ref()
+            .ok_or(AttachmentError::CaptureUnready)?;
+        if owner.identity().sources != sources
+            || owner.identity().mtu != mtu
+            || request.is_some_and(|request| {
+                request.config().mtu != mtu
+                    || request.config().addresses.len()
+                        != usize::from(sources.ipv4.is_some()) + usize::from(sources.ipv6.is_some())
+                    || request
+                        .config()
+                        .addresses
+                        .iter()
+                        .any(|source| !sources.contains(*source))
+            })
+        {
+            return Err(AttachmentError::Invalid);
+        }
+        let predecessor = owner
+            .capability()
+            .sink()
+            .ok_or(AttachmentError::CaptureUnready)?;
+        owner.suspend_sink(&predecessor)?;
+        let previous_config = capture.config.take();
+        capture.predecessor = Some(capture.epoch);
+        capture.epoch = generation.get();
+        capture.config = request.map(|request| request.0.clone());
+        let change = CaptureEpochChange {
+            inner: self.inner.clone(),
+            session: self.generation,
+            generation: generation.get(),
+            predecessor,
+            previous_config,
+            unbound: Mutex::new(Some(generation)),
+            completed: false,
+        };
+        self.inner.publish(&state);
+        self.inner.replies.notify_one();
+        Ok(change)
+    }
+
     /// A new target request may borrow this already observed fd epoch only for
     /// an exactly equal configuration. Changes need the owner's handover path.
     pub fn acknowledge_request(
@@ -883,29 +992,23 @@ impl CaptureLease {
     ) -> Result<(), AttachmentError> {
         let receipt = CaptureReceipt {
             inner: Arc::downgrade(&self.inner),
-            generation: self.generation,
+            generation: self
+                .inner
+                .state
+                .lock()
+                .expect("attachment state")
+                .capture
+                .as_ref()
+                .filter(|c| c.generation == self.generation)
+                .map(|c| c.epoch)
+                .ok_or(AttachmentError::Stale)?,
             configuration: Weak::new(),
         };
         receipt.acknowledge(request)
     }
     /// A feed retains this weak revoker, never the capture owner itself.
     pub fn revoker(&self) -> impl Fn() + Send + Sync + 'static {
-        let inner = Arc::downgrade(&self.inner);
-        let generation = self.generation;
-        move || {
-            if let Some(inner) = inner.upgrade() {
-                let mut state = inner.state.lock().expect("attachment state");
-                if state
-                    .capture
-                    .as_ref()
-                    .is_some_and(|c| c.generation == generation)
-                {
-                    state.retire_capture();
-                }
-                inner.publish(&state);
-                inner.replies.notify_one();
-            }
-        }
+        epoch_revoker(&self.inner, self.generation, self.generation)
     }
     /// Capture-adapter entry after exact fd/network/config observation. This
     /// consumes the unrepeatable identity token; loss requires joined replacement.
@@ -919,7 +1022,20 @@ impl CaptureLease {
         AttachmentBroker {
             inner: self.inner.clone(),
         }
-        .observed_capture(self, interface, network_handle, sources, mtu)
+        .observed_capture(self, interface, Some(network_handle), sources, mtu)
+    }
+    /// Partial uses the same logical lease and checked sink without acquiring a
+    /// NetworkCallback dependency. The fd name and plain-IP format are native.
+    pub fn bind_partial_identity(
+        &self,
+        interface: &str,
+        sources: RelaySources,
+        mtu: u16,
+    ) -> Result<CaptureReceipt, AttachmentError> {
+        AttachmentBroker {
+            inner: self.inner.clone(),
+        }
+        .observed_capture(self, interface, None, sources, mtu)
     }
     pub fn retire(&self) {
         let mut state = self.inner.state.lock().expect("attachment state");
@@ -1002,6 +1118,158 @@ impl CaptureLease {
         }
     }
 }
+
+fn epoch_revoker(
+    inner: &Arc<Inner>,
+    session: u64,
+    epoch: u64,
+) -> impl Fn() + Send + Sync + 'static {
+    let inner = Arc::downgrade(inner);
+    move || {
+        if let Some(inner) = inner.upgrade() {
+            let mut state = inner.state.lock().expect("attachment state");
+            if state
+                .capture
+                .as_ref()
+                .is_some_and(|c| c.generation == session && c.epoch == epoch)
+            {
+                state.retire_capture();
+            }
+            inner.publish(&state);
+            inner.replies.notify_one();
+        }
+    }
+}
+
+impl CaptureEpochChange {
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    pub async fn wait_predecessor_release(&self) {
+        if let Some(config) = &self.previous_config {
+            PendingCaptureRequest(config.clone()).wait_release().await;
+        }
+    }
+
+    pub fn revoker(&self) -> impl Fn() + Send + Sync + 'static {
+        epoch_revoker(&self.inner, self.session, self.generation)
+    }
+
+    pub fn bind_identity(
+        &self,
+        interface: &str,
+        network_handle: Option<u64>,
+        sources: RelaySources,
+        mtu: u16,
+    ) -> Result<CaptureReceipt, AttachmentError> {
+        let mut state = self.inner.state.lock().expect("attachment state");
+        let capture = state
+            .capture
+            .as_mut()
+            .filter(|c| c.generation == self.session && c.epoch == self.generation)
+            .ok_or(AttachmentError::Stale)?;
+        let owner = capture
+            .owner
+            .as_ref()
+            .ok_or(AttachmentError::CaptureUnready)?;
+        // Validate before consuming the one-shot token so an invalid observation
+        // cannot be mistaken for an already adopted descriptor.
+        if owner.identity().sources != sources
+            || owner.identity().mtu != mtu
+            || (capture.config.is_some() && network_handle.is_none())
+        {
+            return Err(AttachmentError::Invalid);
+        }
+        let token = self
+            .unbound
+            .lock()
+            .expect("capture epoch")
+            .take()
+            .ok_or(AttachmentError::Stale)?;
+        owner.bind_sink(
+            token,
+            interface,
+            network_handle,
+            sources,
+            mtu,
+            self.inner.capture.as_ref(),
+        )?;
+        let receipt = CaptureReceipt {
+            inner: Arc::downgrade(&self.inner),
+            generation: self.generation,
+            configuration: capture
+                .config
+                .as_ref()
+                .map(Arc::downgrade)
+                .unwrap_or_default(),
+        };
+        self.inner.publish(&state);
+        self.inner.replies.notify_one();
+        Ok(receipt)
+    }
+
+    /// Called after the old reactor/fd are dropped and its exact platform finish
+    /// succeeds. Failed finish retains this transaction and blocks a third epoch.
+    pub fn finish(&mut self) -> Result<(), AttachmentError> {
+        if self
+            .previous_config
+            .as_ref()
+            .is_some_and(|config| !config.release_ready())
+        {
+            return Err(AttachmentError::Busy);
+        }
+        let mut state = self.inner.state.lock().expect("attachment state");
+        let capture = state
+            .capture
+            .as_mut()
+            .filter(|c| c.generation == self.session && c.epoch == self.generation)
+            .ok_or(AttachmentError::Stale)?;
+        if capture
+            .owner
+            .as_ref()
+            .and_then(|owner| owner.capability().sink())
+            .is_none()
+        {
+            return Err(AttachmentError::CaptureUnready);
+        }
+        capture.predecessor = None;
+        self.completed = true;
+        self.inner.publish(&state);
+        Ok(())
+    }
+
+    /// Requires positive pre-establish platform evidence and revalidated old
+    /// observation. This never succeeds after binding a successor or retirement.
+    pub fn rollback(&mut self) -> Result<(), AttachmentError> {
+        let mut state = self.inner.state.lock().expect("attachment state");
+        let capture = state
+            .capture
+            .as_mut()
+            .filter(|c| c.generation == self.session && c.epoch == self.generation)
+            .ok_or(AttachmentError::Stale)?;
+        capture
+            .owner
+            .as_ref()
+            .ok_or(AttachmentError::CaptureUnready)?
+            .resume_sink(&self.predecessor)?;
+        capture.epoch = capture.predecessor.take().ok_or(AttachmentError::Stale)?;
+        capture.config = self.previous_config.take();
+        self.completed = true;
+        self.inner.publish(&state);
+        self.inner.replies.notify_one();
+        Ok(())
+    }
+}
+
+impl Drop for CaptureEpochChange {
+    fn drop(&mut self) {
+        if !self.completed {
+            (epoch_revoker(&self.inner, self.session, self.generation))();
+        }
+    }
+}
+
 impl Drop for CaptureLease {
     fn drop(&mut self) {
         self.retire();
@@ -1053,6 +1321,16 @@ impl AttemptControl {
     /// Called by the transport owner after installing the real carrier and
     /// authenticating connectivity. Capture readiness is checked again here.
     pub fn activate(&self) -> Result<(), AttachmentError> {
+        self.activate_checked(None)
+    }
+    /// Initial activation still requires the exact acquisition epoch. An
+    /// already-active independent target follows the checked current sink after
+    /// handover; its predecessor receipt deliberately remains stale. Validate
+    /// both under the broker lock, ordered against epoch replacement/retirement.
+    pub fn activate_with_receipt(&self, receipt: &CaptureReceipt) -> Result<(), AttachmentError> {
+        self.activate_checked(Some(receipt))
+    }
+    fn activate_checked(&self, receipt: Option<&CaptureReceipt>) -> Result<(), AttachmentError> {
         let inner = self.inner.upgrade().ok_or(AttachmentError::Closed)?;
         let state = inner.state.lock().expect("attachment state");
         if !state
@@ -1060,6 +1338,9 @@ impl AttemptControl {
             .is_some_and(|a| Arc::ptr_eq(a, &self.attempt))
         {
             return Err(AttachmentError::Stale);
+        }
+        if receipt.is_some_and(|receipt| !self.current() && !receipt.matches(&inner, &state)) {
+            return Err(AttachmentError::CaptureUnready);
         }
         self.attempt.owner.activate()?;
         inner.publish(&state);
@@ -1137,11 +1418,24 @@ impl TransportSend {
 }
 
 impl AttachmentReply {
+    pub fn write_to(
+        &mut self,
+        sink: &RelaySink,
+        operation: impl FnOnce(&[u8]) -> io::Result<usize>,
+    ) -> RelayWriteOutcome {
+        let outcome = self.packet.write_to(sink, operation);
+        self.complete_write(outcome)
+    }
+
     pub fn write(
         &mut self,
         operation: impl FnOnce(&[u8]) -> io::Result<usize>,
     ) -> RelayWriteOutcome {
         let outcome = self.packet.write(operation);
+        self.complete_write(outcome)
+    }
+
+    fn complete_write(&self, outcome: RelayWriteOutcome) -> RelayWriteOutcome {
         if matches!(outcome, RelayWriteOutcome::Fatal(_)) {
             // packet.write has released all authority guards before broker entry.
             let control = AttemptControl {

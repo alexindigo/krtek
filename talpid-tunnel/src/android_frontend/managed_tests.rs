@@ -20,13 +20,78 @@ fn assigned() -> TunConfig {
 }
 
 #[tokio::test]
+async fn unsupported_capture_formats_never_admit_packets_and_retain_failed_release() {
+    for flags in [0, 1, 0x1002, 0x5001, 0x1401] {
+        for secured in [false, true] {
+            let (platform, peer) = Platform::new();
+            *platform.format_flags.lock().unwrap() = Some(flags);
+            platform.release_fails.store(true, SeqCst);
+            let broker = broker();
+            let (_request, managed) = managed(&broker);
+            let config = if secured {
+                managed
+            } else {
+                CaptureConfig::Partial(routes())
+            };
+            let authority = Arc::new(Authority::default());
+            let (address, mut hits, echo) = udp_echo(false).await;
+            let request = Flow {
+                source: if secured {
+                    "10.64.42.2:48500"
+                } else {
+                    "192.0.2.2:48500"
+                }
+                .parse()
+                .unwrap(),
+                destination: address,
+                transport: Transport::Udp,
+            };
+            // Stage real input before opening. A format check after admission
+            // would let this nonce reach the physical consumer.
+            send(&peer, &udp(request, b"unsupported-format-must-not-escape")).await;
+            let (_updates, updates) = watch::channel(0);
+            let mut owner = FrontendOwner::start(
+                platform.clone(),
+                config,
+                managed_forwarder(authority.clone()),
+                updates,
+                broker.clone(),
+            )
+            .unwrap();
+            let error = bounded(owner.ready()).await.unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+            assert!(
+                error
+                    .get_ref()
+                    .unwrap()
+                    .downcast_ref::<UnsupportedCaptureFormat>()
+                    .is_some()
+            );
+            assert!(owner.stop().await.is_err());
+            assert_eq!(platform.format_calls.load(SeqCst), 1);
+            assert_eq!(platform.bound_generation.load(SeqCst), 0);
+            assert_eq!(authority.prepares.load(SeqCst), 0);
+            assert!(hits.try_recv().is_err());
+            assert!(!broker.snapshot().capture_ready);
+            assert!(owner.release_failed());
+            assert!(platform.active.load(SeqCst));
+            platform.release_fails.store(false, SeqCst);
+            owner.retry_release().unwrap();
+            owner.stop().await.unwrap();
+            assert_eq!(platform.closed.load(SeqCst), 2);
+            assert!(!platform.active.load(SeqCst));
+            echo.abort();
+        }
+    }
+}
+
+#[tokio::test]
 async fn partial_platform_contract_delivers_replaces_and_releases_without_any_observation() {
     // The actual Kotlin Builder/API matrix is paired with this native consumer
-    // seam: the readiness feed is unavailable and every new bind/name hook fails.
+    // seam: the readiness feed is unavailable and the managed bind hook fails.
     for api in [28, 30, 32, 33] {
         let (platform, mut peer) = Platform::new();
         platform.capture_feed().close();
-        platform.name_error.store(true, SeqCst);
         platform.bind_error.store(true, SeqCst);
         let (address, mut hits, echo) = udp_echo(false).await;
         let (tcp, mut accepts, server) = tcp_echo(false).await;
@@ -90,7 +155,7 @@ async fn partial_platform_contract_delivers_replaces_and_releases_without_any_ob
     }
 }
 
-fn broker() -> AttachmentBroker {
+pub(super) fn broker() -> AttachmentBroker {
     use talpid_netstack::buffer_budget::BufferBudget;
     AttachmentBroker::new(
         Arc::new(BufferBudget::new(22 * 1024 * 1024)),
@@ -177,6 +242,7 @@ async fn receipt_waits_for_current_fd_bound_observation_and_loss_retires_before_
         config,
         managed_forwarder(Arc::new(Authority::default())),
         updates,
+        broker.clone(),
     )
     .unwrap();
     let generation = wait_bound(&platform).await;
@@ -233,6 +299,7 @@ async fn local_and_raw_consumers_share_capture_without_denied_local_fallback() {
         config,
         managed_forwarder(authority.clone()),
         rx,
+        broker.clone(),
     )
     .unwrap();
     bounded(owner.ready()).await.unwrap();
@@ -325,7 +392,8 @@ async fn raw_fatal_sink_joins_physical_work_and_retains_failed_release() {
     let broker = broker();
     let (mut request, config) = managed(&broker);
     let (_updates, updates) = watch::channel(0);
-    let mut owner = FrontendOwner::start(platform.clone(), config, forwarder, updates).unwrap();
+    let mut owner =
+        FrontendOwner::start(platform.clone(), config, forwarder, updates, broker.clone()).unwrap();
     bounded(owner.ready()).await.unwrap();
     let receipt = bounded(request.configured()).await.unwrap();
     let transport = broker.acquire(&receipt).unwrap();
@@ -392,7 +460,8 @@ async fn secured_local_output_never_uses_partial_guard_while_transport_is_pendin
     let broker = broker();
     let (mut request, config) = managed(&broker);
     let (_updates, updates) = watch::channel(0);
-    let mut owner = FrontendOwner::start(platform, config, forwarder, updates).unwrap();
+    let mut owner =
+        FrontendOwner::start(platform, config, forwarder, updates, broker.clone()).unwrap();
     bounded(owner.ready()).await.unwrap();
     let receipt = request.configured().await.unwrap();
     let transport = broker.acquire(&receipt).unwrap();
@@ -443,6 +512,7 @@ async fn open_name_and_bind_faults_retain_platform_release_without_receipts() {
             config,
             managed_forwarder(Arc::new(Authority::default())),
             updates,
+            broker.clone(),
         )
         .unwrap();
         assert!(bounded(owner.ready()).await.is_err());
@@ -475,16 +545,22 @@ async fn blocked_raw_output_retains_credit_is_idle_and_responds_to_loss_and_stop
         )
         .unwrap();
         let (mut request, config) = managed(&broker);
-        let mut observation = Observation::begin(platform.as_ref(), &config).unwrap();
+        let lease = Arc::new(broker.open_capture(config.request()).unwrap());
+        let mut observation =
+            Observation::begin(platform.as_ref(), &config, lease.clone(), None, None).unwrap();
         let generation = observation.generation;
         let fd = platform.open(generation, &config).unwrap();
         observation
-            .bind(platform.as_ref(), &config, fd.as_fd())
+            .bind(
+                platform.as_ref(),
+                &config,
+                fd.as_fd(),
+                platform.capture_format(fd.as_fd()).unwrap(),
+            )
             .unwrap();
         let (stop, mut stopped) = oneshot::channel();
-        let mut changes = observation.updates.clone();
         observation
-            .wait_ready(&mut changes, &mut stopped)
+            .wait_ready(&config, None, &mut stopped)
             .await
             .unwrap();
         let mut stop = Some(stop);
@@ -531,7 +607,7 @@ async fn blocked_raw_output_retains_credit_is_idle_and_responds_to_loss_and_stop
             forwarder.close_all().await;
             drop(capture);
             drop(fd);
-            task_platform.closed().unwrap();
+            task_platform.closed(generation).unwrap();
             terminal
         });
         let filled = bounded(filled_rx).await.unwrap();
@@ -592,24 +668,30 @@ async fn mixed_backpressure_rotates_both_consumers_and_revokes_only_blocked_loca
     let (platform, peer) = Platform::new();
     let broker = broker();
     let (mut request, config) = managed(&broker);
-    let mut observation = Observation::begin(platform.as_ref(), &config).unwrap();
+    let lease = Arc::new(broker.open_capture(config.request()).unwrap());
+    let mut observation =
+        Observation::begin(platform.as_ref(), &config, lease, None, None).unwrap();
     let fd = platform.open(observation.generation, &config).unwrap();
     socket2::SockRef::from(&fd)
         .set_send_buffer_size(4096)
         .unwrap();
     observation
-        .bind(platform.as_ref(), &config, fd.as_fd())
+        .bind(
+            platform.as_ref(),
+            &config,
+            fd.as_fd(),
+            platform.capture_format(fd.as_fd()).unwrap(),
+        )
         .unwrap();
     let (_stop, mut stopped) = oneshot::channel();
-    let mut updates = observation.updates.clone();
     observation
-        .wait_ready(&mut updates, &mut stopped)
+        .wait_ready(&config, None, &mut stopped)
         .await
         .unwrap();
     let receipt = request.configured().await.unwrap();
     let transport = broker.acquire(&receipt).unwrap();
     transport.control.activate().unwrap();
-    let attempt = observation.lease.as_ref().unwrap().capability().unwrap();
+    let attempt = observation.lease.capability().unwrap();
     let authority = Arc::new(Authority::default());
     let mut forwarder = managed_forwarder(authority.clone());
     let (address, mut hits, echo) = udp_echo(false).await;
@@ -642,7 +724,7 @@ async fn mixed_backpressure_rotates_both_consumers_and_revokes_only_blocked_loca
             .try_send(&raw(253, format!("raw-{n}").as_bytes()))
             .unwrap();
     }
-    let lease = observation.lease.as_ref().unwrap();
+    let lease = observation.lease.as_ref();
     let mut reply = Some(lease.reply().await.unwrap());
     let mut taken = 1;
     let mut total = 12;
@@ -739,7 +821,7 @@ async fn mixed_backpressure_rotates_both_consumers_and_revokes_only_blocked_loca
     forwarder.close_all().await;
     drop(capture);
     drop(fd);
-    platform.closed().unwrap();
+    platform.closed(observation.generation).unwrap();
     echo.abort();
 }
 
@@ -756,6 +838,7 @@ async fn cancelled_config_or_readiness_joins_and_never_certifies_identical_repla
             config,
             managed_forwarder(Arc::new(Authority::default())),
             updates.clone(),
+            broker.clone(),
         )
         .unwrap();
         let generation = wait_bound(&platform).await;
@@ -777,6 +860,7 @@ async fn cancelled_config_or_readiness_joins_and_never_certifies_identical_repla
             config,
             managed_forwarder(Arc::new(Authority::default())),
             updates,
+            broker.clone(),
         )
         .unwrap();
         let next = wait_bound(&platform).await;

@@ -193,10 +193,17 @@ pub(crate) struct ManagedControl {
 
 impl ManagedControl {
     pub(super) fn live(&self) -> bool {
-        self.receipt.current() && self.control.live()
+        // The receipt admits this adapter's initial fd epoch. Ongoing transport
+        // and private-control lifetime belongs to the exact tunnel attempt;
+        // a coordinated sink handover must not terminate that live target.
+        self.control.live()
     }
     pub(super) fn interface(&self) -> String {
-        self.control.capability().identity().interface.clone()
+        self.control
+            .capability()
+            .sink()
+            .map(|sink| sink.identity().interface.clone())
+            .unwrap_or_default()
     }
     pub(crate) fn pinger(&self) -> io::Result<SmoltcpPinger> {
         let socket = self
@@ -216,7 +223,9 @@ impl ManagedControl {
         if !self.live() || !self.installed.load(Ordering::Acquire) {
             return Err(unavailable());
         }
-        self.control.activate().map_err(|_| unavailable())
+        self.control
+            .activate_with_receipt(&self.receipt)
+            .map_err(|_| unavailable())
     }
     pub(crate) fn publish<T>(&self, operation: impl FnOnce() -> T) -> io::Result<T> {
         self.control

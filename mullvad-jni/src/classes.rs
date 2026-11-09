@@ -1,5 +1,6 @@
 /// Optional feature classes are preloaded inside its non-fatal registration boundary.
 pub const LOCAL_NETWORK_CLASSES: &[&str] = &[
+    "net/mullvad/talpid/model/CaptureHandoverResult",
     "net/mullvad/talpid/model/LocalNetworkSnapshot",
     "net/mullvad/talpid/model/LocalPhysicalNetwork",
     "net/mullvad/talpid/model/LocalPhysicalAddress",

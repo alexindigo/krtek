@@ -22,12 +22,36 @@ struct PacketPlatform {
     releases: AtomicUsize,
     released: tokio::sync::Notify,
     fail_release: AtomicBool,
+    retain_handover: AtomicBool,
     authority: Mutex<Option<Arc<DeliveryAuthority>>>,
     generation: std::sync::atomic::AtomicI64,
     physical: (SocketAddr, SocketAddr),
 }
 
 impl FrontendPlatform for PacketPlatform {
+    fn handover(
+        &self,
+        _: i64,
+        generation: i64,
+        config: &CaptureConfig,
+    ) -> talpid_tunnel::android_frontend::CaptureHandover {
+        if self.retain_handover.load(SeqCst) {
+            return talpid_tunnel::android_frontend::CaptureHandover {
+                descriptor: Err(io::Error::other("before establish")),
+                predecessor_retained: true,
+            };
+        }
+        talpid_tunnel::android_frontend::CaptureHandover {
+            descriptor: self.open(generation, config),
+            predecessor_retained: false,
+        }
+    }
+    fn capture_format(
+        &self,
+        _: BorrowedFd<'_>,
+    ) -> io::Result<talpid_tunnel::android_frontend::CaptureFormat> {
+        talpid_tunnel::android_frontend::CaptureFormat::from_flags(0x1001)
+    }
     fn open(&self, generation: i64, config: &CaptureConfig) -> io::Result<OwnedFd> {
         if let Some(config) = config.secured_config() {
             self.opened.lock().unwrap().push(config.clone());
@@ -96,7 +120,7 @@ impl FrontendPlatform for PacketPlatform {
             },
         ))
     }
-    fn closed(&self) -> io::Result<()> {
+    fn closed(&self, _: i64) -> io::Result<()> {
         self.releases.fetch_add(1, SeqCst);
         self.released.notify_one();
         if self.fail_release.load(SeqCst) {
@@ -110,6 +134,7 @@ impl FrontendPlatform for PacketPlatform {
 struct PacketFactory(Arc<PacketPlatform>);
 struct PacketOwner {
     owner: FrontendOwner,
+    authority: Arc<DeliveryAuthority>,
     state: watch::Receiver<FrontendState>,
     open: bool,
 }
@@ -123,26 +148,35 @@ impl FrontendFactory for PacketFactory {
         config: DeliveryConfig,
         authority: Arc<DeliveryAuthority>,
         buffers: Arc<dyn RelayBufferAllocator>,
+        broker: AttachmentBroker,
     ) -> io::Result<Self::Owner> {
         let updates = authority.subscribe();
         *self.0.authority.lock().unwrap() = Some(authority.clone());
         let mtu = config.mtu();
         let frontend = config.into_frontend(authority.clone());
-        let authority = Arc::new(LoopbackAuthority {
-            authority,
+        let forward_authority = Arc::new(LoopbackAuthority {
+            authority: authority.clone(),
             peer: Some(self.0.physical),
         });
-        let forwarder = Forwarder::with_mtu(authority, buffers, usize::from(mtu))
+        let forwarder = Forwarder::with_mtu(forward_authority, buffers, usize::from(mtu))
             .map_err(|_| io::Error::other("test budget full"))?;
-        let owner = FrontendOwner::start(self.0.clone(), frontend, forwarder, updates)?;
+        let owner = FrontendOwner::start(self.0.clone(), frontend, forwarder, updates, broker)?;
         Ok(PacketOwner {
             state: owner.state(),
             owner,
+            authority,
             open: true,
         })
     }
 }
 impl DeliveryOwner for PacketOwner {
+    fn handover(&mut self, config: DeliveryConfig) -> io::Result<()> {
+        self.owner
+            .handover(config.into_frontend(self.authority.clone()))
+    }
+    fn retry_handover_release(&mut self) -> io::Result<()> {
+        self.owner.retry_handover_release()
+    }
     async fn ready(&mut self) -> io::Result<()> {
         self.owner.ready().await
     }
@@ -217,6 +251,198 @@ async fn capture_reply(peer: &UnixDatagram) -> Vec<u8> {
 }
 
 #[tokio::test]
+async fn daemon_route_handover_retains_the_partial_grant_and_same_physical_tcp_stream() {
+    let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let udp = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let physical = (tcp.local_addr().unwrap(), udp.local_addr().unwrap());
+    let physical_task = tokio::spawn(async move {
+        let (mut stream, _) = tcp.accept().await.unwrap();
+        for nonce in [
+            b"before".as_slice(),
+            b"routes",
+            b"secured",
+            b"exclusions",
+            b"partial",
+        ] {
+            let mut bytes = vec![0; nonce.len()];
+            stream.read_exact(&mut bytes).await.unwrap();
+            assert_eq!(bytes, nonce);
+            stream.write_all(&bytes).await.unwrap();
+        }
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), tcp.accept())
+                .await
+                .is_err()
+        );
+    });
+    let platform = Arc::new(PacketPlatform {
+        feed: CaptureNetworkFeed::new(43),
+        expected: Mutex::new(None),
+        opened: Mutex::new(Vec::new()),
+        peer: Mutex::new(None),
+        starts: AtomicUsize::new(0),
+        releases: AtomicUsize::new(0),
+        released: tokio::sync::Notify::new(),
+        fail_release: AtomicBool::new(false),
+        retain_handover: AtomicBool::new(false),
+        authority: Mutex::new(None),
+        generation: 0.into(),
+        physical,
+    });
+    let authority = authority();
+    authority.update(&policy(), Some(observation()));
+    let buffers = DeliveryBuffers::new();
+    let broker = broker();
+    let mut delivery = Delivery::new(
+        PacketFactory(platform.clone()),
+        authority.clone(),
+        buffers.local.clone(),
+        broker.clone(),
+    );
+    delivery
+        .maintain_config(Some(DeliveryConfig::Partial(vec!["10.0.2.2/32".into()])))
+        .await;
+    bounded(delivery.changed()).await;
+    let mut peer = UnixDatagram::from_std(platform.peer.lock().unwrap().take().unwrap()).unwrap();
+    let local = flow(Transport::Tcp, 45901);
+    let grant = authority.authorize(local).unwrap();
+    let session = broker.snapshot().session_generation;
+    assert_eq!(
+        grant.generation, session,
+        "Partial uses the real logical session"
+    );
+    peer.send(&tcp_packet(local, 100, 0, 2, &[])).await.unwrap();
+    let syn = capture_reply(&peer).await;
+    assert_eq!(syn[33] & 0x12, 0x12);
+    let mut ack = u32::from_be_bytes(syn[24..28].try_into().unwrap()).wrapping_add(1);
+    let mut sequence = 101;
+    let mut request = None;
+    for (index, nonce) in [
+        b"before".as_slice(),
+        b"routes",
+        b"secured",
+        b"exclusions",
+        b"partial",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if index != 0 {
+            drop(request.take());
+            let config = match index {
+                1 => DeliveryConfig::Partial(vec!["10.0.2.2/32".into(), "172.16.0.0/16".into()]),
+                2 | 3 => {
+                    let mut config = assigned_config();
+                    config.addresses =
+                        vec!["192.0.2.2".parse().unwrap(), "2001:db8::2".parse().unwrap()];
+                    config.mtu = 1280;
+                    if index == 3 {
+                        config.dns_servers = Some(vec!["10.64.0.2".parse().unwrap()]);
+                        config
+                            .excluded_packages
+                            .push("unrelated.excluded.app".into());
+                    }
+                    request = Some(broker.request_capture(config).unwrap());
+                    DeliveryConfig::Secured {
+                        broker: broker.clone(),
+                        request: broker.pending_request().unwrap(),
+                    }
+                }
+                _ => DeliveryConfig::Partial(vec!["10.0.2.2/32".into()]),
+            };
+            if index == 1 {
+                platform.fail_release.store(true, SeqCst);
+            }
+            if index == 2 {
+                // Retry the retained predecessor within this same live owner,
+                // then fail establish before any OS switch. Neither may revoke
+                // the Partial grant or the already connected physical stream.
+                let previous = delivery.applied_config().unwrap();
+                platform.fail_release.store(false, SeqCst);
+                platform.retain_handover.store(true, SeqCst);
+                delivery.maintain_config(Some(config.clone())).await;
+                bounded(async {
+                    while delivery.pending.is_some() {
+                        delivery.changed().await;
+                    }
+                })
+                .await;
+                assert!(delivery.failed(), "failed establish was not reported");
+                assert!(
+                    delivery.ready(),
+                    "proven rollback lost the working predecessor"
+                );
+                assert!(delivery.applied_config().unwrap().same_capture(&previous));
+                assert!(authority.current(&grant));
+                assert!(
+                    !delivery.release_failed(),
+                    "exact predecessor release did not recover: owner {:?}, releases {}, broker {:?}",
+                    delivery.owner_state(),
+                    platform.releases.load(SeqCst),
+                    broker.snapshot()
+                );
+                platform.retain_handover.store(false, SeqCst);
+            }
+            delivery.maintain_config(Some(config.clone())).await;
+            assert!(
+                authority.current(&grant),
+                "configuration change revoked the retained Local grant"
+            );
+            bounded(async {
+                while !delivery
+                    .applied_config()
+                    .as_ref()
+                    .is_some_and(|applied| applied.same_capture(&config))
+                {
+                    delivery.changed().await;
+                }
+            })
+            .await;
+            if let Some(request) = request.as_mut() {
+                bounded(request.configured()).await.unwrap();
+            }
+            peer = UnixDatagram::from_std(platform.peer.lock().unwrap().take().unwrap()).unwrap();
+            assert!(authority.current(&grant));
+            assert_eq!(broker.snapshot().session_generation, session);
+        }
+        peer.send(&tcp_packet(local, sequence, ack, 0x18, nonce))
+            .await
+            .unwrap();
+        let mut received = vec![];
+        while received.len() < nonce.len() {
+            let bytes = capture_reply(&peer).await;
+            let payload = packet::parse(&bytes).unwrap().payload;
+            received.extend_from_slice(payload);
+            ack = ack.wrapping_add(payload.len() as u32);
+        }
+        assert_eq!(received, nonce);
+        sequence += nonce.len() as u32;
+        peer.send(&tcp_packet(local, sequence, ack, 0x10, &[]))
+            .await
+            .unwrap();
+        if index == 1 {
+            bounded(async {
+                while !delivery.release_failed() {
+                    delivery.changed().await;
+                }
+            })
+            .await;
+            assert!(
+                authority.current(&grant),
+                "failed predecessor cleanup revoked Local"
+            );
+            assert!(delivery.ready(), "cleanup failure stopped the current sink");
+            assert_eq!(platform.starts.load(SeqCst), 2);
+        }
+    }
+    bounded(physical_task).await.unwrap();
+    delivery.stop().await.unwrap();
+    assert!(!authority.current(&grant));
+    assert_eq!(platform.starts.load(SeqCst), 5);
+    assert_eq!(platform.releases.load(SeqCst), 7);
+}
+
+#[tokio::test]
 async fn managed_capture_delivers_local_nonces_and_never_relays_denied_local() {
     let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let udp = UdpSocket::bind("127.0.0.1:0").await.unwrap();
@@ -254,6 +480,7 @@ async fn managed_capture_delivers_local_nonces_and_never_relays_denied_local() {
         releases: AtomicUsize::new(0),
         released: tokio::sync::Notify::new(),
         fail_release: AtomicBool::new(false),
+        retain_handover: AtomicBool::new(false),
         authority: Mutex::new(None),
         generation: 0.into(),
         physical,
@@ -416,6 +643,7 @@ async fn assigned_config_replacement_and_shutdown_retain_release_and_revoke_old_
         releases: AtomicUsize::new(0),
         released: tokio::sync::Notify::new(),
         fail_release: AtomicBool::new(false),
+        retain_handover: AtomicBool::new(false),
         authority: Mutex::new(None),
         generation: 0.into(),
         physical: (
@@ -541,6 +769,127 @@ async fn assigned_config_replacement_and_shutdown_retain_release_and_revoke_old_
     assert!(broker.snapshot().closed);
 }
 
+fn release_fixture() -> (
+    Delivery<PacketFactory>,
+    Arc<PacketPlatform>,
+    AttachmentBroker,
+) {
+    let platform = Arc::new(PacketPlatform {
+        feed: CaptureNetworkFeed::new(44),
+        expected: Mutex::new(None),
+        opened: Mutex::new(Vec::new()),
+        peer: Mutex::new(None),
+        starts: AtomicUsize::new(0),
+        releases: AtomicUsize::new(0),
+        released: tokio::sync::Notify::new(),
+        fail_release: AtomicBool::new(false),
+        retain_handover: AtomicBool::new(false),
+        authority: Mutex::new(None),
+        generation: 0.into(),
+        physical: (
+            "127.0.0.1:9".parse().unwrap(),
+            "127.0.0.1:9".parse().unwrap(),
+        ),
+    });
+    let broker = broker();
+    broker.set_mode(AttachmentMode::ManagedRequired).unwrap();
+    let delivery = Delivery::new(
+        PacketFactory(platform.clone()),
+        authority(),
+        DeliveryBuffers::new().local.clone(),
+        broker.clone(),
+    );
+    (delivery, platform, broker)
+}
+
+fn fixed_config() -> talpid_tunnel::tun_provider::TunConfig {
+    let mut config = assigned_config();
+    config.addresses = vec!["192.0.2.2".parse().unwrap(), "2001:db8::2".parse().unwrap()];
+    config.mtu = 1280;
+    config
+}
+
+#[tokio::test]
+async fn pending_successor_defers_actual_fd_release_before_daemon_ready() {
+    let (mut delivery, platform, broker) = release_fixture();
+    delivery
+        .maintain_config(Some(DeliveryConfig::Partial(vec!["10.0.2.2/32".into()])))
+        .await;
+    bounded(delivery.changed()).await;
+    let old_peer = platform.peer.lock().unwrap().take().unwrap();
+    let mut request = broker.request_capture(fixed_config()).unwrap();
+    delivery
+        .maintain_config(Some(DeliveryConfig::Secured {
+            broker: broker.clone(),
+            request: broker.pending_request().unwrap(),
+        }))
+        .await;
+    bounded(request.configured()).await.unwrap();
+    assert!(matches!(delivery.pending, Some(Readiness::Handover { .. })));
+    let peer = platform.peer.lock().unwrap().take().unwrap();
+    delivery.defer_release();
+    let stopped = bounded(delivery.stop()).await;
+    assert_eq!(
+        peer.send(b"pending-held")
+            .expect("pending successor fd released before TSM join"),
+        12
+    );
+    assert_eq!(stopped.unwrap_err().kind(), io::ErrorKind::WouldBlock);
+    assert!(delivery.has_owner());
+    delivery.transport_joined();
+    bounded(delivery.stop()).await.unwrap();
+    assert!(old_peer.send(b"old-closed").is_err());
+    assert!(peer.send(b"new-closed").is_err());
+    assert_eq!(platform.releases.load(SeqCst), 2);
+}
+
+#[tokio::test]
+async fn applied_successor_acknowledges_retained_predecessor_before_stop() {
+    let (mut delivery, platform, broker) = release_fixture();
+    let mut first = broker.request_capture(fixed_config()).unwrap();
+    let first_pending = broker.pending_request().unwrap();
+    delivery
+        .maintain_config(Some(DeliveryConfig::Secured {
+            broker: broker.clone(),
+            request: first_pending.clone(),
+        }))
+        .await;
+    let receipt = bounded(first.configured()).await.unwrap();
+    let pair = broker.acquire(&receipt).unwrap();
+    bounded(delivery.changed()).await;
+    let old_peer = platform.peer.lock().unwrap().take().unwrap();
+    delivery.defer_release();
+    first.cancel();
+    let mut config = fixed_config();
+    config.dns_servers = Some(vec!["10.64.0.2".parse().unwrap()]);
+    let mut second = broker.request_capture(config).unwrap();
+    let next = DeliveryConfig::Secured {
+        broker: broker.clone(),
+        request: broker.pending_request().unwrap(),
+    };
+    delivery.maintain_config(Some(next.clone())).await;
+    bounded(second.configured()).await.unwrap();
+    bounded(delivery.changed()).await;
+    assert!(delivery.applied_config().unwrap().same_capture(&next));
+    let peer = platform.peer.lock().unwrap().take().unwrap();
+    assert_eq!(old_peer.send(b"predecessor-held").unwrap(), 16);
+    assert_eq!(platform.releases.load(SeqCst), 0);
+    drop(pair);
+    first.transport_joined();
+    assert!(
+        !first_pending.release_ready(),
+        "transport join bypassed the TSM stage"
+    );
+    assert_eq!(old_peer.send(b"predecessor-held").unwrap(), 16);
+    assert_eq!(platform.releases.load(SeqCst), 0);
+    delivery.transport_joined();
+    bounded(delivery.stop()).await.unwrap();
+    assert!(first_pending.release_ready());
+    assert!(old_peer.send(b"old-closed").is_err());
+    assert!(peer.send(b"new-closed").is_err());
+    assert_eq!(platform.releases.load(SeqCst), 2);
+}
+
 struct Handover {
     runtime: LocalNetworkRuntime<PacketFactory>,
     platform: Arc<PacketPlatform>,
@@ -570,6 +919,7 @@ impl Handover {
             releases: AtomicUsize::new(0),
             released: tokio::sync::Notify::new(),
             fail_release: AtomicBool::new(false),
+            retain_handover: AtomicBool::new(false),
             authority: Mutex::new(None),
             generation: 0.into(),
             physical: (
@@ -984,6 +1334,16 @@ async fn joined_internal_transport_retry_replaces_capture_without_a_tsm_handover
     h.connect_endpoint().await;
     let broker = h.runtime.broker();
     let first_generation = broker.snapshot().capture_generation.unwrap();
+    let first_session = broker.snapshot().session_generation;
+    let old_peer = h
+        .platform
+        .peer
+        .lock()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .try_clone()
+        .unwrap();
     let config = h.platform.opened.lock().unwrap().last().unwrap().clone();
     let old_request = h.request.take().unwrap();
     let transport = h.transport.take().unwrap();
@@ -998,11 +1358,14 @@ async fn joined_internal_transport_retry_replaces_capture_without_a_tsm_handover
         .await;
     assert_eq!(h.platform.starts.load(SeqCst), 1);
     assert_eq!(h.platform.releases.load(SeqCst), 0);
-    assert!(
-        tokio::time::timeout(Duration::from_millis(20), next_request.configured())
-            .await
-            .is_err()
-    );
+    // The successor can become ready without destroying Local or acknowledging
+    // predecessor cleanup. The old descriptor remains owned until the exact join.
+    bounded(h.runtime.notifications().1).await;
+    let receipt = bounded(next_request.configured()).await.unwrap();
+    assert_ne!(receipt.generation(), first_generation);
+    assert_eq!(broker.snapshot().session_generation, first_session);
+    assert_eq!(old_peer.send(b"predecessor-retained").unwrap(), 20);
+    assert_eq!(h.platform.releases.load(SeqCst), 0);
     drop(transport);
     old_request.transport_joined();
     // This is the same production broker notification selected by the daemon.
@@ -1010,9 +1373,7 @@ async fn joined_internal_transport_retry_replaces_capture_without_a_tsm_handover
     h.runtime
         .internal_update(&h.policy, h.target, h.phase)
         .await;
-    bounded(h.runtime.notifications().1).await;
-    let receipt = bounded(next_request.configured()).await.unwrap();
-    assert_ne!(receipt.generation(), first_generation);
+    bounded(h.platform.released.notified()).await;
     let pair = broker.acquire(&receipt).unwrap();
     pair.control.activate().unwrap();
     h.request = Some(next_request);

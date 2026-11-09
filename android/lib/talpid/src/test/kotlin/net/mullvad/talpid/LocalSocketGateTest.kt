@@ -79,7 +79,7 @@ class LocalSocketGateTest {
                 sequence = record.sequence
             }
         val owner = LocalFrontendOwnership()
-        assertTrue(owner.tryFrontend())
+        assertTrue(owner.tryFrontend(11))
         watcher.start()
         watcher.attach(1)
         source.event(LocalNetworkEvent.Available(9, false))

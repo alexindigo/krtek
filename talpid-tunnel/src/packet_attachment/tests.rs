@@ -120,14 +120,148 @@ async fn exact_request_acknowledgement_is_required_before_ordinary_activation() 
     lease.try_send(b"exact raw bytes").unwrap();
     let packet = pair.receive.recv().await.unwrap();
     assert_eq!(
-        packet.view().attempt().identity().network_handle,
-        0xf123_4567_0000_0063
+        packet
+            .view()
+            .attempt()
+            .sink()
+            .unwrap()
+            .identity()
+            .network_handle,
+        Some(0xf123_4567_0000_0063)
     );
     let mut consumer = Vec::new();
     packet
         .handoff(|bytes| consumer.extend_from_slice(bytes))
         .unwrap();
     assert_eq!(consumer, b"exact raw bytes");
+}
+
+#[tokio::test]
+async fn epoch_handover_retains_session_targets_and_exact_cleanup_without_reusing_receipts() {
+    let f = Fixture::new();
+    let (request, lease, pair) = f.active().await;
+    let session = lease.capability().unwrap();
+    let first = session.sink().unwrap();
+    let old_revoke = lease.revoker();
+    pair.send.try_send(b"retained-target-return").unwrap();
+    let mut reply = lease.reply().await.unwrap();
+    let (_, old_receipt) = match &*request.status.borrow() {
+        RequestStatus::Ready(receipt) => ((), receipt.clone()),
+        _ => panic!("initial receipt missing"),
+    };
+    let (mut successor, pending) = f.request();
+    let mut change = lease
+        .begin_handover(Some(&pending), sources(), 1420)
+        .unwrap();
+    let epoch = change.generation();
+    assert_ne!(epoch, lease.generation());
+    assert_eq!(
+        f.broker.snapshot().session_generation,
+        Some(lease.generation())
+    );
+    assert_eq!(f.broker.snapshot().capture_generation, Some(epoch));
+    assert!(!f.broker.snapshot().capture_ready);
+    assert!(session.current());
+    assert!(!old_receipt.current());
+    assert!(!pair.control.current());
+    assert!(matches!(
+        lease.begin_handover(Some(&pending), sources(), 1420),
+        Err(AttachmentError::Busy)
+    ));
+    old_revoke();
+    assert!(
+        session.current(),
+        "old observer destroyed successor session"
+    );
+    assert!(matches!(
+        change.bind_identity("tun8", None, sources(), 1420),
+        Err(AttachmentError::Invalid)
+    ));
+    let receipt = change
+        .bind_identity("tun8", Some(0x7654_3210_0000_0088), sources(), 1420)
+        .unwrap();
+    assert!(
+        pair.control.current(),
+        "sink replacement retired an independent live target"
+    );
+    assert!(matches!(change.rollback(), Err(AttachmentError::Stale)));
+    f.broker.acknowledge(&pending, &receipt).unwrap();
+    assert_eq!(successor.configured().await.unwrap().generation(), epoch);
+    let next = session.sink().unwrap();
+    assert_eq!(next.identity().interface, "tun8");
+    assert!(matches!(
+        reply.write_to(&first, |_| panic!("old descriptor write")),
+        RelayWriteOutcome::Retry
+    ));
+    let (sink, consumer) = UnixDatagram::pair().unwrap();
+    assert!(matches!(
+        reply.write_to(&next, |bytes| sink.send(bytes)),
+        RelayWriteOutcome::Written
+    ));
+    let mut bytes = [0; 64];
+    let count = consumer.recv(&mut bytes).unwrap();
+    assert_eq!(&bytes[..count], b"retained-target-return");
+    assert!(
+        matches!(
+            lease.begin_handover(None, sources(), 1420),
+            Err(AttachmentError::Busy)
+        ),
+        "third epoch bypassed retained predecessor cleanup"
+    );
+    assert_eq!(
+        change.finish(),
+        Err(AttachmentError::Busy),
+        "transport join bypassed"
+    );
+    request.transport_joined();
+    change.finish().unwrap();
+    drop(change);
+    assert!(session.current());
+    // Late cancellation is still target-specific, not a sink/session revoker.
+    request.cancel();
+    assert!(!pair.control.current());
+    assert!(session.current());
+    let replacement = f.broker.acquire(&receipt).unwrap();
+    replacement.control.activate().unwrap();
+    successor.transport_joined();
+    lease.retire();
+    assert!(!session.current());
+    assert!(!replacement.control.current());
+}
+
+#[tokio::test]
+async fn epoch_rollback_and_abandonment_never_resurrect_retired_authority() {
+    for retire in [false, true] {
+        let f = Fixture::new();
+        let (request, lease, pair) = f.active().await;
+        let session = lease.capability().unwrap();
+        let first = session.sink().unwrap();
+        let mut change = lease.begin_handover(None, sources(), 1420).unwrap();
+        if retire {
+            lease.retire();
+            assert_eq!(change.rollback(), Err(AttachmentError::Stale));
+        } else {
+            change.rollback().unwrap();
+            assert!(pair.control.current());
+            session.with_sink(&first, || ()).unwrap();
+            assert_eq!(
+                f.broker.snapshot().capture_generation,
+                Some(lease.generation())
+            );
+        }
+        drop(change);
+        assert_eq!(session.current(), !retire);
+        if !retire {
+            let change = lease.begin_handover(None, sources(), 1420).unwrap();
+            drop(change);
+            assert!(
+                !session.current(),
+                "abandoned epoch silently restored old capture"
+            );
+            assert!(!pair.control.current());
+        }
+        request.transport_joined();
+    }
 }
 
 #[tokio::test]

@@ -27,6 +27,9 @@ use tokio::{
 #[path = "connected_tests.rs"]
 mod connected;
 
+#[path = "retry_tests.rs"]
+mod retry;
+
 #[test]
 fn runtime_regions_share_one_root_and_local_exhaustion_preserves_control() {
     let pools = DeliveryBuffers::new();
@@ -203,7 +206,7 @@ async fn assigned_sources_and_capture_identity_are_required_at_prepare_and_outpu
             broker: broker.clone(),
             request: pending.clone(),
         }
-        .authority(),
+        .authority(&broker),
     );
     let mut assigned = flow(Transport::Udp, 40101);
     assigned.source.set_ip(config.addresses[0]);
@@ -616,6 +619,10 @@ struct FakeOwner {
     open: bool,
     release_pending: bool,
     released: bool,
+    partial: Option<talpid_tunnel::packet_attachment::CaptureLease>,
+    handover_pending: bool,
+    active_release_failed: bool,
+    retrying_handover_release: bool,
 }
 
 // Test-only physical redirection: admission still evaluates the original private
@@ -661,6 +668,7 @@ impl FrontendFactory for FakeFactory {
         config: DeliveryConfig,
         authority: Arc<DeliveryAuthority>,
         buffers: Arc<dyn RelayBufferAllocator>,
+        broker: AttachmentBroker,
     ) -> io::Result<FakeOwner> {
         self.0.starts.fetch_add(1, SeqCst);
         if self.0.fail_start.load(SeqCst) {
@@ -678,6 +686,24 @@ impl FrontendFactory for FakeFactory {
                 .collect(),
         };
         self.0.routes.lock().unwrap().push(routes);
+        let partial = if matches!(config, DeliveryConfig::Partial(_)) {
+            let lease = broker
+                .open_capture(None)
+                .map_err(|error| io::Error::other(format!("{error:?}")))?;
+            lease
+                .bind_partial_identity(
+                    "tun-fake",
+                    talpid_types::relay_flow::RelaySources {
+                        ipv4: Some("192.0.2.2".parse().unwrap()),
+                        ipv6: Some("2001:db8::2".parse().unwrap()),
+                    },
+                    1280,
+                )
+                .map_err(|error| io::Error::other(format!("{error:?}")))?;
+            Some(lease)
+        } else {
+            None
+        };
         let (state, receiver) = watch::channel(OwnerState::Running);
         *self.0.state.lock().unwrap() = Some(state);
         *self.0.authority.lock().unwrap() = Some(authority.clone());
@@ -733,14 +759,66 @@ impl FrontendFactory for FakeFactory {
             open: true,
             release_pending: false,
             released: false,
+            partial,
+            handover_pending: false,
+            active_release_failed: false,
+            retrying_handover_release: false,
         })
     }
 }
 
 impl DeliveryOwner for FakeOwner {
+    fn handover(&mut self, config: DeliveryConfig) -> io::Result<()> {
+        if let DeliveryConfig::Secured { request, .. } = &config {
+            let authority = self.control.authority.lock().unwrap().clone().unwrap();
+            for address in request.config().gateways() {
+                assert_eq!(
+                    authority.disposition(address),
+                    Disposition::Drop,
+                    "successor control destinations were not reserved before dispatch"
+                );
+            }
+        }
+        let routes = match config {
+            DeliveryConfig::Partial(routes) => routes,
+            DeliveryConfig::Secured { request, .. } => request
+                .config()
+                .routes
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+        };
+        self.control.routes.lock().unwrap().push(routes);
+        self.control.history.lock().unwrap().push("handover".into());
+        self.handover_pending = true;
+        Ok(())
+    }
+    fn retry_handover_release(&mut self) -> io::Result<()> {
+        self.control
+            .history
+            .lock()
+            .unwrap()
+            .push("retry-active".into());
+        self.retrying_handover_release = true;
+        Ok(())
+    }
     async fn ready(&mut self) -> io::Result<()> {
         if self.control.hold_ready.load(SeqCst) {
             std::future::pending::<()>().await;
+        }
+        if self.handover_pending {
+            self.handover_pending = false;
+            if self.control.fail_start.load(SeqCst) {
+                return Err(io::Error::other("pre-establish failure"));
+            }
+            self.active_release_failed = self.control.fail_release.load(SeqCst);
+        }
+        if self.retrying_handover_release {
+            self.retrying_handover_release = false;
+            self.active_release_failed = self.control.fail_release.load(SeqCst);
+            if self.active_release_failed {
+                return Err(io::Error::other("active release still pending"));
+            }
         }
         if self.control.fail_ready.load(SeqCst) {
             Err(io::Error::other("readiness failed"))
@@ -757,6 +835,7 @@ impl DeliveryOwner for FakeOwner {
             task.await.unwrap();
             self.task = None;
         }
+        self.partial.take();
         if self.release_pending {
             return Err(io::Error::other("release requires explicit retry"));
         }
@@ -786,6 +865,7 @@ impl DeliveryOwner for FakeOwner {
             Err(io::Error::other("release still pending"))
         } else {
             self.release_pending = false;
+            self.active_release_failed = false;
             self.released = true;
             self.control.active.store(false, SeqCst);
             self.control.history.lock().unwrap().push("released".into());
@@ -797,6 +877,7 @@ impl DeliveryOwner for FakeOwner {
     }
     fn release_failed(&self) -> bool {
         self.release_pending
+            || self.active_release_failed
             || (self.state() == OwnerState::Failed && self.control.fail_release.load(SeqCst))
     }
     async fn changed(&mut self) {
@@ -941,13 +1022,7 @@ async fn route_reconciliation_joins_before_replacement_and_ignores_condition_and
         );
     }
     let history = control.history.lock().unwrap().clone();
-    assert_eq!(
-        history,
-        [
-            "start", "stop", "released", "start", "stop", "released", "start", "stop", "released",
-            "start"
-        ]
-    );
+    assert_eq!(history, ["start", "handover", "handover", "handover"]);
     configured.rules[0].enabled = false;
     runtime
         .update(&configured, TargetState::Unsecured, true)
@@ -978,6 +1053,7 @@ async fn outstanding_release_blocks_replacement_and_connect_until_a_later_event_
         FakeFactory(control.clone()),
         authority(),
         DeliveryBuffers::new().local,
+        broker(),
     );
     delivery
         .maintain(&policy(), TargetState::Unsecured, true)
@@ -1028,6 +1104,7 @@ async fn cancelled_or_failed_readiness_retains_the_recovery_owner() {
         FakeFactory(control.clone()),
         authority(),
         DeliveryBuffers::new().local,
+        broker(),
     );
     assert!(
         tokio::time::timeout(Duration::from_millis(30), async {
@@ -1074,12 +1151,128 @@ async fn cancelled_or_failed_readiness_retains_the_recovery_owner() {
 }
 
 #[tokio::test]
+async fn in_owner_reconciliation_coalesces_settings_and_retains_grants_across_cancelled_waits() {
+    let control = Arc::new(Control::default());
+    let authority = authority();
+    authority.update(&policy(), Some(observation()));
+    let mut delivery = Delivery::new(
+        FakeFactory(control.clone()),
+        authority.clone(),
+        DeliveryBuffers::new().local,
+        broker(),
+    );
+    let first = DeliveryConfig::Partial(vec!["10.0.2.2/32".into()]);
+    delivery.maintain_config(Some(first)).await;
+    let grant = authority.authorize(flow(Transport::Udp, 45902)).unwrap();
+    control.hold_ready.store(true, SeqCst);
+    let second = DeliveryConfig::Partial(vec!["10.0.2.2/32".into(), "172.16.0.0/16".into()]);
+    bounded(delivery.maintain_config(Some(second))).await;
+    assert!(authority.current(&grant));
+    assert!(
+        tokio::time::timeout(Duration::from_millis(30), delivery.changed())
+            .await
+            .is_err()
+    );
+    let latest = DeliveryConfig::Partial(vec!["10.0.2.2/32".into(), "192.168.0.0/16".into()]);
+    bounded(delivery.maintain_config(Some(latest.clone()))).await;
+    assert_eq!(*control.history.lock().unwrap(), ["start", "handover"]);
+    control.hold_ready.store(false, SeqCst);
+    bounded(delivery.changed()).await;
+    assert!(delivery.applied_config().unwrap().same_capture(&latest));
+    assert!(authority.current(&grant));
+    assert_eq!(control.starts.load(SeqCst), 1);
+    assert_eq!(
+        *control.history.lock().unwrap(),
+        ["start", "handover", "handover"]
+    );
+    delivery.stop().await.unwrap();
+    assert!(!authority.current(&grant));
+}
+
+#[tokio::test]
+async fn a_foreign_runtime_request_cannot_replace_or_revoke_the_current_session() {
+    let control = Arc::new(Control::default());
+    let authority = authority();
+    authority.update(&policy(), Some(observation()));
+    let mut delivery = Delivery::new(
+        FakeFactory(control.clone()),
+        authority.clone(),
+        DeliveryBuffers::new().local,
+        broker(),
+    );
+    delivery
+        .maintain_config(Some(DeliveryConfig::Partial(vec!["10.0.2.2/32".into()])))
+        .await;
+    let grant = authority.authorize(flow(Transport::Udp, 45903)).unwrap();
+    let foreign = broker();
+    let request = foreign.request_capture(assigned_config()).unwrap();
+    delivery
+        .maintain_config(Some(DeliveryConfig::Secured {
+            request: foreign.pending_request().unwrap(),
+            broker: foreign,
+        }))
+        .await;
+    assert!(delivery.has_owner());
+    assert!(delivery.failed());
+    assert!(authority.current(&grant));
+    assert_eq!(*control.history.lock().unwrap(), ["start"]);
+    assert_eq!(control.starts.load(SeqCst), 1);
+    drop(request);
+    delivery.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn successor_reserved_destinations_are_published_before_its_owner_command() {
+    let control = Arc::new(Control::default());
+    let authority = authority();
+    let mut policy = policy();
+    policy.rules[0].cidrs = vec!["10.0.0.0/8".parse().unwrap()];
+    authority.update(&policy, Some(observation()));
+    let broker = broker();
+    let mut delivery = Delivery::new(
+        FakeFactory(control),
+        authority.clone(),
+        DeliveryBuffers::new().local,
+        broker.clone(),
+    );
+    delivery
+        .maintain_config(Some(DeliveryConfig::Partial(vec!["10.0.0.0/8".into()])))
+        .await;
+    let grant = authority.authorize(flow(Transport::Udp, 45904)).unwrap();
+    assert_eq!(
+        authority.disposition("10.64.0.1".parse().unwrap()),
+        Disposition::Local
+    );
+    let mut config = assigned_config();
+    config.addresses = vec!["192.0.2.2".parse().unwrap(), "2001:db8::2".parse().unwrap()];
+    config.mtu = 1280;
+    let request = broker.request_capture(config).unwrap();
+    delivery
+        .maintain_config(Some(DeliveryConfig::Secured {
+            request: broker.pending_request().unwrap(),
+            broker,
+        }))
+        .await;
+    assert!(
+        authority.current(&grant),
+        "unrelated Local grant was revoked"
+    );
+    assert_eq!(
+        authority.disposition("10.64.0.1".parse().unwrap()),
+        Disposition::Drop
+    );
+    drop(request);
+    delivery.stop().await.unwrap();
+}
+
+#[tokio::test]
 async fn external_change_can_recover_failure_before_the_owner_notification_is_selected() {
     let control = Arc::new(Control::default());
     let mut delivery = Delivery::new(
         FakeFactory(control.clone()),
         authority(),
         DeliveryBuffers::new().local,
+        broker(),
     );
     delivery
         .maintain(&policy(), TargetState::Unsecured, true)
@@ -1319,6 +1512,7 @@ async fn observer_unavailable_keeps_announcements_and_denies_delivery() {
         FakeFactory(control.clone()),
         authority.clone(),
         DeliveryBuffers::new().local,
+        broker(),
     );
     delivery
         .maintain(&policy(), TargetState::Unsecured, true)
@@ -1517,6 +1711,7 @@ async fn permission_and_network_changes_revalidate_without_replacing_announcemen
         FakeFactory(control.clone()),
         authority.clone(),
         DeliveryBuffers::new().local,
+        broker(),
     );
     authority.update(&policy(), Some(observation()));
     delivery
@@ -1572,24 +1767,28 @@ async fn route_replacement_failure_publishes_once_and_waits_for_an_external_even
         .await
         .unwrap();
     assert_eq!(status.forwarding, ForwardingAvailability::Failed);
-    assert!(!runtime.has_owner());
-    assert_eq!(
-        *control.history.lock().unwrap(),
-        ["start", "stop", "released"]
+    assert!(
+        runtime.has_owner(),
+        "pre-establish failure lost the recovery owner"
     );
-    assert_eq!(control.starts.load(SeqCst), 2);
+    assert_eq!(*control.history.lock().unwrap(), ["start", "handover"]);
+    assert_eq!(control.starts.load(SeqCst), 1);
     assert!(
         runtime
             .owner_changed(&replacement, TargetState::Unsecured, true)
             .is_none()
     );
-    assert_eq!(control.starts.load(SeqCst), 2);
+    assert_eq!(control.starts.load(SeqCst), 1);
     control.fail_start.store(false, SeqCst);
     runtime
         .update(&replacement, TargetState::Unsecured, true)
         .await;
     assert_eq!(runtime.status().forwarding, ForwardingAvailability::Active);
-    assert_eq!(control.starts.load(SeqCst), 3);
+    assert_eq!(control.starts.load(SeqCst), 1);
+    assert_eq!(
+        *control.history.lock().unwrap(),
+        ["start", "handover", "handover"]
+    );
     assert_eq!(
         control.routes.lock().unwrap().last().unwrap(),
         &replacement

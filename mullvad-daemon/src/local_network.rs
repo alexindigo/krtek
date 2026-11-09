@@ -192,6 +192,7 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
                 factory,
                 Arc::new(DeliveryAuthority::new(policy, preparer)),
                 buffers.local.clone(),
+                broker.clone(),
             ),
             shutting_down: false,
             _buffers: buffers,
@@ -307,7 +308,11 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
             && self.delivery.release_ready()
             && !self.delivery.release_failed();
         if !self.shutting_down && (external || !self.delivery.failed() || successor) {
-            self.delivery.maintain_config(config).await;
+            if external {
+                self.delivery.maintain_config(config).await;
+            } else {
+                self.delivery.reconcile_config(config).await;
+            }
         }
         self.set_endpoint(target, phase);
         self.publish(policy, target, phase)
@@ -462,7 +467,8 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
                 && phase != TunnelPhase::Disconnecting)
         {
             // TSM emits the next state only after its tunnel-close future joins.
-            // This acknowledges the old applied request, never its successor.
+            // Acknowledge every exact request retained by this owner, including
+            // an in-flight successor and a predecessor awaiting cleanup.
             self.delivery.transport_joined();
         } else if phase == TunnelPhase::Disconnecting {
             self.delivery.defer_release();

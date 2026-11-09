@@ -27,6 +27,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import net.mullvad.mullvadvpn.lib.common.util.prepareVpnSafe
 import net.mullvad.mullvadvpn.lib.model.Prepared
+import net.mullvad.talpid.model.CaptureHandoverResult
 import net.mullvad.talpid.model.CaptureNetworkObservation
 import net.mullvad.talpid.model.CreateTunResult
 import net.mullvad.talpid.model.InetNetwork
@@ -61,6 +62,9 @@ class LocalCaptureServiceTest {
         mockkStatic("net.mullvad.mullvadvpn.lib.common.util.VpnServiceUtilsKt")
         mockkStatic(Looper::class)
         mockkStatic(Process::class)
+        mockkStatic(ParcelFileDescriptor::class)
+        every { ParcelFileDescriptor.adoptFd(any()) } throws
+            AssertionError("native-owned fd adopted twice")
         every { Looper.getMainLooper() } returns mockk()
         every { Process.myUid() } returns UID
         service = spyk(TalpidVpnService())
@@ -86,6 +90,7 @@ class LocalCaptureServiceTest {
             builder
         descriptor = mockk<ParcelFileDescriptor>()
         every { anyConstructed<VpnService.Builder>().establish() } returns descriptor
+        every { descriptor.fd } returns 7
         every { descriptor.detachFd() } returns 7
         every { descriptor.close() } returns Unit
         mockkConstructor(NetworkRequest.Builder::class)
@@ -103,14 +108,16 @@ class LocalCaptureServiceTest {
                 // Keep the actual service-created observer and all callback logic.
                 // This JVM cannot execute Android JNI; capture its existing injected
                 // publication closure at the same boundary as the observer unit tests.
-                val observer =
+                val observers =
                     checkNotNull(
                         TalpidVpnService::class
                             .java
-                            .getDeclaredField("captureObserver")
+                            .getDeclaredField("captureObservers")
                             .apply { isAccessible = true }
                             .get(service)
                     )
+                        as Map<*, *>
+                val observer = checkNotNull(observers.values.last())
                 val publish: (Long, Long, CaptureNetworkObservation) -> Unit =
                     { registration, generation, observation ->
                         publications += Triple(registration, generation, observation)
@@ -184,7 +191,7 @@ class LocalCaptureServiceTest {
         service.closeTun()
         assertTrue(service.isLocalFrontendActive())
         assertTrue(publications.isEmpty())
-        service.finishLocalFrontend()
+        service.finishLocalFrontend(11)
         assertFalse(service.isLocalFrontendActive())
     }
 
@@ -215,7 +222,7 @@ class LocalCaptureServiceTest {
         old.onCapabilitiesChanged(foreign, capabilities(UID))
         old.onLinkPropertiesChanged(foreign, links("tun7"))
         assertEquals(1, publications.size)
-        service.finishLocalFrontend()
+        service.finishLocalFrontend(11)
         assertTrue(publications.last().third.lost)
         val count = publications.size
         assertEquals(CreateTunResult.Success(7), service.openSecuredFrontend(12, config))
@@ -234,7 +241,7 @@ class LocalCaptureServiceTest {
         assertEquals(HANDLE + 1, publications.last().third.networkHandle)
         current.onLost(foreign)
         assertTrue(publications.last().third.lost)
-        service.finishLocalFrontend()
+        service.finishLocalFrontend(12)
     }
 
     @Test
@@ -248,7 +255,7 @@ class LocalCaptureServiceTest {
         every {
             connectivity.unregisterNetworkCallback(any<ConnectivityManager.NetworkCallback>())
         } throws SecurityException("retry")
-        assertTrue(runCatching { service.finishLocalFrontend() }.isFailure)
+        assertTrue(runCatching { service.finishLocalFrontend(11) }.isFailure)
         assertTrue(publications.last().third.lost)
         assertTrue(service.isLocalFrontendActive())
         assertEquals(CreateTunResult.EstablishError, service.openSecuredFrontend(12, config))
@@ -258,8 +265,8 @@ class LocalCaptureServiceTest {
         every {
             connectivity.unregisterNetworkCallback(any<ConnectivityManager.NetworkCallback>())
         } returns Unit
-        service.finishLocalFrontend()
-        service.finishLocalFrontend()
+        service.finishLocalFrontend(11)
+        service.finishLocalFrontend(11)
         assertFalse(service.isLocalFrontendActive())
         verify(exactly = 2) {
             connectivity.unregisterNetworkCallback(any<ConnectivityManager.NetworkCallback>())
@@ -284,8 +291,123 @@ class LocalCaptureServiceTest {
     }
 
     @Test
+    fun `should finish and retry only the predecessor while successor observation stays ready`() {
+        assertEquals(CreateTunResult.Success(7), service.openSecuredFrontend(11, config))
+        val old = callbacks.single()
+        old.onCapabilitiesChanged(network(HANDLE), capabilities(UID))
+        old.onLinkPropertiesChanged(network(HANDLE), links("tun7"))
+        assertTrue(service.bindLocalFrontend(11, "tun7"))
+        assertEquals(
+            CaptureHandoverResult(CreateTunResult.Success(7), false),
+            service.handoverSecuredFrontend(11, 12, config),
+        )
+        val current = callbacks.last()
+        assertTrue(current !== old)
+        current.onCapabilitiesChanged(network(HANDLE + 1), capabilities(UID))
+        current.onLinkPropertiesChanged(network(HANDLE + 1), links("tun8"))
+        assertTrue(service.bindLocalFrontend(12, "tun8"))
+        assertEquals(12L, publications.last().second)
+        every { connectivity.unregisterNetworkCallback(old) } throws SecurityException("retry old")
+        assertTrue(runCatching { service.finishLocalFrontend(11) }.isFailure)
+        assertTrue(publications.filter { it.second == 11L }.last().third.lost)
+        assertTrue(publications.filter { it.second == 12L }.last().third.fresh)
+        assertTrue(service.isLocalFrontendActive())
+        assertEquals(CreateTunResult.EstablishError, service.openTun(config))
+        assertEquals(
+            CreateTunResult.EstablishError,
+            service.handoverSecuredFrontend(12, 13, config).result,
+        )
+        verify(exactly = 2) { anyConstructed<VpnService.Builder>().establish() }
+        val count = publications.size
+        old.onLost(network(HANDLE))
+        old.onLinkPropertiesChanged(network(HANDLE), links("tun7"))
+        assertEquals(count, publications.size)
+        every { connectivity.unregisterNetworkCallback(old) } returns Unit
+        service.finishLocalFrontend(11)
+        service.finishLocalFrontend(11)
+        assertTrue(service.isLocalFrontendActive())
+        assertTrue(publications.filter { it.second == 12L }.last().third.fresh)
+        assertEquals(
+            CreateTunResult.Success(7),
+            service
+                .handoverLocalFrontend(
+                    12,
+                    13,
+                    arrayOf("10.0.2.2/32"),
+                )
+                .result,
+        )
+        service.finishLocalFrontend(12)
+        service.finishLocalFrontend(11)
+        assertTrue(service.isLocalFrontendActive())
+        service.finishLocalFrontend(13)
+        assertFalse(service.isLocalFrontendActive())
+        verify(exactly = 0) { ParcelFileDescriptor.adoptFd(any()) }
+    }
+
+    @Test
+    fun `should attest predecessor only before entering establish and retain failed epochs for finish`() {
+        assertEquals(
+            CreateTunResult.Success(7),
+            service.openLocalFrontend(11, arrayOf("10.0.2.2/32")),
+        )
+        assertEquals(7, service.takeLocalFrontendDescriptor(11))
+        every { anyConstructed<VpnService.Builder>().setMtu(any()) } throws
+            IllegalArgumentException("config")
+        assertEquals(
+            CaptureHandoverResult(CreateTunResult.EstablishError, true),
+            service.handoverLocalFrontend(11, 12, arrayOf("10.0.2.99/32")),
+        )
+        service.finishLocalFrontend(12)
+        assertTrue(service.isLocalFrontendActive())
+        every { anyConstructed<VpnService.Builder>().setMtu(any()) } returns mockk(relaxed = true)
+        every { anyConstructed<VpnService.Builder>().establish() } returns null
+        assertEquals(
+            CaptureHandoverResult(CreateTunResult.EstablishError, false),
+            service.handoverLocalFrontend(11, 13, arrayOf("10.0.2.99/32")),
+        )
+        assertEquals(Result.success(4), runCatching { service.prepareLocalSocket(7, 9, 1, false) })
+        // Failed establish must not claim rollback just because no successor fd arrived.
+        service.finishLocalFrontend(13)
+        assertEquals(Result.success(4), runCatching { service.prepareLocalSocket(7, 9, 1, false) })
+        assertFalse(
+            service.handoverLocalFrontend(11, 14, arrayOf("10.0.2.99/32")).predecessorRetained
+        )
+        service.finishLocalFrontend(11)
+        assertFalse(service.isLocalFrontendActive())
+        verify(exactly = 2) { anyConstructed<VpnService.Builder>().establish() }
+        verify(exactly = 1) { descriptor.detachFd() }
+    }
+
+    @Test
+    fun `should retain successor cleanup after detach failure without closing predecessor observer`() {
+        assertEquals(CreateTunResult.Success(7), service.openSecuredFrontend(11, config))
+        assertEquals(7, service.takeLocalFrontendDescriptor(11))
+        val old = callbacks.single()
+        every { descriptor.detachFd() } throws IllegalStateException("detach ack")
+        assertEquals(
+            CaptureHandoverResult(CreateTunResult.Success(7), false),
+            service.handoverSecuredFrontend(11, 12, config),
+        )
+        assertTrue(runCatching { service.takeLocalFrontendDescriptor(12) }.isFailure)
+        val successor = callbacks.last()
+        every { connectivity.unregisterNetworkCallback(successor) } throws
+            SecurityException("retry successor")
+        assertTrue(runCatching { service.finishLocalFrontend(12) }.isFailure)
+        verify(exactly = 0) { connectivity.unregisterNetworkCallback(old) }
+        assertTrue(service.isLocalFrontendActive())
+        service.onRevoke()
+        assertFalse(service.handoverSecuredFrontend(12, 13, config).predecessorRetained)
+        every { connectivity.unregisterNetworkCallback(successor) } returns Unit
+        service.finishLocalFrontend(12)
+        assertTrue(service.isLocalFrontendActive())
+        service.finishLocalFrontend(11)
+        assertFalse(service.isLocalFrontendActive())
+    }
+
+    @Test
     fun `should retain failed startup observer cleanup until explicit finish retry`() {
-        every { descriptor.detachFd() } throws IllegalStateException("detach")
+        every { descriptor.fd } throws IllegalStateException("descriptor result")
         every {
             connectivity.unregisterNetworkCallback(any<ConnectivityManager.NetworkCallback>())
         } throws SecurityException("retry")
@@ -294,7 +416,7 @@ class LocalCaptureServiceTest {
         assertTrue(service.isLocalFrontendActive())
         assertFalse(service.bindLocalFrontend(11, "tun7"))
         assertEquals(CreateTunResult.EstablishError, service.openSecuredFrontend(12, config))
-        assertTrue(runCatching { service.finishLocalFrontend() }.isFailure)
+        assertTrue(runCatching { service.finishLocalFrontend(11) }.isFailure)
         val old = callbacks.single()
         old.onCapabilitiesChanged(network(HANDLE), capabilities(UID))
         old.onLinkPropertiesChanged(network(HANDLE), links("tun7"))
@@ -302,19 +424,22 @@ class LocalCaptureServiceTest {
         every {
             connectivity.unregisterNetworkCallback(any<ConnectivityManager.NetworkCallback>())
         } returns Unit
-        service.finishLocalFrontend()
+        service.finishLocalFrontend(11)
         assertFalse(service.isLocalFrontendActive())
-        every { descriptor.detachFd() } returns 7
+        every { descriptor.fd } returns 7
         assertEquals(CreateTunResult.Success(7), service.openSecuredFrontend(12, config))
         old.onLinkPropertiesChanged(network(HANDLE), links("tun7"))
         assertTrue(publications.isEmpty())
-        service.finishLocalFrontend()
+        service.finishLocalFrontend(12)
     }
 
     @Test
     fun `should release observer allocated before failed descriptor detach`() {
         every { descriptor.detachFd() } throws IllegalStateException("detach")
-        assertEquals(CreateTunResult.EstablishError, service.openSecuredFrontend(11, config))
+        assertEquals(CreateTunResult.Success(7), service.openSecuredFrontend(11, config))
+        assertTrue(runCatching { service.takeLocalFrontendDescriptor(11) }.isFailure)
+        assertTrue(service.isLocalFrontendActive())
+        service.finishLocalFrontend(11)
         assertFalse(service.isLocalFrontendActive())
         verify(exactly = 1) { descriptor.close() }
         verify(exactly = 1) {
@@ -324,7 +449,7 @@ class LocalCaptureServiceTest {
         old.onCapabilitiesChanged(network(HANDLE), capabilities(UID))
         old.onLinkPropertiesChanged(network(HANDLE), links("tun7"))
         assertTrue(publications.isEmpty())
-        service.finishLocalFrontend()
+        service.finishLocalFrontend(11)
         verify(exactly = 1) {
             connectivity.unregisterNetworkCallback(any<ConnectivityManager.NetworkCallback>())
         }
@@ -339,16 +464,18 @@ class LocalCaptureServiceTest {
                 CreateTunResult.Success(7),
                 service.openLocalFrontend(11, arrayOf("10.0.2.2/32")),
             )
+            assertEquals(7, service.takeLocalFrontendDescriptor(11))
             assertTrue(service.isLocalFrontendActive())
             assertFalse(service.bindLocalFrontend(11, "tun7"))
-            service.finishLocalFrontend()
-            assertFalse(service.isLocalFrontendActive())
             assertEquals(
-                CreateTunResult.Success(7),
-                service.openLocalFrontend(12, arrayOf("10.0.2.99/32")),
+                CaptureHandoverResult(CreateTunResult.Success(7), false),
+                service.handoverLocalFrontend(11, 12, arrayOf("10.0.2.99/32")),
             )
-            service.finishLocalFrontend()
-            service.finishLocalFrontend()
+            assertEquals(7, service.takeLocalFrontendDescriptor(12))
+            service.finishLocalFrontend(11)
+            assertTrue(service.isLocalFrontendActive())
+            service.finishLocalFrontend(12)
+            service.finishLocalFrontend(12)
             assertFalse(service.isLocalFrontendActive())
         }
         assertTrue(callbacks.isEmpty())
@@ -390,9 +517,111 @@ class LocalCaptureServiceTest {
             if (api < 30) verify(exactly = 0) { caps.ownerUid }
             if (api < 29) verify(exactly = 0) { lp.mtu }
             if (api < 33) lp.routes.forEach { route -> verify(exactly = 0) { route.type } }
-            service.finishLocalFrontend()
+            service.finishLocalFrontend(api.toLong())
             assertTrue(publications.last().third.lost)
         }
+    }
+
+    @Test
+    fun `should keep API exact observers isolated through Partial managed and Partial handovers`() {
+        for (api in listOf(28, 30, 32, 33)) {
+            setSdk(api)
+            assertEquals(
+                CreateTunResult.Success(7),
+                service.openLocalFrontend(11, arrayOf("10.0.2.2/32")),
+            )
+            assertEquals(
+                CaptureHandoverResult(CreateTunResult.Success(7), false),
+                service.handoverSecuredFrontend(11, 12, config),
+            )
+            val callback = callbacks.last()
+            val caps = capabilities(UID)
+            val lp = links("tun8")
+            callback.onCapabilitiesChanged(network(HANDLE), caps)
+            callback.onLinkPropertiesChanged(network(HANDLE), lp)
+            assertTrue(service.bindLocalFrontend(12, "tun8"))
+            service.finishLocalFrontend(11)
+            assertTrue(service.isLocalFrontendActive())
+            val observation = publications.last().third
+            assertTrue(observation.fresh)
+            assertEquals(api, observation.apiLevel)
+            assertEquals(if (api >= 30) UID else null, observation.ownerUid)
+            assertEquals(if (api >= 29) config.mtu else null, observation.mtu)
+            assertTrue(observation.routes.all { it.routeType == if (api >= 33) 1 else null })
+            if (api < 30) verify(exactly = 0) { caps.ownerUid }
+            if (api < 29) verify(exactly = 0) { lp.mtu }
+            if (api < 33) lp.routes.forEach { route -> verify(exactly = 0) { route.type } }
+            assertEquals(
+                CaptureHandoverResult(CreateTunResult.Success(7), false),
+                service.handoverLocalFrontend(12, 13, arrayOf("10.0.2.99/32")),
+            )
+            service.finishLocalFrontend(12)
+            assertTrue(publications.last().third.lost)
+            val count = publications.size
+            callback.onCapabilitiesChanged(network(HANDLE), caps)
+            callback.onLinkPropertiesChanged(network(HANDLE), lp)
+            assertEquals(count, publications.size)
+            assertTrue(service.isLocalFrontendActive())
+            service.finishLocalFrontend(13)
+            assertFalse(service.isLocalFrontendActive())
+        }
+    }
+
+    @Test
+    fun `should retain undelivered descriptors by epoch and transfer each at most once`() {
+        assertEquals(CreateTunResult.Success(7), service.openSecuredFrontend(11, config))
+        verify(exactly = 0) { descriptor.detachFd() }
+        verify(exactly = 0) { descriptor.close() }
+        assertTrue(runCatching { service.takeLocalFrontendDescriptor(10) }.isFailure)
+        assertEquals(7, service.takeLocalFrontendDescriptor(11))
+        assertTrue(runCatching { service.takeLocalFrontendDescriptor(11) }.isFailure)
+        verify(exactly = 1) { descriptor.detachFd() }
+
+        val successor = mockk<ParcelFileDescriptor>()
+        every { successor.fd } returns 8
+        every { successor.detachFd() } returns 8
+        every { successor.close() } returns Unit
+        every { anyConstructed<VpnService.Builder>().establish() } returns successor
+        assertEquals(
+            CaptureHandoverResult(CreateTunResult.Success(8), false),
+            service.handoverSecuredFrontend(11, 12, config),
+        )
+        service.finishLocalFrontend(11)
+        verify(exactly = 0) { descriptor.close() }
+        verify(exactly = 0) { successor.detachFd() }
+        verify(exactly = 0) { successor.close() }
+        assertTrue(service.isLocalFrontendActive())
+        // Simulate loss of the open result: native never takes this descriptor.
+        service.finishLocalFrontend(12)
+        service.finishLocalFrontend(12)
+        verify(exactly = 1) { successor.close() }
+        assertTrue(runCatching { service.takeLocalFrontendDescriptor(12) }.isFailure)
+        verify(exactly = 0) { ParcelFileDescriptor.adoptFd(any()) }
+        assertFalse(service.isLocalFrontendActive())
+    }
+
+    @Test
+    fun `should refuse descriptor transfer after predecessor replacement or service revoke`() {
+        assertEquals(CreateTunResult.Success(7), service.openSecuredFrontend(11, config))
+        val successor = mockk<ParcelFileDescriptor>()
+        every { successor.fd } returns 8
+        every { successor.detachFd() } returns 8
+        every { successor.close() } returns Unit
+        every { anyConstructed<VpnService.Builder>().establish() } returns successor
+        assertEquals(
+            CaptureHandoverResult(CreateTunResult.Success(8), false),
+            service.handoverSecuredFrontend(11, 12, config),
+        )
+        assertTrue(runCatching { service.takeLocalFrontendDescriptor(11) }.isFailure)
+        verify(exactly = 0) { descriptor.detachFd() }
+        service.finishLocalFrontend(11)
+        verify(exactly = 1) { descriptor.close() }
+        service.onRevoke()
+        assertTrue(runCatching { service.takeLocalFrontendDescriptor(12) }.isFailure)
+        verify(exactly = 0) { successor.detachFd() }
+        service.finishLocalFrontend(12)
+        verify(exactly = 1) { successor.close() }
+        assertFalse(service.isLocalFrontendActive())
     }
 
     private fun network(handle: Long): Network {

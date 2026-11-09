@@ -57,6 +57,7 @@ class TalpidVpnServiceFrontendTest {
         every { anyConstructed<VpnService.Builder>().setBlocking(any()) } returns builder
         val fd = mockk<ParcelFileDescriptor>()
         every { anyConstructed<VpnService.Builder>().establish() } returns fd
+        every { fd.fd } returns 7
         every { fd.detachFd() } returns 7
         every { fd.close() } returns Unit
     }
@@ -100,7 +101,7 @@ class TalpidVpnServiceFrontendTest {
             service.onRevoke()
             assertEquals(4, service.prepareLocalSocket(7, 9, 1, false))
             assertTrue(service.isLocalFrontendActive())
-            service.finishLocalFrontend()
+            service.finishLocalFrontend(1)
             assertFalse(service.isLocalFrontendActive())
         }
         verify(exactly = 0) { anyConstructed<VpnService.Builder>().addDnsServer(any<String>()) }
@@ -163,17 +164,71 @@ class TalpidVpnServiceFrontendTest {
         assertEquals(CreateTunResult.Success(7), result.get())
         assertTrue(service.foreground, "concurrent frontend was demoted after its promotion")
         service.demote { error("an active frontend must not be demoted") }
-        service.finishLocalFrontend()
+        service.finishLocalFrontend(1)
     }
 
     private class FrontendService : TalpidVpnService() {
         @Volatile var foreground = false
+        var failDemotion = false
+        val changes = mutableListOf<Boolean>()
 
         fun demote(action: () -> Unit) = withoutLocalFrontend(action)
 
         override fun onLocalFrontendChanged(active: Boolean) {
+            if (!active && failDemotion) error("foreground release acknowledgement")
+            changes += active
             foreground = active
         }
+    }
+
+    @Test
+    fun `should retain foreground through handover and ignore predecessor finish after successor opens`() {
+        assertEquals(
+            CreateTunResult.Success(7),
+            service.openLocalFrontend(11, arrayOf("10.0.2.2/32")),
+        )
+        assertEquals(
+            CreateTunResult.Success(7),
+            service.handoverLocalFrontend(11, 12, arrayOf("10.0.2.99/32")).result,
+        )
+        service.demote { error("handover lost foreground ownership") }
+        service.finishLocalFrontend(11)
+        service.finishLocalFrontend(11)
+        assertTrue(service.foreground)
+        assertTrue(service.changes.all { it })
+        service.demote { error("late predecessor finish demoted successor") }
+        service.finishLocalFrontend(12)
+        assertFalse(service.foreground)
+        assertEquals(listOf(true, true, false), service.changes)
+        service.demote { service.foreground = false }
+    }
+
+    @Test
+    fun `should retain final epoch and foreground after failed demotion until exact finish retry`() {
+        assertEquals(
+            CreateTunResult.Success(7),
+            service.openLocalFrontend(11, arrayOf("10.0.2.2/32")),
+        )
+        assertEquals(
+            CreateTunResult.Success(7),
+            service.handoverLocalFrontend(11, 12, arrayOf("10.0.2.99/32")).result,
+        )
+        service.failDemotion = true
+        service.finishLocalFrontend(11)
+        assertTrue(runCatching { service.finishLocalFrontend(12) }.isFailure)
+        assertTrue(service.isLocalFrontendActive())
+        assertTrue(service.foreground)
+        assertEquals(
+            CreateTunResult.EstablishError,
+            service.openLocalFrontend(13, arrayOf("10.0.2.99/32")),
+        )
+        service.failDemotion = false
+        service.finishLocalFrontend(11)
+        assertTrue(service.foreground)
+        service.finishLocalFrontend(12)
+        assertFalse(service.foreground)
+        assertFalse(service.isLocalFrontendActive())
+        assertEquals(listOf(true, true, false), service.changes)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -244,7 +299,7 @@ class TalpidVpnServiceFrontendTest {
                 }
             } finally {
                 fixture.invoke("stop")
-                service.finishLocalFrontend()
+                service.finishLocalFrontend(1)
                 update?.join(1000)
             }
         }

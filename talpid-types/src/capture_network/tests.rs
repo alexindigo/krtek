@@ -80,6 +80,130 @@ fn registration_generation_and_fd_binding_refuse_stale_equal_observations() {
 }
 
 #[test]
+fn handover_disarms_only_old_epoch_and_requires_fresh_exact_successor_observation() {
+    let feed = CaptureNetworkFeed::new(9);
+    let old = feed.begin(11).unwrap();
+    assert!(feed.bind(11, expected()));
+    assert!(feed.publish(9, 11, observed()));
+    let revoked = Arc::new(AtomicUsize::new(0));
+    let r = revoked.clone();
+    assert_eq!(
+        feed.acknowledge(
+            11,
+            Arc::new(move || {
+                r.fetch_add(1, Ordering::SeqCst);
+            }),
+            |_| ()
+        ),
+        Some(())
+    );
+    assert!(feed.begin_handover(10, Some(12)).is_none());
+    let next = feed.begin_handover(11, Some(12)).unwrap().unwrap();
+    assert!(
+        feed.with_ready(11, || panic!("predecessor still writable"))
+            .is_none()
+    );
+    assert!(feed.begin(13).is_none());
+    assert!(feed.begin_handover(12, Some(13)).is_none());
+    assert!(!feed.bind(11, expected()));
+    assert!(
+        feed.acknowledge(11, Arc::new(|| panic!("old reacknowledged")), |_| ())
+            .is_none()
+    );
+    let mut lost = observed();
+    lost.lost = true;
+    assert!(feed.publish(9, 11, lost));
+    assert_eq!(*old.borrow(), CaptureNetworkState::Lost);
+    assert_eq!(
+        revoked.load(Ordering::SeqCst),
+        0,
+        "expected predecessor loss retired session"
+    );
+    assert!(!feed.rollback_handover(11), "lost old fd falsely restored");
+    assert_eq!(*next.borrow(), CaptureNetworkState::Pending);
+    assert!(
+        !feed.publish(9, 12, observed()),
+        "unbound successor acknowledged"
+    );
+    assert!(feed.bind(12, expected()));
+    let mut wrong = observed();
+    wrong.interface_name = "tun-old".into();
+    assert!(!feed.publish(9, 12, wrong));
+    assert_eq!(*next.borrow(), CaptureNetworkState::Pending);
+    assert!(feed.publish(9, 12, observed()));
+    let r = revoked.clone();
+    assert_eq!(
+        feed.acknowledge(
+            12,
+            Arc::new(move || {
+                r.fetch_add(1, Ordering::SeqCst);
+            }),
+            |_| ()
+        ),
+        Some(())
+    );
+    feed.invalidate(11);
+    assert_eq!(
+        feed.with_ready(12, || b"new-sink-consumer"),
+        Some(b"new-sink-consumer")
+    );
+    assert_eq!(revoked.load(Ordering::SeqCst), 0);
+    assert!(!feed.publish(9, 11, observed()));
+    // Loss of the actual current epoch still revokes synchronously.
+    let mut lost = observed();
+    lost.lost = true;
+    assert!(feed.publish(9, 12, lost));
+    assert_eq!(revoked.load(Ordering::SeqCst), 1);
+    assert!(
+        feed.with_ready(12, || panic!("lost successor write"))
+            .is_none()
+    );
+}
+
+#[test]
+fn pre_establish_retention_restores_exact_old_feed_and_close_revokes_during_handover() {
+    for partial in [false, true] {
+        let feed = CaptureNetworkFeed::new(9);
+        let old = feed.begin(11).unwrap();
+        assert!(feed.bind(11, expected()));
+        assert!(feed.publish(9, 11, observed()));
+        let revoked = Arc::new(AtomicUsize::new(0));
+        let r = revoked.clone();
+        feed.acknowledge(
+            11,
+            Arc::new(move || {
+                r.fetch_add(1, Ordering::SeqCst);
+            }),
+            |_| (),
+        )
+        .unwrap();
+        let successor = feed.begin_handover(11, (!partial).then_some(12)).unwrap();
+        assert_eq!(successor.is_none(), partial);
+        assert!(!feed.rollback_handover(10));
+        assert!(feed.rollback_handover(11));
+        if let Some(successor) = successor {
+            assert_eq!(*successor.borrow(), CaptureNetworkState::Lost);
+        }
+        assert_eq!(
+            feed.with_ready(11, || b"retained-consumer"),
+            Some(b"retained-consumer")
+        );
+        assert_eq!(revoked.load(Ordering::SeqCst), 0);
+        assert!(matches!(*old.borrow(), CaptureNetworkState::Ready(_)));
+        assert!(feed.begin_handover(11, (!partial).then_some(13)).is_some());
+        feed.close();
+        assert_eq!(
+            revoked.load(Ordering::SeqCst),
+            1,
+            "feed shutdown lost suspended revoker"
+        );
+        assert_eq!(*old.borrow(), CaptureNetworkState::Lost);
+        assert!(!feed.rollback_handover(11));
+        assert!(feed.begin(14).is_none());
+    }
+}
+
+#[test]
 fn exact_config_and_loss_revoke_before_notification_and_cannot_recover_in_place() {
     let mutations: [fn(&mut CaptureNetworkObservation); 10] = [
         |o| o.routes.clear(),

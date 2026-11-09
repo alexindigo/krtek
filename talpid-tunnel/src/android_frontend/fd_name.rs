@@ -7,26 +7,42 @@ use std::{
 };
 
 pub fn interface_name(fd: BorrowedFd<'_>) -> io::Result<String> {
-    query(fd, |fd, request| {
-        // SAFETY: request is the installed target ABI's complete writable ifreq.
-        // TUNGETIFF is read-only; fd stays borrowed, without dup/adoption/closure.
-        let result = unsafe { libc::ioctl(fd.as_raw_fd(), libc::TUNGETIFF, request) };
-        if result < 0 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(())
-        }
-    })
+    query(fd, ioctl)
+}
+
+pub(super) fn flags(fd: BorrowedFd<'_>) -> io::Result<u16> {
+    let request = query_request(fd, ioctl)?;
+    // SAFETY: TUNGETIFF initializes ifr_flags in the target ABI's ifreq union.
+    Ok(unsafe { request.ifr_ifru.ifru_flags } as u16)
+}
+
+fn ioctl(fd: BorrowedFd<'_>, request: &mut libc::ifreq) -> io::Result<()> {
+    // SAFETY: request is the installed target ABI's complete writable ifreq.
+    // TUNGETIFF is read-only; fd stays borrowed, without dup/adoption/closure.
+    let result = unsafe { libc::ioctl(fd.as_raw_fd(), libc::TUNGETIFF, request) };
+    if result < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+fn query_request(
+    fd: BorrowedFd<'_>,
+    operation: impl FnOnce(BorrowedFd<'_>, &mut libc::ifreq) -> io::Result<()>,
+) -> io::Result<libc::ifreq> {
+    // SAFETY: ifreq is a C POD of integer/byte fields, pointers and a union;
+    // all-zero is a valid initial representation for this output-only ioctl.
+    let mut request: libc::ifreq = unsafe { std::mem::zeroed() };
+    operation(fd, &mut request)?;
+    Ok(request)
 }
 
 fn query(
     fd: BorrowedFd<'_>,
     operation: impl FnOnce(BorrowedFd<'_>, &mut libc::ifreq) -> io::Result<()>,
 ) -> io::Result<String> {
-    // SAFETY: ifreq is a C POD of integer/byte fields, pointers and a union;
-    // all-zero is a valid initial representation for this output-only ioctl.
-    let mut request: libc::ifreq = unsafe { std::mem::zeroed() };
-    operation(fd, &mut request)?;
+    let request = query_request(fd, operation)?;
     let bytes = request.ifr_name.map(|value| value as u8);
     let end = bytes
         .iter()

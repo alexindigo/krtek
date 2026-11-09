@@ -25,6 +25,7 @@ async fn one_local_tcp_and_udp_engine_outlives_target_cancel_detach_and_replacem
         config,
         managed_forwarder(authority.clone()),
         updates,
+        broker.clone(),
     )
     .unwrap();
     bounded(owner.ready()).await.unwrap();

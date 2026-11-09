@@ -24,6 +24,7 @@ import net.mullvad.mullvadvpn.lib.common.util.EstablishError.ParameterNotApplied
 import net.mullvad.mullvadvpn.lib.common.util.establishSafe
 import net.mullvad.mullvadvpn.lib.common.util.prepareVpnSafe
 import net.mullvad.mullvadvpn.lib.model.PrepareError
+import net.mullvad.talpid.model.CaptureHandoverResult
 import net.mullvad.talpid.model.CreateTunResult
 import net.mullvad.talpid.model.CreateTunResult.EstablishError
 import net.mullvad.talpid.model.CreateTunResult.InvalidDnsServers
@@ -40,8 +41,10 @@ open class TalpidVpnService : LifecycleVpnService() {
     private lateinit var localNetworkWatcher: LocalNetworkWatcher
     private val localFrontendOwnership = LocalFrontendOwnership()
     private var captureRegistration = 0L
-    private var captureGeneration: Long? = null
-    private var captureObserver: LocalCaptureNetworkObserver? = null
+    private val captureObservers = mutableMapOf<Long, LocalCaptureNetworkObserver>()
+    // Until native has decoded the complete result, this epoch still owns the
+    // established descriptor. A lost acknowledgement is cleaned by exact finish.
+    private val pendingCaptureDescriptors = mutableMapOf<Long, ParcelFileDescriptor>()
     private var activeTunStatus by
         observable<CreateTunResult?>(null) { _, oldTunStatus, _ ->
             val oldTunFd =
@@ -107,15 +110,16 @@ open class TalpidVpnService : LifecycleVpnService() {
     @Suppress("Unused")
     fun bindLocalFrontend(generation: Long, interfaceName: String): Boolean =
         synchronized(this) {
-            captureGeneration == generation && captureObserver?.bind(interfaceName) == true
+            captureObservers[generation]?.bind(interfaceName) == true
         }
 
-    // Used by JNI. Native receives the sole descriptor; Kotlin retains only ownership state.
+    // Used by JNI. Success reports the borrowed number; exact take transfers the
+    // sole descriptor after conversion. This never enters the Native TUN cache.
     @Suppress("Unused")
     fun openLocalFrontend(generation: Long, routes: Array<String>): CreateTunResult =
         synchronized(this) {
             val config = LocalFrontendConfig.parse(routes) ?: return EstablishError
-            openFrontend(generation) { createLocalFrontend(config) }
+            openFrontend(generation) { createLocalFrontend(generation, config) {} }
         }
 
     /**
@@ -130,24 +134,74 @@ open class TalpidVpnService : LifecycleVpnService() {
                     !config.validIpv6Routes()
             )
                 return EstablishError
-            openFrontend(generation) {
-                either {
-                    prepareVpnSafe().mapLeft { it.toCreateTunError() }.bind()
-                    val builder = Builder()
-                    // Refuse invalid config before establishing. The Native path keeps
-                    // its upstream blocking fallbacks; secured capture must be exact.
-                    builder.configureWith(config).mapLeft { EstablishError }.bind()
-                    builder
-                        .establishSafe()
-                        .mapLeft { EstablishError }
-                        .bind()
-                        .use {
-                            frontendEstablished(it, observeCapture = true)
-                        }
-                }
-                    .merge()
+            openFrontend(generation) { createSecuredFrontend(generation, config) {} }
+        }
+
+    @Suppress("Unused")
+    fun handoverLocalFrontend(
+        predecessor: Long,
+        generation: Long,
+        routes: Array<String>,
+    ): CaptureHandoverResult =
+        synchronized(this) {
+            val config =
+                LocalFrontendConfig.parse(routes)
+                    ?: return CaptureHandoverResult(
+                        EstablishError,
+                        localFrontendOwnership.predecessorCurrent(predecessor),
+                    )
+            handoverFrontend(predecessor, generation) { establishing ->
+                createLocalFrontend(generation, config, establishing)
             }
         }
+
+    @Suppress("Unused")
+    fun handoverSecuredFrontend(
+        predecessor: Long,
+        generation: Long,
+        config: TunConfig,
+    ): CaptureHandoverResult =
+        synchronized(this) {
+            if (
+                !supportsCaptureObservation() ||
+                    !config.validSecuredFields() ||
+                    !config.validIpv6Routes()
+            )
+                return CaptureHandoverResult(
+                    EstablishError,
+                    localFrontendOwnership.predecessorCurrent(predecessor),
+                )
+            handoverFrontend(predecessor, generation) { establishing ->
+                createSecuredFrontend(generation, config, establishing)
+            }
+        }
+
+    private fun handoverFrontend(
+        predecessor: Long,
+        generation: Long,
+        create: (() -> Unit) -> CreateTunResult,
+    ): CaptureHandoverResult {
+        if (!localFrontendOwnership.tryHandover(predecessor, generation))
+            return CaptureHandoverResult(
+                EstablishError,
+                localFrontendOwnership.predecessorCurrent(predecessor),
+            )
+        var enteredEstablish = false
+        val result =
+            try {
+                create {
+                    enteredEstablish = true
+                    localFrontendOwnership.establishing(generation)
+                }
+            } catch (_: RuntimeException) {
+                EstablishError
+            }
+        // Both obligations remain native-owned, including failure/acknowledgement
+        // loss. Only an exact finish after joined fd closure may release either.
+        if (enteredEstablish && result !is CreateTunResult.Success)
+            localFrontendOwnership.establishmentFailed(generation)
+        return CaptureHandoverResult(result, !enteredEstablish)
+    }
 
     private fun supportsCaptureObservation() = captureRegistration > 0L
 
@@ -157,8 +211,7 @@ open class TalpidVpnService : LifecycleVpnService() {
             mtu >= BLOCKING_MTU
 
     private fun openFrontend(generation: Long, create: () -> CreateTunResult): CreateTunResult {
-        if (generation <= 0 || !localFrontendOwnership.tryFrontend()) return EstablishError
-        captureGeneration = generation
+        if (!localFrontendOwnership.tryFrontend(generation)) return EstablishError
         val result =
             try {
                 create()
@@ -167,42 +220,76 @@ open class TalpidVpnService : LifecycleVpnService() {
             }
         if (result !is CreateTunResult.Success) {
             // No detached fd exists. Keep ownership if callback release fails.
-            closeCaptureObservation()
-            onLocalFrontendChanged(false)
-            captureGeneration = null
-            localFrontendOwnership.frontendFinished()
+            finishLocalFrontend(generation)
         }
         return result
     }
 
     private fun frontendEstablished(
+        generation: Long,
         descriptor: ParcelFileDescriptor,
         observeCapture: Boolean,
     ): CreateTunResult {
+        pendingCaptureDescriptors[generation] = descriptor
         onLocalFrontendChanged(true)
         if (observeCapture && captureRegistration > 0) {
             val observer =
                 LocalCaptureNetworkObserver(
                     checkNotNull(getSystemService<ConnectivityManager>()),
                     captureRegistration,
-                    checkNotNull(captureGeneration),
+                    generation,
                 )
-            captureObserver = observer
+            captureObservers[generation] = observer
             observer.start()
         }
-        return CreateTunResult.Success(descriptor.detachFd())
+        return CreateTunResult.Success(descriptor.fd)
     }
 
+    // Used by JNI only after every fallible result conversion has succeeded.
+    // detachFd transfers the sole descriptor; no wrapper adopts it a second time.
+    @Suppress("Unused")
+    fun takeLocalFrontendDescriptor(generation: Long): Int =
+        synchronized(this) {
+            check(localFrontendOwnership.predecessorCurrent(generation))
+            val descriptor = checkNotNull(pendingCaptureDescriptors[generation])
+            val fd = descriptor.detachFd()
+            pendingCaptureDescriptors.remove(generation)
+            fd
+        }
+
     private fun invalidateCaptureObservation() {
-        captureObserver?.invalidate()
+        captureObservers.values.forEach { it.invalidate() }
     }
 
     private fun closeCaptureObservation() {
-        captureObserver?.close()
-        captureObserver = null
+        // Invalidate all epochs before the first fallible unregister.
+        invalidateCaptureObservation()
+        val pending = captureObservers.entries.iterator()
+        while (pending.hasNext()) {
+            pending.next().value.close()
+            pending.remove()
+        }
     }
 
-    private fun createLocalFrontend(config: LocalFrontendConfig): CreateTunResult = either {
+    private fun createSecuredFrontend(
+        generation: Long,
+        config: TunConfig,
+        establishing: () -> Unit,
+    ): CreateTunResult = either {
+        prepareVpnSafe().mapLeft { it.toCreateTunError() }.bind()
+        val builder = Builder()
+        builder.configureWith(config).mapLeft { EstablishError }.bind()
+        establishing()
+        val descriptor = builder.establishSafe().mapLeft { EstablishError }.bind()
+        frontendEstablished(generation, descriptor, observeCapture = true)
+    }
+        .merge()
+
+    private fun createLocalFrontend(
+        generation: Long,
+        config: LocalFrontendConfig,
+        establishing: () -> Unit,
+    ): CreateTunResult = either {
         prepareVpnSafe().mapLeft { it.toCreateTunError() }.bind()
         val builder = Builder()
         config.configure(
@@ -212,20 +299,23 @@ open class TalpidVpnService : LifecycleVpnService() {
         builder.setMtu(BLOCKING_MTU)
         builder.setBlocking(false)
         builder.setMeteredIfSupported(false)
+        establishing()
         val descriptor = builder.establishSafe().mapLeft { EstablishError }.bind()
-        descriptor.use { frontendEstablished(it, observeCapture = false) }
+        frontendEstablished(generation, descriptor, observeCapture = false)
     }
         .merge()
 
     @Suppress("Unused")
-    fun finishLocalFrontend(): Unit =
+    fun finishLocalFrontend(generation: Long): Unit =
         synchronized(this) {
-            if (localFrontendOwnership.frontendActive) {
-                closeCaptureObservation()
-                onLocalFrontendChanged(false)
-                captureGeneration = null
-                localFrontendOwnership.frontendFinished()
-            }
+            if (!localFrontendOwnership.owns(generation)) return
+            captureObservers[generation]?.invalidate()
+            pendingCaptureDescriptors[generation]?.close()
+            pendingCaptureDescriptors.remove(generation)
+            captureObservers[generation]?.close()
+            captureObservers.remove(generation)
+            if (localFrontendOwnership.isLast(generation)) onLocalFrontendChanged(false)
+            localFrontendOwnership.frontendFinished(generation)
         }
 
     @Suppress("Unused")

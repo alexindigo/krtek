@@ -65,6 +65,8 @@ struct Platform {
     name_error: AtomicBool,
     bind_error: AtomicBool,
     open_error: AtomicBool,
+    format_flags: Mutex<Option<u16>>,
+    format_calls: AtomicUsize,
 }
 impl Platform {
     fn new() -> (Arc<Self>, AsyncFd<OwnedFd>) {
@@ -78,6 +80,16 @@ impl Platform {
     }
 }
 impl FrontendPlatform for Platform {
+    fn handover(&self, _: i64, _: i64, _: &CaptureConfig) -> CaptureHandover {
+        CaptureHandover {
+            descriptor: Err(io::ErrorKind::Unsupported.into()),
+            predecessor_retained: true,
+        }
+    }
+    fn capture_format(&self, _: BorrowedFd<'_>) -> io::Result<CaptureFormat> {
+        self.format_calls.fetch_add(1, SeqCst);
+        CaptureFormat::from_flags(self.format_flags.lock().unwrap().unwrap_or(0x1001))
+    }
     fn open(&self, generation: i64, config: &CaptureConfig) -> io::Result<OwnedFd> {
         assert!(generation > 0);
         self.generation.store(generation as u64, SeqCst);
@@ -162,7 +174,7 @@ impl FrontendPlatform for Platform {
         }
         Ok(true)
     }
-    fn closed(&self) -> io::Result<()> {
+    fn closed(&self, _: i64) -> io::Result<()> {
         let descriptor = self.descriptor.lock().unwrap();
         let (path, old) = descriptor.as_ref().unwrap();
         assert_ne!(
@@ -209,8 +221,13 @@ async fn start<A: LocalAuthority>(
     forwarder: Forwarder<A>,
     updates: watch::Receiver<u64>,
 ) -> io::Result<FrontendOwner> {
-    let mut owner =
-        FrontendOwner::start(platform, CaptureConfig::Partial(routes), forwarder, updates)?;
+    let mut owner = FrontendOwner::start(
+        platform,
+        CaptureConfig::Partial(routes),
+        forwarder,
+        updates,
+        managed::broker(),
+    )?;
     if let Err(error) = owner.ready().await {
         owner.stop().await?;
         return Err(error);
@@ -651,8 +668,8 @@ async fn stop_drop_eof_and_route_replacement_preserve_single_descriptor_ownershi
     bounded(state.wait_for(|s| *s == FrontendState::Failed))
         .await
         .unwrap();
-    assert_eq!(platform.closed.load(SeqCst), 1);
     owner.stop().await.unwrap();
+    assert_eq!(platform.closed.load(SeqCst), 1);
 }
 
 #[tokio::test]
@@ -1005,6 +1022,17 @@ struct PausedPlatform {
     pause: Arc<Pause>,
 }
 impl FrontendPlatform for PausedPlatform {
+    fn handover(
+        &self,
+        predecessor: i64,
+        generation: i64,
+        config: &CaptureConfig,
+    ) -> CaptureHandover {
+        self.inner.handover(predecessor, generation, config)
+    }
+    fn capture_format(&self, fd: BorrowedFd<'_>) -> io::Result<CaptureFormat> {
+        self.inner.capture_format(fd)
+    }
     fn open(&self, generation: i64, config: &CaptureConfig) -> io::Result<OwnedFd> {
         let fd = self.inner.open(generation, config)?;
         self.pause.enter();
@@ -1026,8 +1054,8 @@ impl FrontendPlatform for PausedPlatform {
     fn bind(&self, generation: i64, interface: &str) -> io::Result<bool> {
         self.inner.bind(generation, interface)
     }
-    fn closed(&self) -> io::Result<()> {
-        self.inner.closed()
+    fn closed(&self, generation: i64) -> io::Result<()> {
+        self.inner.closed(generation)
     }
 }
 
@@ -1148,6 +1176,7 @@ async fn release_failure_retains_ownership_until_explicit_joined_retry() {
             CaptureConfig::Partial(routes()),
             test_forwarder(Arc::new(Authority::default())),
             rx.clone(),
+            managed::broker(),
         )
         .unwrap();
         let mut state = owner.state();
@@ -1225,6 +1254,7 @@ async fn cancelled_readiness_and_stop_keep_the_recovery_owner() {
         CaptureConfig::Partial(routes()),
         test_forwarder(Arc::new(Authority::default())),
         rx,
+        managed::broker(),
     )
     .unwrap();
     bounded(pause.entered.notified()).await;
@@ -1300,9 +1330,11 @@ async fn fatal_sink_write_joins_physical_work_before_close_release_and_failed_pu
     bounded(state.wait_for(|s| *s == FrontendState::Failed))
         .await
         .unwrap();
+    // Failed publishes after the physical join; asynchronous platform finish is
+    // separately acknowledged by Stop, including for observation-free Partial.
+    owner.stop().await.unwrap();
     assert_eq!(platform.closed.load(SeqCst), 1);
     assert!(!platform.active.load(SeqCst));
-    owner.stop().await.unwrap();
     // The physical preparation completed, but cleanup never delivered its nonce.
     assert!(hits.try_recv().is_err());
     echo.abort();
@@ -1344,5 +1376,7 @@ async fn short_and_zero_packet_writes_are_fatal_at_the_checked_sink_boundary() {
     }
 }
 
+#[path = "handover_tests.rs"]
+mod handover;
 #[path = "managed_tests.rs"]
 mod managed;
