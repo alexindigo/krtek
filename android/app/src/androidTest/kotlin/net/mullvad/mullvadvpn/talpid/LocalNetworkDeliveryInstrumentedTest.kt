@@ -1714,24 +1714,31 @@ class LocalNetworkDeliveryInstrumentedTest {
                         delimitedField(agent, "network{", '}')?.takeIf { value ->
                             value.isNotEmpty() && value.all { it in '0'..'9' }
                         }
-                    if (expectedTunnel != "Disconnected" && iface != null && netId != null) {
-                        assertEquals(
-                            fixedCapture,
-                            frontend,
-                            "App-facing router capture must keep the fixed source pair",
-                        )
-                        assertTrue(addresses.isNotEmpty() && dns.isNotEmpty())
+                    if (expectedTunnel != "Disconnected") {
                         val mtu = checkNotNull(tokenField(agent, "MTU: ")).toInt()
-                        assertTrue(mtu >= 1280)
-                        if (fixedCapture) assertEquals(1280, mtu)
-                        val identity = captureReceipt(iface, netId, allRoutes, mtu)
-                        if (identity.first == previousGeneration) {
+                        if (
+                            iface == null ||
+                                netId == null ||
+                                !CaptureReadiness.configurationReady(
+                                    frontend == fixedCapture && addresses.isNotEmpty(),
+                                    dns,
+                                    mtu,
+                                    allRoutes,
+                                    expected,
+                                    if (fixedCapture) 1280 else null,
+                                )
+                        ) {
+                            delay(100)
+                            continue
+                        }
+                        val identity =
+                            captureReceipt(iface, netId, allRoutes, mtu, previousGeneration)
+                        if (identity == null) {
                             delay(100)
                             continue
                         }
                         if (forwarding == ForwardingAvailability.Active) {
                             assertTrue(policy.enabled && expected.isNotEmpty())
-                            assertTrue(allRoutes.containsAll(expected))
                             report("frontend", "present-managed")
                         } else {
                             assertEquals(ForwardingAvailability.Off, forwarding)
@@ -1768,7 +1775,11 @@ class LocalNetworkDeliveryInstrumentedTest {
                     ) {
                         assertTrue(routes.none { it.endsWith("/0") })
                         assertEquals(1280, checkNotNull(tokenField(agent, "MTU: ")).toInt())
-                        val generation = partialCaptureFormat()
+                        val generation = partialCaptureFormat(previousGeneration)
+                        if (generation == null) {
+                            delay(100)
+                            continue
+                        }
                         report("frontend", "present")
                         report("frontend_interface", iface)
                         report("frontend_net_id", netId)
@@ -1805,30 +1816,14 @@ class LocalNetworkDeliveryInstrumentedTest {
             ByteArray(size).also { log.readFully(it) }.toString(Charsets.UTF_8)
         }
 
-    private fun partialCaptureFormat(): String {
-        val tail = daemonTail()
-        val current =
-            tail
-                .lineSequence()
-                .last { it.contains("router-authority ") }
-                .substringAfter(" current=")
-        assertTrue(current.contains("capture_ready: true"), "Partial native sink must be usable")
-        assertTrue(current.contains("ordinary_ready: false"), "Partial must not retain a target")
-        val generation =
-            checkNotNull(Regex("capture_generation: Some\\(([0-9]+)\\)").find(current))
-                .groupValues[1]
-        val session =
-            checkNotNull(Regex("session_generation: Some\\(([0-9]+)\\)").find(current))
-                .groupValues[1]
-        val format =
-            tail.lineSequence().last { it.contains("capture-format generation=$generation ") }
-        assertTrue(format.contains("representation=plain-ip"))
-        val flags = format.substringAfter("flags=0x").trim().toInt(16)
-        assertEquals(0x1001, flags and 0x5003, "TUN/NO_PI without TAP or VNET_HDR")
-        report("capture_generation", generation)
-        report("capture_session_generation", session)
-        report("capture_format", format)
-        return generation
+    private fun partialCaptureFormat(previousGeneration: String?): String? {
+        if (!File(target.filesDir, "daemon.log").isFile) return null
+        val receipt =
+            CaptureReadiness.partialReceipt(daemonTail(), previousGeneration) ?: return null
+        report("capture_generation", receipt.generation)
+        report("capture_session_generation", receipt.session)
+        report("capture_format", receipt.format)
+        return receipt.generation
     }
 
     private fun captureReceipt(
@@ -1836,35 +1831,31 @@ class LocalNetworkDeliveryInstrumentedTest {
         netId: String,
         routes: Set<String>,
         mtu: Int,
-    ): Pair<String, String> {
-        val tail = daemonTail()
-        val line =
-            tail.lineSequence().last {
-                (it.contains("capture-ready ") || it.contains("capture-lost ")) &&
-                    it.contains(" network=$netId interface=$iface ")
+        previousGeneration: String?,
+    ): Pair<String, String>? {
+        val file = File(target.filesDir, "daemon.log")
+        if (!file.isFile) return null
+        val tail =
+            RandomAccessFile(file, "r").use { log ->
+                val size = minOf(log.length(), 256 * 1024L).toInt()
+                log.seek(log.length() - size)
+                ByteArray(size).also { log.readFully(it) }.toString(Charsets.UTF_8)
             }
-        assertTrue(line.contains("capture-ready "), "Current capture must not have been lost")
-        val ready = line.substringAfter("capture-ready ")
-        val generation =
-            checkNotNull(tokenField(ready, "generation: ") ?: tokenField(ready, "generation="))
-        val handle = checkNotNull(tokenField(ready, "handle="))
-        assertTrue(generation.toULong() > 0uL && handle.toULong() > 0uL)
-        assertTrue(ready.contains("owner_uid=Some(${target.applicationInfo.uid})"))
-        assertTrue(ready.contains("mtu=Some($mtu)"))
-        val requested =
-            ready.substringAfter("requested_routes=").substringBefore(" observed_routes=")
-        val observed = ready.substringAfter("observed_routes=").substringBefore(" api=")
-        assertEquals(requested, observed, "Exact pushed route receipt, never a superset")
-        val prefixes =
-            Regex("""CapturePrefix \{ address: ([^,]+), prefix_length: ([0-9]+) \}""")
-                .findAll(observed)
-                .map { canonicalPrefix("${it.groupValues[1]}/${it.groupValues[2]}") }
-                .toSet()
-        assertEquals(routes, prefixes, "Capture-owned receipt must match current Android routes")
-        report("capture_generation", generation)
-        report("capture_handle", handle)
-        report("capture_receipt", ready)
-        return generation to handle
+        val receipt =
+            CaptureReadiness.receipt(
+                tail,
+                iface,
+                netId,
+                routes,
+                mtu,
+                target.applicationInfo.uid,
+                previousGeneration,
+                ::canonicalPrefix,
+            ) ?: return null
+        report("capture_generation", receipt.generation)
+        report("capture_handle", receipt.handle)
+        report("capture_receipt", receipt.text)
+        return receipt.generation to receipt.handle
     }
 
     private inner class Consumer : AutoCloseable {
