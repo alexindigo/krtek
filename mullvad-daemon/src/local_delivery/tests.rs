@@ -128,6 +128,7 @@ fn authority() -> Arc<DeliveryAuthority> {
     Arc::new(DeliveryAuthority::new(&policy(), Arc::new(|_, _| Ok(()))))
 }
 
+#[cfg(any(target_os = "android", target_os = "linux"))]
 fn assigned_config() -> talpid_tunnel::tun_provider::TunConfig {
     let mut config = talpid_tunnel::tun_provider::blocking_config();
     config.addresses = vec![
@@ -176,6 +177,7 @@ fn broker() -> AttachmentBroker {
     broker
 }
 
+#[cfg(any(target_os = "android", target_os = "linux"))]
 #[tokio::test]
 async fn assigned_sources_and_capture_identity_are_required_at_prepare_and_output() {
     let count = Arc::new(AtomicUsize::new(0));
@@ -289,6 +291,7 @@ async fn assigned_sources_and_capture_identity_are_required_at_prepare_and_outpu
     assert!(authority.authorize(flow(Transport::Udp, 40103)).is_ok());
 }
 
+#[cfg(any(target_os = "android", target_os = "linux"))]
 #[tokio::test]
 async fn connected_status_requires_the_current_capture_and_activated_attempt() {
     use crate::local_network::TunnelPhase;
@@ -1242,6 +1245,7 @@ async fn in_owner_reconciliation_coalesces_settings_and_retains_grants_across_ca
     assert!(!authority.current(&grant));
 }
 
+#[cfg(any(target_os = "android", target_os = "linux"))]
 #[tokio::test]
 async fn a_foreign_runtime_request_cannot_replace_or_revoke_the_current_session() {
     let control = Arc::new(Control::default());
@@ -1276,6 +1280,7 @@ async fn a_foreign_runtime_request_cannot_replace_or_revoke_the_current_session(
     delivery.stop().await.unwrap();
 }
 
+#[cfg(any(target_os = "android", target_os = "linux"))]
 #[tokio::test]
 async fn successor_reserved_destinations_are_published_before_its_owner_command() {
     let control = Arc::new(Control::default());

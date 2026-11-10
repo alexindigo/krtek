@@ -1613,5 +1613,5 @@ impl AttachmentReply {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any(target_os = "android", target_os = "linux")))]
 mod tests;
