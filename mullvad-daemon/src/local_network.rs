@@ -57,6 +57,9 @@ impl ConnectContinuation {
     pub fn joined(&self) -> bool {
         self.observed_initial && self.joined
     }
+    pub fn disconnected_and_joined(&self, state: &mullvad_types::states::TunnelState) -> bool {
+        state.is_disconnected() && self.joined()
+    }
     #[cfg(any(target_os = "android", test))]
     pub fn connect(&mut self) {
         self.requested = true;
@@ -706,6 +709,36 @@ mod tests {
         );
         runtime.shutdown().await.unwrap();
         assert!(broker.snapshot().closed);
+    }
+
+    #[test]
+    fn shutdown_waits_for_join_after_connect_is_queued_on_cached_disconnected() {
+        use mullvad_types::states::TunnelState;
+        let cached = TunnelState::Disconnected {
+            location: None,
+            #[cfg(not(target_os = "android"))]
+            locked_down: false,
+        };
+        let mut intent = ConnectContinuation::default();
+        assert!(!intent.disconnected_and_joined(&cached));
+        intent.observe(TunnelPhase::Disconnected);
+        assert!(intent.disconnected_and_joined(&cached));
+        intent.connect();
+        intent.selected(&policy(), true);
+        intent.disconnect();
+        // Ignored shutdown events do not update the cached tunnel state or join.
+        for _ignored_event in 0..3 {
+            assert!(!intent.disconnected_and_joined(&cached));
+        }
+        for phase in [TunnelPhase::Connecting, TunnelPhase::Disconnecting] {
+            intent.observe(phase);
+            assert!(!intent.disconnected_and_joined(&cached));
+        }
+        intent.observe(TunnelPhase::Disconnected);
+        assert!(intent.disconnected_and_joined(&cached));
+        let disconnecting =
+            TunnelState::Disconnecting(talpid_types::tunnel::ActionAfterDisconnect::Nothing);
+        assert!(!intent.disconnected_and_joined(&disconnecting));
     }
 
     #[test]

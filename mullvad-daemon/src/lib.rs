@@ -1189,7 +1189,10 @@ impl Daemon {
 
     /// Begin disconnecting and wait for the tunnel state machine to be disconnected
     async fn disconnect_tunnel_and_wait(&mut self) {
-        if self.tunnel_state.is_disconnected() && self.local_connect.joined() {
+        if self
+            .local_connect
+            .disconnected_and_joined(&self.tunnel_state)
+        {
             return;
         }
 
@@ -1205,7 +1208,10 @@ impl Daemon {
                 }
             }
 
-            if self.tunnel_state.is_disconnected() {
+            if self
+                .local_connect
+                .disconnected_and_joined(&self.tunnel_state)
+            {
                 break;
             }
         }
