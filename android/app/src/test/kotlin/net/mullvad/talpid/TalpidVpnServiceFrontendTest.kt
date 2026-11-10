@@ -45,13 +45,20 @@ class TalpidVpnServiceFrontendTest {
         mockkStatic("net.mullvad.mullvadvpn.lib.common.util.VpnServiceUtilsKt")
         mockkStatic(Looper::class)
         every { Looper.getMainLooper() } returns mockk()
-        service = spyk(FrontendService())
+        service = spyk(FrontendService(), recordPrivateCalls = true)
+        every { service getProperty "connectivityListener" } returns
+            mockk<ConnectivityListener>(relaxed = true)
         every { service.prepareVpnSafe() } returns Prepared.right()
         mockkConstructor(VpnService.Builder::class)
         val builder = mockk<VpnService.Builder>(relaxed = true)
         every { anyConstructed<VpnService.Builder>().addAddress(any<String>(), any()) } returns
             builder
+        every { anyConstructed<VpnService.Builder>().addAddress(any<InetAddress>(), any()) } returns
+            builder
+        every { anyConstructed<VpnService.Builder>().addDnsServer(any<String>()) } returns builder
         every { anyConstructed<VpnService.Builder>().addRoute(any<InetAddress>(), any()) } returns
+            builder
+        every { anyConstructed<VpnService.Builder>().addRoute(any<String>(), any()) } returns
             builder
         every { anyConstructed<VpnService.Builder>().setMtu(any()) } returns builder
         every { anyConstructed<VpnService.Builder>().setBlocking(any()) } returns builder
@@ -197,6 +204,60 @@ class TalpidVpnServiceFrontendTest {
         assertEquals(CreateTunResult.Success(7), result.get())
         assertTrue(service.foreground, "concurrent frontend was demoted after its promotion")
         service.demote { error("an active frontend must not be demoted") }
+        service.finishLocalFrontend(1)
+    }
+
+    @Test
+    fun `should release upstream ownership after a closed open result`() {
+        every { anyConstructed<VpnService.Builder>().establish() } returns null
+        assertEquals(
+            CreateTunResult.EstablishError,
+            service.openTun(TalpidVpnServiceFallbackDnsTest.baseTunConfig),
+        )
+        val fd = mockk<ParcelFileDescriptor>()
+        every { anyConstructed<VpnService.Builder>().establish() } returns fd
+        every { fd.fd } returns 8
+        every { fd.close() } returns Unit
+        assertEquals(
+            CreateTunResult.Success(8),
+            service.openLocalFrontend(1, arrayOf("10.0.2.2/32")),
+        )
+        service.finishLocalFrontend(1)
+    }
+
+    @Test
+    fun `should retain upstream ownership for descriptor bearing errors until close`() {
+        mockkStatic(ParcelFileDescriptor::class)
+        val closed = mockk<ParcelFileDescriptor>(relaxed = true)
+        every { ParcelFileDescriptor.adoptFd(7) } returns closed
+        val config =
+            TalpidVpnServiceFallbackDnsTest.baseTunConfig.copy(
+                dnsServers = arrayListOf(InetAddress.getByName("1.1.1.1"))
+            )
+        every { anyConstructed<VpnService.Builder>().addDnsServer(any<InetAddress>()) } throws
+            IllegalArgumentException("invalid DNS")
+        val invalidDns = service.openTun(config)
+        assertTrue(invalidDns is CreateTunResult.InvalidDnsServers && invalidDns.isOpen)
+        assertEquals(
+            CreateTunResult.EstablishError,
+            service.openLocalFrontend(1, arrayOf("10.0.2.2/32")),
+        )
+        service.closeTun()
+        every { anyConstructed<VpnService.Builder>().addDnsServer(any<InetAddress>()) } returns
+            mockk(relaxed = true)
+        val invalidIpv6 =
+            service.openTun(config.copy(dnsServers = arrayListOf(InetAddress.getByName("::1"))))
+        assertTrue(invalidIpv6 is CreateTunResult.InvalidIpv6Config && invalidIpv6.isOpen)
+        assertEquals(
+            CreateTunResult.EstablishError,
+            service.openLocalFrontend(1, arrayOf("10.0.2.2/32")),
+        )
+        service.closeTun()
+        assertEquals(
+            CreateTunResult.Success(7),
+            service.openLocalFrontend(1, arrayOf("10.0.2.2/32")),
+        )
+        verify(exactly = 2) { closed.close() }
         service.finishLocalFrontend(1)
     }
 

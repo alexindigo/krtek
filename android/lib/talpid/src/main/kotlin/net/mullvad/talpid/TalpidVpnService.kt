@@ -366,7 +366,10 @@ open class TalpidVpnService : LifecycleVpnService() {
     fun openTun(config: TunConfig): CreateTunResult =
         synchronized(this) {
             if (!localFrontendOwnership.tryUpstream()) return EstablishError
-            createTun(config).merge().also { activeTunStatus = it }
+            createTun(config).merge().also {
+                activeTunStatus = it
+                if (!it.isOpen) localFrontendOwnership.upstreamClosed()
+            }
         }
 
     // Used by JNI
