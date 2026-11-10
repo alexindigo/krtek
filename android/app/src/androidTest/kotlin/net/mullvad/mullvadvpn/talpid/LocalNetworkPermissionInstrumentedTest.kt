@@ -27,6 +27,8 @@ import org.koin.android.ext.android.getKoin
 /**
  * Real shipped MainActivity and permission requester. Each method states the device permission
  * state it needs; the device runner stages that state before the method and restores it after.
+ * Excluded from Gradle's default unstaged suite. Invoke individual methods through adb, not the
+ * entire class; do not revoke permissions inside the instrumented target process.
  */
 class LocalNetworkPermissionInstrumentedTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()

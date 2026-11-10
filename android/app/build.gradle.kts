@@ -56,6 +56,10 @@ android {
         versionCode = appVersion.code
         versionName = appVersion.name.value
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // These methods require mutually exclusive permission states staged externally.
+        // The device runner invokes each method directly, with exact restoration.
+        testInstrumentationRunnerArguments["notClass"] =
+            "net.mullvad.mullvadvpn.talpid.LocalNetworkPermissionInstrumentedTest"
 
         lint {
             lintConfig = file("${rootProject.projectDir}/config/lint.xml")
