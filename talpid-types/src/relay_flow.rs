@@ -391,6 +391,9 @@ impl RelayCaptureOwner {
         )?;
         state.last_sink = generation.get();
         state.sink = Some(sink.clone());
+        let records = sink_records(&state, true, "sink-bound");
+        drop(state);
+        emit_records(records);
         Ok(sink)
     }
 
@@ -407,6 +410,9 @@ impl RelayCaptureOwner {
             return Err(RelayFlowError::Stale);
         }
         state.sink = None;
+        let records = sink_records(&state, false, "sink-suspended");
+        drop(state);
+        emit_records(records);
         Ok(())
     }
 
@@ -418,11 +424,28 @@ impl RelayCaptureOwner {
             return Err(RelayFlowError::Stale);
         }
         state.sink = Some(sink.clone());
+        let records = sink_records(&state, true, "sink-resumed");
+        drop(state);
+        emit_records(records);
         Ok(())
     }
 
     pub fn retire(&self) {
-        self.0.state.lock().expect("capture state").live = false;
+        let mut state = self.0.state.lock().expect("capture state");
+        if !state.live {
+            return;
+        }
+        state.live = false;
+        let records = std::array::from_fn(|index| {
+            state.attempts[index].upgrade().and_then(|attempt| {
+                let mut phase = attempt.phase.lock().expect("attempt state");
+                let changed = *phase != AttemptPhase::Retired;
+                *phase = AttemptPhase::Retired;
+                changed.then(|| AuthorityRecord::capture(&attempt, false, "capture-retired"))
+            })
+        });
+        drop(state);
+        emit_records(records);
     }
 
     pub fn capability(&self) -> RelayCapture {
@@ -477,6 +500,7 @@ impl RelayCaptureOwner {
             .ok_or(RelayFlowError::Full)?;
         let charge = buffers.try_reserve(BUFFER_OVERHEAD)?;
         let attempt = Arc::new(Attempt {
+            serial: serial(),
             capture: self.0.clone(),
             target,
             sources,
@@ -485,6 +509,9 @@ impl RelayCaptureOwner {
             _charge: charge,
         });
         *slot = Arc::downgrade(&attempt);
+        let record = AuthorityRecord::capture(&attempt, false, "pending");
+        drop(capture);
+        record.emit();
         Ok(RelayAttemptOwner(RelayAttempt(attempt)))
     }
 }
@@ -503,12 +530,89 @@ enum AttemptPhase {
 }
 
 struct Attempt {
+    serial: u64,
     capture: Arc<Capture>,
     target: RelayTargetId,
     sources: RelaySources,
     mtu: u16,
     phase: Mutex<AttemptPhase>,
     _charge: Arc<dyn RelayBufferReservation>,
+}
+
+/// A semantic authority transition, captured at the actual switch under its
+/// guards and emitted only after releasing them. No per-packet logging.
+struct AuthorityRecord {
+    session: u64,
+    target: u64,
+    attempt: u64,
+    revision: u64,
+    boottime_ns: Option<u64>,
+    ready: bool,
+    reason: &'static str,
+}
+
+fn serial() -> u64 {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1))
+        .expect("authority serial exhausted")
+}
+
+impl AuthorityRecord {
+    fn capture(attempt: &Attempt, ready: bool, reason: &'static str) -> Self {
+        #[cfg(any(target_os = "android", target_os = "linux"))]
+        let boottime_ns = {
+            let mut time = libc::timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            };
+            // SAFETY: writable timespec and the platform's documented clock ID.
+            let result = unsafe { libc::clock_gettime(libc::CLOCK_BOOTTIME, &raw mut time) };
+            (result == 0).then(|| time.tv_sec as u64 * 1_000_000_000 + time.tv_nsec as u64)
+        };
+        #[cfg(not(any(target_os = "android", target_os = "linux")))]
+        let boottime_ns = None;
+        Self {
+            session: attempt.capture.identity.generation.get(),
+            target: attempt.target.get(),
+            attempt: attempt.serial,
+            revision: serial(),
+            boottime_ns,
+            ready,
+            reason,
+        }
+    }
+    fn emit(self) {
+        log::info!(
+            "target-authority session={} target={} attempt={} revision={} clock=CLOCK_BOOTTIME boottime_ns={} clock_valid={} ready={} reason={}",
+            self.session,
+            self.target,
+            self.attempt,
+            self.revision,
+            self.boottime_ns.unwrap_or(0),
+            self.boottime_ns.is_some(),
+            self.ready,
+            self.reason
+        );
+    }
+}
+
+fn sink_records(
+    capture: &CaptureState,
+    ready: bool,
+    reason: &'static str,
+) -> [Option<AuthorityRecord>; MAX_TARGETS] {
+    std::array::from_fn(|index| {
+        capture.attempts[index].upgrade().and_then(|attempt| {
+            (*attempt.phase.lock().expect("attempt state") == AttemptPhase::Active)
+                .then(|| AuthorityRecord::capture(&attempt, ready, reason))
+        })
+    })
+}
+
+fn emit_records(records: [Option<AuthorityRecord>; MAX_TARGETS]) {
+    for record in records.into_iter().flatten() {
+        record.emit();
+    }
 }
 
 /// Only the lifecycle owner can activate an attempt after real readiness.
@@ -526,12 +630,28 @@ impl RelayAttemptOwner {
         if !capture.live || capture.sink.is_none() || *phase == AttemptPhase::Retired {
             return Err(RelayFlowError::Stale);
         }
+        let changed = *phase != AttemptPhase::Active;
         *phase = AttemptPhase::Active;
+        let record = changed.then(|| AuthorityRecord::capture(&self.0.0, true, "activate"));
+        drop(phase);
+        drop(capture);
+        if let Some(record) = record {
+            record.emit();
+        }
         Ok(())
     }
 
     pub fn retire(&self) {
-        *self.0.0.phase.lock().expect("attempt state") = AttemptPhase::Retired;
+        let capture = self.0.0.capture.state.lock().expect("capture state");
+        let mut phase = self.0.0.phase.lock().expect("attempt state");
+        let changed = *phase != AttemptPhase::Retired;
+        *phase = AttemptPhase::Retired;
+        let record = changed.then(|| AuthorityRecord::capture(&self.0.0, false, "retire"));
+        drop(phase);
+        drop(capture);
+        if let Some(record) = record {
+            record.emit();
+        }
     }
 }
 
@@ -546,6 +666,9 @@ impl Drop for RelayAttemptOwner {
 pub struct RelayAttempt(Arc<Attempt>);
 
 impl RelayAttempt {
+    pub fn same_attempt(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
     pub fn identity(&self) -> &RelayCaptureIdentity {
         &self.0.capture.identity
     }
@@ -673,9 +796,14 @@ impl RelayPacket {
             result => {
                 self.consumed = true;
                 *phase = AttemptPhase::Retired;
-                RelayWriteOutcome::Fatal(result.err().unwrap_or_else(|| {
+                let record = AuthorityRecord::capture(&self.attempt.0, false, "write-fatal");
+                let outcome = RelayWriteOutcome::Fatal(result.err().unwrap_or_else(|| {
                     io::Error::new(io::ErrorKind::WriteZero, "incomplete raw IP packet write")
-                }))
+                }));
+                drop(phase);
+                drop(capture);
+                record.emit();
+                outcome
             }
         }
     }

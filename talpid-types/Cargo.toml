@@ -10,6 +10,7 @@ license.workspace = true
 base64 = "0.22.0"
 ipnetwork = { workspace = true, features = ["serde"] }
 itertools.workspace = true
+log.workspace = true
 safelog = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 shadowsocks-crypto.workspace = true
@@ -23,6 +24,9 @@ insta = { workspace = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 jnix = { version = "0.5.1", features = ["derive"] }
+
+[target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
+libc = "0.2"
 
 [lints]
 workspace = true

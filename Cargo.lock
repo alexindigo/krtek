@@ -6271,6 +6271,8 @@ dependencies = [
  "ipnetwork",
  "itertools 0.14.0",
  "jnix",
+ "libc",
+ "log",
  "safelog",
  "serde",
  "shadowsocks-crypto",

@@ -20,12 +20,15 @@ pub enum UserspaceTun<T> {
 /// Configuration ownership only. No descriptor is acquired or retained here.
 pub struct ManagedTun {
     pub broker: AttachmentBroker,
+    /// Actual target assignment, before app-facing platform projection.
     pub config: TunConfig,
+    pub capture_config: TunConfig,
     pub request: ConfigurationRequest,
 }
 
 impl ManagedTun {
     pub fn request(broker: AttachmentBroker, config: TunConfig) -> Result<Self, AttachmentError> {
+        let target_config = config.clone();
         #[cfg(target_os = "android")]
         let config = {
             // Apply Native's LAN/gateway/DNS/family projection first, then union
@@ -44,10 +47,11 @@ impl ManagedTun {
             config.dns_servers = Some(effective.dns_servers);
             config
         };
-        let request = broker.request_capture(config.clone())?;
+        let request = broker.request_target_capture(target_config.clone(), config.clone())?;
         Ok(Self {
             broker,
-            config,
+            config: target_config,
+            capture_config: config,
             request,
         })
     }

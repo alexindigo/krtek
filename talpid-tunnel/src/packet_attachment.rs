@@ -63,6 +63,7 @@ pub struct BrokerSnapshot {
 struct Configuration {
     id: u64,
     config: TunConfig,
+    target_config: TunConfig,
     status: watch::Sender<RequestStatus>,
     release: watch::Sender<CaptureRelease>,
     release_changes: watch::Sender<u64>,
@@ -130,7 +131,12 @@ struct Capture {
 
 struct Queues {
     outbound: VecDeque<RelayPacket>,
-    inbound: VecDeque<RelayPacket>,
+    inbound: VecDeque<ReturnPacket>,
+}
+
+enum ReturnPacket {
+    Application(RelayPacket),
+    Feedback(talpid_netstack::packet_sizing::Feedback),
 }
 
 struct Attempt {
@@ -311,7 +317,7 @@ pub struct TransportPair {
 pub struct AttachmentReply {
     inner: Weak<Inner>,
     attempt: Arc<Attempt>,
-    packet: RelayPacket,
+    packet: ReturnPacket,
 }
 
 impl AttachmentBroker {
@@ -435,6 +441,16 @@ impl AttachmentBroker {
         &self,
         config: TunConfig,
     ) -> Result<ConfigurationRequest, AttachmentError> {
+        self.request_target_capture(config.clone(), config)
+    }
+
+    /// Assigned target configuration and the actor's app-facing projection are
+    /// immutable, distinct inputs. The receipt attests only the latter.
+    pub fn request_target_capture(
+        &self,
+        target_config: TunConfig,
+        config: TunConfig,
+    ) -> Result<ConfigurationRequest, AttachmentError> {
         let storage = self.inner.capture.try_reserve(1024)?;
         let mut state = self.inner.state.lock().expect("attachment state");
         if state.closed {
@@ -457,6 +473,7 @@ impl AttachmentBroker {
         let request = Arc::new(Configuration {
             id,
             config,
+            target_config,
             status: status_tx,
             release: watch::channel(CaptureRelease {
                 transport_joined: true,
@@ -624,7 +641,7 @@ impl AttachmentBroker {
             .configuration
             .upgrade()
             .ok_or(AttachmentError::CaptureUnready)?;
-        let config = &request.config;
+        let config = &request.target_config;
         let sources = RelaySources {
             ipv4: config.addresses.iter().find_map(|ip| {
                 if let std::net::IpAddr::V4(ip) = ip {
@@ -815,6 +832,9 @@ impl PendingCaptureRequest {
     }
     pub fn config(&self) -> &TunConfig {
         &self.0.config
+    }
+    pub fn target_config(&self) -> &TunConfig {
+        &self.0.target_config
     }
     /// The daemon holds this stage before revoking an attempt for a normal TSM
     /// handover. A transport's own cleanup cannot bypass the actor's joined ack.
@@ -1286,22 +1306,23 @@ fn enqueue(
         return Err(AttachmentError::OrdinaryUnready);
     }
     let mut queues = attempt.queues.lock().expect("attachment queues");
-    let queue = if outbound {
-        &mut queues.outbound
+    let length = if outbound {
+        queues.outbound.len()
     } else {
-        &mut queues.inbound
+        queues.inbound.len()
     };
-    if queue.len() == PACKET_CAPACITY {
+    if length == PACKET_CAPACITY {
         return Err(AttachmentError::Full);
     }
     let packet = attempt
         .owner
         .capability()
         .packet(RelayBuffer::copy_from(bytes, inner.application.as_ref())?)?;
-    queue.push_back(packet);
     if outbound {
+        queues.outbound.push_back(packet);
         attempt.outbound.notify_one();
     } else {
+        queues.inbound.push_back(ReturnPacket::Application(packet));
         inner.replies.notify_one();
     }
     Ok(())
@@ -1398,6 +1419,58 @@ impl TransportReceive {
 }
 
 impl TransportSend {
+    /// Move already-accounted output without copying it out of its attempt or
+    /// reserved feedback region. The broker still checks the exact queue owner.
+    pub fn try_send_packet(&self, packet: RelayPacket) -> Result<(), AttachmentError> {
+        if !packet
+            .view()
+            .attempt()
+            .same_attempt(&self.control.capability())
+        {
+            return Err(AttachmentError::Stale);
+        }
+        self.enqueue_return(ReturnPacket::Application(packet))
+    }
+    pub fn try_send_feedback(
+        &self,
+        feedback: talpid_netstack::packet_sizing::Feedback,
+    ) -> Result<(), AttachmentError> {
+        if feedback.side() != talpid_netstack::packet_sizing::FeedbackSide::App
+            || !feedback.attempt().same_attempt(&self.control.capability())
+        {
+            return Err(AttachmentError::Stale);
+        }
+        self.enqueue_return(ReturnPacket::Feedback(feedback))
+    }
+    fn enqueue_return(&self, packet: ReturnPacket) -> Result<(), AttachmentError> {
+        let inner = self
+            .control
+            .inner
+            .upgrade()
+            .ok_or(AttachmentError::Closed)?;
+        let state = inner.state.lock().expect("attachment state");
+        if !state
+            .attempt(self.control.attempt.target)
+            .is_some_and(|a| Arc::ptr_eq(a, &self.control.attempt))
+        {
+            return Err(AttachmentError::Stale);
+        }
+        if !self.control.current() {
+            return Err(AttachmentError::OrdinaryUnready);
+        }
+        let mut queues = self
+            .control
+            .attempt
+            .queues
+            .lock()
+            .expect("attachment queues");
+        if queues.inbound.len() == PACKET_CAPACITY {
+            return Err(AttachmentError::Full);
+        }
+        queues.inbound.push_back(packet);
+        inner.replies.notify_one();
+        Ok(())
+    }
     /// Only authenticated return traffic, after private-control demultiplexing.
     /// Bytes are opaque here; this capability supplies the exact attempt owner.
     pub fn try_send(&self, bytes: &[u8]) -> Result<(), AttachmentError> {
@@ -1423,7 +1496,10 @@ impl AttachmentReply {
         sink: &RelaySink,
         operation: impl FnOnce(&[u8]) -> io::Result<usize>,
     ) -> RelayWriteOutcome {
-        let outcome = self.packet.write_to(sink, operation);
+        let outcome = match &mut self.packet {
+            ReturnPacket::Application(packet) => packet.write_to(sink, operation),
+            ReturnPacket::Feedback(feedback) => feedback.write_to(sink, operation),
+        };
         self.complete_write(outcome)
     }
 
@@ -1431,7 +1507,10 @@ impl AttachmentReply {
         &mut self,
         operation: impl FnOnce(&[u8]) -> io::Result<usize>,
     ) -> RelayWriteOutcome {
-        let outcome = self.packet.write(operation);
+        let outcome = match &mut self.packet {
+            ReturnPacket::Application(packet) => packet.write(operation),
+            ReturnPacket::Feedback(feedback) => feedback.write(operation),
+        };
         self.complete_write(outcome)
     }
 

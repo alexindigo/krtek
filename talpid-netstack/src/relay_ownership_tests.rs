@@ -20,6 +20,86 @@ fn capture(budget: &BufferBudget) -> RelayCaptureOwner {
     .unwrap()
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn authority_records_follow_actual_activation_sink_switches_and_retirement() {
+    use std::sync::{
+        Mutex, Once,
+        atomic::{AtomicU64, Ordering},
+    };
+    struct Logger {
+        session: AtomicU64,
+        records: Mutex<Vec<String>>,
+    }
+    impl log::Log for Logger {
+        fn enabled(&self, _: &log::Metadata<'_>) -> bool {
+            true
+        }
+        fn flush(&self) {}
+        fn log(&self, record: &log::Record<'_>) {
+            if record.target() != "talpid_types::relay_flow" {
+                return;
+            }
+            let text = record.args().to_string();
+            if text.starts_with(&format!(
+                "target-authority session={} ",
+                self.session.load(Ordering::Relaxed)
+            )) {
+                let mut records = self.records.lock().unwrap();
+                assert!(records.len() < 16);
+                records.push(text);
+            }
+        }
+    }
+    static LOGGER: Logger = Logger {
+        session: AtomicU64::new(0),
+        records: Mutex::new(Vec::new()),
+    };
+    static START: Once = Once::new();
+    START.call_once(|| {
+        log::set_logger(&LOGGER).unwrap();
+        log::set_max_level(log::LevelFilter::Info);
+    });
+    let budget = BufferBudget::new(8192);
+    let owner = capture(&budget);
+    LOGGER
+        .session
+        .store(owner.identity().generation.get(), Ordering::Relaxed);
+    let target = owner.open_attempt(&budget).unwrap();
+    target.activate().unwrap();
+    target.activate().unwrap(); // no duplicate ready
+    let sink = owner.capability().sink().unwrap();
+    owner.suspend_sink(&sink).unwrap();
+    owner.resume_sink(&sink).unwrap();
+    owner.retire();
+    target.retire(); // no duplicate retirement
+    let records = LOGGER.records.lock().unwrap();
+    assert_eq!(records.len(), 5);
+    let mut revision = 0;
+    let mut stamp = 0;
+    let mut attempt = None;
+    for (record, ready) in records.iter().zip([false, true, false, true, false]) {
+        let field = |key: &str| {
+            record
+                .split_whitespace()
+                .find_map(|word| word.strip_prefix(key))
+                .unwrap()
+        };
+        assert_eq!(field("clock="), "CLOCK_BOOTTIME");
+        assert_eq!(field("clock_valid="), "true");
+        assert_eq!(field("ready="), if ready { "true" } else { "false" });
+        assert_eq!(field("target="), "1");
+        let next = field("revision=").parse::<u64>().unwrap();
+        assert!(next > revision);
+        revision = next;
+        let now = field("boottime_ns=").parse::<u64>().unwrap();
+        assert!(now >= stamp && now > 0);
+        stamp = now;
+        let serial = field("attempt=");
+        assert_eq!(*attempt.get_or_insert(serial), serial);
+    }
+}
+
 #[test]
 fn capture_identity_is_immutable_full_width_and_replacement_is_distinct() {
     let budget = BufferBudget::new(4096);

@@ -43,6 +43,16 @@ impl TargetPacketPath {
     pub fn backend_refused(&mut self) {
         self.mapper.backend_refused();
     }
+    pub fn refused(&mut self, reason: TranslationError) {
+        self.mapper.summary.refuse(reason);
+    }
+    pub fn take_feedback_for(&mut self, side: FeedbackSide) -> Option<Feedback> {
+        if !self.mapper.attempt.current() {
+            self.feedback.clear();
+            return None;
+        }
+        self.feedback.pop_side(side)
+    }
     pub fn take_feedback(&mut self) -> Option<Feedback> {
         if !self.mapper.attempt.current() {
             self.feedback.clear();

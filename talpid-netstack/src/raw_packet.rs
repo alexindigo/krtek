@@ -74,19 +74,35 @@ pub fn handoff<T>(
     buffers: &dyn RelayBufferAllocator,
     operation: impl FnOnce(Packet<Ip>) -> T,
 ) -> Result<T, RelayFlowError> {
-    packet.handoff(|bytes| {
-        let charge = buffers.try_reserve(bytes.len() + BUFFER_OVERHEAD)?;
-        let native = BytesMut::from(bytes);
-        if native.capacity() + BUFFER_OVERHEAD > charge.bytes() {
-            return Err(RelayFlowError::Full);
-        }
-        let native = Packet::from_bytes(native)
-            .try_into_ip()
-            .map_err(|_| RelayFlowError::Invalid)?;
-        let result = operation(native);
-        drop(charge);
-        Ok(result)
-    })?
+    packet.handoff(|bytes| encode_handoff(bytes, buffers, operation))?
+}
+
+/// Only the internal, exact-attempt feedback producer can use assigned sources
+/// without passing through ordinary application translation.
+pub fn handoff_feedback<T>(
+    feedback: crate::packet_sizing::Feedback,
+    operation: impl FnOnce(Packet<Ip>) -> T,
+) -> Result<T, RelayFlowError> {
+    let buffers = feedback.buffers();
+    feedback.handoff(|bytes| encode_handoff(bytes, buffers.as_ref(), operation))?
+}
+
+fn encode_handoff<T>(
+    bytes: &[u8],
+    buffers: &dyn RelayBufferAllocator,
+    operation: impl FnOnce(Packet<Ip>) -> T,
+) -> Result<T, RelayFlowError> {
+    let charge = buffers.try_reserve(bytes.len() + BUFFER_OVERHEAD)?;
+    let native = BytesMut::from(bytes);
+    if native.capacity() + BUFFER_OVERHEAD > charge.bytes() {
+        return Err(RelayFlowError::Full);
+    }
+    let native = Packet::from_bytes(native)
+        .try_into_ip()
+        .map_err(|_| RelayFlowError::Invalid)?;
+    let result = operation(native);
+    drop(charge);
+    Ok(result)
 }
 
 #[cfg(test)]

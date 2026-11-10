@@ -621,8 +621,9 @@ async fn create_devices(
         config.entry_peer.endpoint,
         bypass,
     );
-    // The addresses assigned to the tun device, i.e. the only source addresses we accept
-    // packets from. See [SourceFilter].
+    // Only this target's assigned sources enter WireGuard. Managed translates
+    // ordinary app sources before this unchanged filter; private producers are
+    // already assigned. Native sources retain the upstream boundary.
     let source_v4 = config.tunnel_ipv4();
     let source_v6 = config.tunnel_ipv6();
 

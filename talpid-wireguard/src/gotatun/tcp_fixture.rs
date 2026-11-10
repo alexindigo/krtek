@@ -18,6 +18,9 @@ use talpid_types::{
 };
 use tokio::sync::mpsc;
 
+#[path = "translated_fixture.rs"]
+mod translated_fixture;
+
 fn config() -> Config {
     let private_key = PrivateKey::new_from_random();
     Config {
@@ -60,6 +63,58 @@ fn tun_config(config: &Config) -> tun_provider::TunConfig {
     tun.routes = config.routes.clone();
     tun.dns_servers = Some(vec![config.ipv4_gateway.into()]);
     tun
+}
+
+fn fixed_config(config: &Config) -> tun_provider::TunConfig {
+    let mut tun = tun_config(config);
+    tun.addresses = vec!["192.0.2.2".parse().unwrap(), "2001:db8::2".parse().unwrap()];
+    tun.mtu = 1280;
+    tun
+}
+
+#[tokio::test]
+async fn assigned_target_configuration_is_not_the_capture_projection() {
+    let (broker, _root, control) = broker();
+    let config = config();
+    let capture_config = fixed_config(&config);
+    let request = broker
+        .request_target_capture(tun_config(&config), capture_config.clone())
+        .unwrap();
+    let mut pending = PendingManaged::new(talpid_tunnel::tun_provider::transport::ManagedTun {
+        broker: broker.clone(),
+        config: tun_config(&config),
+        capture_config: capture_config.clone(),
+        request,
+    });
+    let request = broker.pending_request().unwrap();
+    assert_eq!(request.target_config(), &tun_config(&config));
+    assert_eq!(request.config(), &capture_config);
+    let capture = broker.open_capture(Some(&request)).unwrap();
+    let receipt = capture
+        .bind_observed_identity(
+            "tun17",
+            99,
+            RelaySources {
+                ipv4: Some("192.0.2.2".parse().unwrap()),
+                ipv6: Some("2001:db8::2".parse().unwrap()),
+            },
+            1280,
+        )
+        .unwrap();
+    broker.acknowledge(&request, &receipt).unwrap();
+    let pair = pending
+        .create(&config)
+        .await
+        .expect("assigned target rejected fixed capture");
+    assert_eq!(
+        pair.owner.control.capability().sources().ipv4,
+        config.tunnel_ipv4()
+    );
+    assert_eq!(pair.owner.control.capability().mtu(), config.mtu);
+    assert_eq!(pair.owner.control.capability().identity().mtu, 1280);
+    pair.owner.stop().await;
+    drop(pair);
+    assert_eq!(control.used(), 0);
 }
 
 fn broker() -> (AttachmentBroker, BufferBudget, BufferBudget) {
@@ -113,6 +168,7 @@ struct RemoteSend {
     output: mpsc::Sender<Packet<Ip>>,
     observed: mpsc::Sender<Vec<u8>>,
     gateway: Ipv4Addr,
+    reply_errors: bool,
 }
 struct RemoteReceive(mpsc::Receiver<Packet<Ip>>);
 impl IpSend for RemoteSend {
@@ -129,7 +185,18 @@ impl IpSend for RemoteSend {
             self.observed
                 .try_send(bytes.to_vec())
                 .map_err(|_| io::ErrorKind::WouldBlock)?;
-            bytes.to_vec()
+            if (bytes[0] >> 4 == 4 && u16::from_be_bytes([bytes[6], bytes[7]]) & 0x3fff != 0)
+                || (bytes[0] >> 4 == 6 && bytes[6] == 44)
+            {
+                return Ok(()); // The independent fragment consumer owns reassembly.
+            }
+            if !self.reply_errors
+                && ((bytes[0] >> 4 == 4 && bytes[9] == 1 && bytes[20] == 3)
+                    || (bytes[0] >> 4 == 6 && bytes[6] == 58 && bytes[40] < 128))
+            {
+                return Ok(());
+            }
+            application_reply(&bytes)
         };
         self.output
             .try_send(Packet::<[u8]>::copy_from(&returned).try_into_ip().unwrap())
@@ -180,6 +247,21 @@ impl Remote {
 }
 
 async fn remote(config: &mut Config, multihop: bool) -> (Remote, mpsc::Receiver<Vec<u8>>) {
+    let (remote, observations, _) = remote_impl(config, multihop, true).await;
+    (remote, observations)
+}
+
+async fn remote_controlled(
+    config: &mut Config,
+    multihop: bool,
+) -> (Remote, mpsc::Receiver<Vec<u8>>, mpsc::Sender<Packet<Ip>>) {
+    remote_impl(config, multihop, false).await
+}
+async fn remote_impl(
+    config: &mut Config,
+    multihop: bool,
+    reply_errors: bool,
+) -> (Remote, mpsc::Receiver<Vec<u8>>, mpsc::Sender<Packet<Ip>>) {
     let key = PrivateKey::new_from_random();
     config.entry_peer.public_key = key.public_key();
     let reservation = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -189,9 +271,10 @@ async fn remote(config: &mut Config, multihop: bool) -> (Remote, mpsc::Receiver<
     let (output, input) = mpsc::channel(512);
     let (observed, observations) = mpsc::channel(512);
     let send = RemoteSend {
-        output,
+        output: output.clone(),
         observed,
         gateway: config.ipv4_gateway,
+        reply_errors,
     };
     let receive = RemoteReceive(input);
     let peer = PeerConfig {
@@ -250,7 +333,7 @@ async fn remote(config: &mut Config, multihop: bool) -> (Remote, mpsc::Receiver<
                 .unwrap(),
         )
     };
-    (remote, observations)
+    (remote, observations, output)
 }
 
 fn ipv4(protocol: u8, nonce: &[u8]) -> Vec<u8> {
@@ -266,9 +349,95 @@ fn ipv4(protocol: u8, nonce: &[u8]) -> Vec<u8> {
     bytes[22..24].copy_from_slice(&53u16.to_be_bytes());
     bytes[32] = 0x50;
     bytes[40..].copy_from_slice(nonce);
-    let checksum = internet_checksum::checksum(&bytes[..20]);
-    bytes[10..12].copy_from_slice(&checksum);
+    if protocol == 17 {
+        let length = (bytes.len() - 20) as u16;
+        bytes[24..26].copy_from_slice(&length.to_be_bytes());
+    } else if protocol == 1 {
+        bytes[20] = 8;
+        bytes[21] = 0;
+    }
+    fix_wire(&mut bytes, 20, protocol);
     bytes
+}
+
+// Independent full-wire oracle, separate from production RFC1624 adjustments.
+fn wire_sum(bytes: &[u8], offset: usize, protocol: u8) -> [u8; 2] {
+    let mut input = Vec::new();
+    if bytes[0] >> 4 == 4 {
+        if protocol != 1 {
+            input.extend_from_slice(&bytes[12..20]);
+            input.extend_from_slice(&[0, protocol]);
+            input.extend_from_slice(&((bytes.len() - offset) as u16).to_be_bytes());
+        }
+    } else {
+        input.extend_from_slice(&bytes[8..40]);
+        input.extend_from_slice(&((bytes.len() - offset) as u32).to_be_bytes());
+        input.extend_from_slice(&[0, 0, 0, protocol]);
+    }
+    input.extend_from_slice(&bytes[offset..]);
+    internet_checksum::checksum(&input)
+}
+
+fn fix_wire(bytes: &mut [u8], offset: usize, protocol: u8) {
+    if let Some(field) = match protocol {
+        6 => Some(16),
+        17 => Some(6),
+        1 | 58 => Some(2),
+        _ => None,
+    } {
+        bytes[offset + field..offset + field + 2].fill(0);
+        let sum = wire_sum(bytes, offset, protocol);
+        bytes[offset + field..offset + field + 2].copy_from_slice(&if protocol == 17
+            && sum == [0, 0]
+        {
+            [255, 255]
+        } else {
+            sum
+        });
+    }
+    if bytes[0] >> 4 == 4 {
+        bytes[10..12].fill(0);
+        let sum = internet_checksum::checksum(&bytes[..usize::from(bytes[0] & 15) * 4]);
+        bytes[10..12].copy_from_slice(&sum);
+    }
+}
+
+fn application_reply(bytes: &[u8]) -> Vec<u8> {
+    let mut reply = bytes.to_vec();
+    let v4 = bytes[0] >> 4 == 4;
+    let (start, width) = if v4 { (12, 4) } else { (8, 16) };
+    reply[start..start + width].copy_from_slice(&bytes[start + width..start + 2 * width]);
+    reply[start + width..start + 2 * width].copy_from_slice(&bytes[start..start + width]);
+    let offset = if v4 {
+        usize::from(bytes[0] & 15) * 4
+    } else if bytes[6] == 0 {
+        48
+    } else {
+        40
+    };
+    let protocol = if v4 {
+        bytes[9]
+    } else if bytes[6] == 0 {
+        bytes[40]
+    } else {
+        bytes[6]
+    };
+    if protocol == 6 || protocol == 17 {
+        reply[offset..offset + 2].copy_from_slice(&bytes[offset + 2..offset + 4]);
+        reply[offset + 2..offset + 4].copy_from_slice(&bytes[offset..offset + 2]);
+    } else if protocol == 1 && bytes[offset] == 8 {
+        reply[offset] = 0;
+    } else if protocol == 58 && bytes[offset] == 128 {
+        reply[offset] = 129;
+    } else if protocol == 1 && bytes[offset] == 3 {
+        // A peer error quotes the opposite direction. Swapping both endpoints
+        // preserves the quoted IP/pseudoheader checksum even when truncated.
+        let quote = offset + 8;
+        reply[quote + 12..quote + 16].copy_from_slice(&bytes[quote + 16..quote + 20]);
+        reply[quote + 16..quote + 20].copy_from_slice(&bytes[quote + 12..quote + 16]);
+    }
+    fix_wire(&mut reply, offset, protocol);
+    reply
 }
 
 async fn establish_and_observe(
@@ -356,25 +525,27 @@ async fn crypto(multihop: bool) {
         ipv4(6, b"tcp-nonce"),
         ipv4(17, b"dns-udp-nonce"),
         ipv4(1, b"public-icmp-nonce"),
-        ipv4(253, b"unknown-protocol"),
+        ipv4(47, b"address-independent-gre"),
     ];
     let mut configured_dns = ipv4(17, b"actual-configured-dns-tuple");
     configured_dns[16..20].copy_from_slice(&config.ipv4_gateway.octets());
     let udp_length = (configured_dns.len() - 20) as u16;
     configured_dns[24..26].copy_from_slice(&udp_length.to_be_bytes());
     configured_dns[10..12].fill(0);
-    let checksum = internet_checksum::checksum(&configured_dns[..20]);
-    configured_dns[10..12].copy_from_slice(&checksum);
+    fix_wire(&mut configured_dns, 20, 17);
     assert_eq!(
         tun_config(&config).dns_servers,
         Some(vec![config.ipv4_gateway.into()])
     );
     vectors.push(configured_dns);
-    let mut fragment = ipv4(17, b"fragment-without-reassembly");
-    fragment[6..8].copy_from_slice(&0x2001u16.to_be_bytes());
-    vectors.push(fragment);
-    let mut quotation = ipv4(1, b"icmp-error-quotation");
+    let quoted = application_reply(&ipv4(17, b"truncated-quotation-nonce"));
+    let mut quotation = ipv4(1, b"");
+    quotation.truncate(28);
     quotation[20] = 3;
+    quotation.extend_from_slice(&quoted[..28]);
+    let size = quotation.len() as u16;
+    quotation[2..4].copy_from_slice(&size.to_be_bytes());
+    fix_wire(&mut quotation, 20, 1);
     vectors.push(quotation);
     let mut v6 = vec![0; 64];
     v6[0] = 0x60;
@@ -383,7 +554,7 @@ async fn crypto(multihop: bool) {
     v6[7] = 64;
     v6[8..24].copy_from_slice(&config.tunnel_ipv6().unwrap().octets());
     v6[24..40].copy_from_slice(&"2001:db8:240::20".parse::<Ipv6Addr>().unwrap().octets());
-    v6[40] = 253;
+    v6[40] = 47;
     v6[48..64].copy_from_slice(b"ipv6-extension!!");
     vectors.push(v6);
     vectors.push(ipv4(17, &vec![0x95; 1350]));
@@ -402,7 +573,7 @@ async fn crypto(multihop: bool) {
             .unwrap();
         assert!(matches!(
             reply.write(|received| {
-                assert_eq!(received, bytes);
+                assert_eq!(received, application_reply(&bytes));
                 Ok(received.len())
             }),
             RelayWriteOutcome::Written
@@ -567,7 +738,7 @@ async fn installed_managed_target_crosses_fd_epochs_without_reusing_the_old_rece
             ));
             let mut received = vec![0; bytes.len()];
             assert_eq!(consumer.recv(&mut received).unwrap(), bytes.len());
-            assert_eq!(received, bytes);
+            assert_eq!(received, application_reply(&bytes));
             let prior = owner.ledger.lock().unwrap().highest;
             assert!(check.establish_connectivity(&client).await.unwrap());
             tokio::time::timeout(Duration::from_secs(2), async {
@@ -1056,7 +1227,7 @@ async fn actual_enobufs_bind_retries_with_fresh_request_capture_attempt_and_cont
         .unwrap();
     assert!(matches!(
         reply.write(|received| {
-            assert_eq!(received, bytes);
+            assert_eq!(received, application_reply(&bytes));
             Ok(received.len())
         }),
         RelayWriteOutcome::Written
@@ -1417,126 +1588,140 @@ impl IpRecv for TcpRemoteReceive {
 async fn ordinary_tcp_stream_consumers_receive_full_nonces_through_real_crypto() {
     use talpid_netstack::smoltcp_network::{SmoltcpNetworkConfig, smoltcp_network};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let (broker, _root, control) = broker();
-    let mut config = config();
-    config.tunnel.addresses.retain(|address| address.is_ipv4());
-    config.ipv6_gateway = None;
-    let key = PrivateKey::new_from_random();
-    config.entry_peer.public_key = key.public_key();
-    let reservation = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
-    let port = reservation.local_addr().unwrap().port();
-    drop(reservation);
-    config.entry_peer.endpoint = (Ipv4Addr::LOCALHOST, port).into();
-    let (output, input) = mpsc::channel(64);
-    let request: Vec<_> = b"ordinary-application-request-nonce"
-        .iter()
-        .copied()
-        .cycle()
-        .take(12305)
-        .collect();
-    let response: Vec<_> = b"independent-peer-response-nonce"
-        .iter()
-        .copied()
-        .cycle()
-        .take(16371)
-        .collect();
-    let endpoint = Arc::new(Mutex::new(TcpEndpoint::new(output, response.clone())));
-    let peer = PeerConfig {
-        public_key: config.tunnel.private_key.public_key(),
-        allowed_ips: vec!["10.12.34.56/32".parse().unwrap()],
-        endpoint: "127.0.0.1:9".parse().unwrap(),
-        psk: None,
-        constant_packet_size: false,
-    };
-    let remote = DeviceBuilder::new()
-        .with_default_udp()
-        .with_listen_port(port)
-        .with_private_key(StaticSecret::from(key.to_bytes()))
-        .with_peer(to_gotatun_peer(&peer, None))
-        .with_ip_pair(
-            TcpRemoteSend(endpoint.clone()),
-            TcpRemoteReceive {
-                endpoint: endpoint.clone(),
-                input,
-            },
+    for translated in [false, true] {
+        let (broker, _root, control) = broker();
+        let mut config = config();
+        config.tunnel.addresses.retain(|address| address.is_ipv4());
+        config.ipv6_gateway = None;
+        let key = PrivateKey::new_from_random();
+        config.entry_peer.public_key = key.public_key();
+        let reservation = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        let port = reservation.local_addr().unwrap().port();
+        drop(reservation);
+        config.entry_peer.endpoint = (Ipv4Addr::LOCALHOST, port).into();
+        let (output, input) = mpsc::channel(64);
+        let request: Vec<_> = b"ordinary-application-request-nonce"
+            .iter()
+            .copied()
+            .cycle()
+            .take(12305)
+            .collect();
+        let response: Vec<_> = b"independent-peer-response-nonce"
+            .iter()
+            .copied()
+            .cycle()
+            .take(16371)
+            .collect();
+        let endpoint = Arc::new(Mutex::new(TcpEndpoint::new(output, response.clone())));
+        let peer = PeerConfig {
+            public_key: config.tunnel.private_key.public_key(),
+            allowed_ips: vec!["10.12.34.56/32".parse().unwrap()],
+            endpoint: "127.0.0.1:9".parse().unwrap(),
+            psk: None,
+            constant_packet_size: false,
+        };
+        let remote = DeviceBuilder::new()
+            .with_default_udp()
+            .with_listen_port(port)
+            .with_private_key(StaticSecret::from(key.to_bytes()))
+            .with_peer(to_gotatun_peer(&peer, None))
+            .with_ip_pair(
+                TcpRemoteSend(endpoint.clone()),
+                TcpRemoteReceive {
+                    endpoint: endpoint.clone(),
+                    input,
+                },
+            )
+            .build()
+            .await
+            .unwrap();
+        let source = if translated {
+            translated_fixture::projected(&broker, &config)
+        } else {
+            PendingManaged::request(broker.clone(), tun_config(&config)).unwrap()
+        };
+        let capture = if translated {
+            translated_fixture::bind(&broker)
+        } else {
+            acknowledge(&broker, &config)
+        };
+        let mut client = GotaTun::new(
+            PlaintextSource::Managed(source),
+            Arc::new(NoopBypass),
+            None,
+            &config,
+            None,
+            String::new(),
         )
-        .build()
         .await
         .unwrap();
-    let source = PendingManaged::request(broker.clone(), tun_config(&config)).unwrap();
-    let capture = acknowledge(&broker, &config);
-    let mut client = GotaTun::new(
-        PlaintextSource::Managed(source),
-        Arc::new(NoopBypass),
-        None,
-        &config,
-        None,
-        String::new(),
-    )
-    .await
-    .unwrap();
-    let owner = client.managed().unwrap();
-    let (_cancel, receiver) = CancelToken::new();
-    let mut check = Check::new_with_smoltcp(owner.pinger().unwrap(), 0, receiver);
-    establish_and_observe(&mut check, &client, &owner, async { Ok(()) })
-        .await
-        .unwrap();
-    let (application, mut app_output, mut app_input, mut app_guard) =
-        smoltcp_network(SmoltcpNetworkConfig {
-            ipv4_addr: config.tunnel_ipv4().unwrap(),
-            ipv6_addr: None,
-            mtu: config.mtu,
-        });
-    let (stop, stopped) = tokio::sync::oneshot::channel();
-    let bridge = tokio::spawn(async move {
-        let mut pool = PacketBufPool::new(4);
-        tokio::pin!(stopped);
-        loop {
-            tokio::select! {
-                _ = &mut stopped => return capture,
-                packets = app_output.recv(&mut pool) => {
-                    for packet in packets.unwrap() {
-                        capture.try_send(&packet.into_bytes()).unwrap();
+        let owner = client.managed().unwrap();
+        let (_cancel, receiver) = CancelToken::new();
+        let mut check = Check::new_with_smoltcp(owner.pinger().unwrap(), 0, receiver);
+        establish_and_observe(&mut check, &client, &owner, async { Ok(()) })
+            .await
+            .unwrap();
+        let (application, mut app_output, mut app_input, mut app_guard) =
+            smoltcp_network(SmoltcpNetworkConfig {
+                ipv4_addr: if translated {
+                    "192.0.2.2".parse().unwrap()
+                } else {
+                    config.tunnel_ipv4().unwrap()
+                },
+                ipv6_addr: None,
+                mtu: if translated { 1280 } else { config.mtu },
+            });
+        let (stop, stopped) = tokio::sync::oneshot::channel();
+        let bridge = tokio::spawn(async move {
+            let mut pool = PacketBufPool::new(4);
+            tokio::pin!(stopped);
+            loop {
+                tokio::select! {
+                    _ = &mut stopped => return capture,
+                    packets = app_output.recv(&mut pool) => {
+                        for packet in packets.unwrap() {
+                            capture.try_send(&packet.into_bytes()).unwrap();
+                        }
+                    }
+                    reply = capture.reply() => {
+                        let mut reply = reply.unwrap();
+                        let mut bytes = None;
+                        assert!(matches!(reply.write(|packet| { bytes = Some(packet.to_vec()); Ok(packet.len()) }), RelayWriteOutcome::Written));
+                        app_input.send(Packet::<[u8]>::copy_from(&bytes.unwrap()).try_into_ip().unwrap()).await.unwrap();
                     }
                 }
-                reply = capture.reply() => {
-                    let mut reply = reply.unwrap();
-                    let mut bytes = None;
-                    assert!(matches!(reply.write(|packet| { bytes = Some(packet.to_vec()); Ok(packet.len()) }), RelayWriteOutcome::Written));
-                    app_input.send(Packet::<[u8]>::copy_from(&bytes.unwrap()).try_into_ip().unwrap()).await.unwrap();
-                }
             }
-        }
-    });
-    let mut stream = application
-        .clone()
-        .tcp_connect("203.0.113.20:443".parse().unwrap())
+        });
+        let mut stream = application
+            .clone()
+            .tcp_connect("203.0.113.20:443".parse().unwrap())
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(5), stream.write_all(&request))
+            .await
+            .unwrap()
+            .unwrap();
+        let mut received = vec![0; response.len()];
+        tokio::time::timeout(Duration::from_secs(5), stream.read_exact(&mut received))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(received, response);
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while endpoint.lock().unwrap().received.len() < request.len() {
+                tokio::time::sleep(Duration::from_millis(2)).await;
+            }
+        })
         .await
         .unwrap();
-    tokio::time::timeout(Duration::from_secs(5), stream.write_all(&request))
-        .await
-        .unwrap()
-        .unwrap();
-    let mut received = vec![0; response.len()];
-    tokio::time::timeout(Duration::from_secs(5), stream.read_exact(&mut received))
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(received, response);
-    tokio::time::timeout(Duration::from_secs(2), async {
-        while endpoint.lock().unwrap().received.len() < request.len() {
-            tokio::time::sleep(Duration::from_millis(2)).await;
-        }
-    })
-    .await
-    .unwrap();
-    assert_eq!(endpoint.lock().unwrap().received, request);
-    stop.send(()).unwrap();
-    let capture = bridge.await.unwrap();
-    drop((stream, application));
-    app_guard.stop().await;
-    client.shutdown().await;
-    drop((owner, check, client, capture));
-    assert_eq!(control.used(), 0);
-    remote.stop().await;
+        assert_eq!(endpoint.lock().unwrap().received, request);
+        stop.send(()).unwrap();
+        let capture = bridge.await.unwrap();
+        drop((stream, application));
+        app_guard.stop().await;
+        client.shutdown().await;
+        drop((owner, check, client, capture));
+        assert_eq!(control.used(), 0);
+        remote.stop().await;
+    }
 }

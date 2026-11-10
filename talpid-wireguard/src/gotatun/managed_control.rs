@@ -1,5 +1,6 @@
-//! Raw application IP and a single private, prepaid connectivity pinger.
-//! No application flow parsing, translation or control TCP surface lives here.
+//! Per-attempt application target and a separate prepaid connectivity pinger.
+//! Address translation is after capture selection and before SourceFilter;
+//! authenticated private replies are demultiplexed before inverse translation.
 use crate::{config::Config, connectivity::SmoltcpPinger};
 use gotatun::{
     packet::{Ip, Packet, PacketBufPool},
@@ -13,9 +14,15 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use talpid_netstack::smoltcp_network::{
-    SmoltcpIcmpSocket, SmoltcpIpRecv, SmoltcpIpSend, SmoltcpNetworkConfig, SmoltcpNetworkGuard,
-    smoltcp_network_retained,
+use talpid_netstack::{
+    address_translation::{
+        Direction, TargetConfig, TargetPacketPath, TranslationError, TranslationOutcome,
+    },
+    packet_sizing::{Emission, Feedback, FeedbackSide},
+    smoltcp_network::{
+        SmoltcpIcmpSocket, SmoltcpIpRecv, SmoltcpIpSend, SmoltcpNetworkConfig, SmoltcpNetworkGuard,
+        smoltcp_network_retained,
+    },
 };
 use talpid_tunnel::{
     packet_attachment::{
@@ -24,7 +31,9 @@ use talpid_tunnel::{
     },
     tun_provider::TunConfig,
 };
-use talpid_types::relay_flow::{RelayBufferAllocator, RelayBufferReservation};
+use talpid_types::relay_flow::{
+    RelayBufferAllocator, RelayBufferReservation, RelayFlowError, RelaySources,
+};
 
 const REQUESTS: usize = 32;
 const REQUEST_LIFETIME: Duration = Duration::from_secs(15);
@@ -44,6 +53,7 @@ pub(super) fn unavailable() -> io::Error {
 pub(super) struct PendingManaged {
     broker: AttachmentBroker,
     config: TunConfig,
+    capture_config: TunConfig,
     request: Option<ConfigurationRequest>,
 }
 
@@ -52,6 +62,7 @@ impl PendingManaged {
         Self {
             broker: source.broker,
             config: source.config,
+            capture_config: source.capture_config,
             request: Some(source.request),
         }
     }
@@ -81,7 +92,7 @@ impl PendingManaged {
         if self.request.is_none() {
             self.request = Some(
                 self.broker
-                    .request_capture(self.config.clone())
+                    .request_target_capture(self.config.clone(), self.capture_config.clone())
                     .map_err(|_| unavailable())?,
             );
         }
@@ -95,12 +106,26 @@ impl PendingManaged {
         let pair = self.broker.acquire(&receipt).map_err(|_| unavailable())?;
         let source = config.tunnel_ipv4().ok_or_else(unavailable)?;
         let identity = pair.control.capability();
-        if identity.identity().sources.ipv4 != Some(source)
-            || identity.identity().sources.ipv6 != config.tunnel_ipv6()
-            || identity.identity().mtu != config.mtu
+        if identity.sources().ipv4 != Some(source)
+            || identity.sources().ipv6 != config.tunnel_ipv6()
+            || identity.mtu() != config.mtu
         {
             return Err(unavailable());
         }
+        let path = TargetPacketPath::new(
+            TargetConfig {
+                target_id: identity.target().get(),
+                fixed: identity.identity().sources,
+                assigned: RelaySources {
+                    ipv4: config.tunnel_ipv4(),
+                    ipv6: config.tunnel_ipv6(),
+                },
+                mtu: config.mtu,
+            },
+            identity,
+            self.broker.application_buffers(),
+        )
+        .map_err(|_| unavailable())?;
         let storage = self
             .broker
             .control_buffers()
@@ -144,20 +169,23 @@ impl PendingManaged {
                 live: VecDeque::with_capacity(REQUESTS),
             }),
             application: self.broker.application_buffers(),
+            ordinary_send,
+            path: Mutex::new(path),
+            feedback: tokio::sync::Notify::new(),
             _storage: storage,
             installed: AtomicBool::new(false),
         });
         Ok(ManagedPair {
             send: ManagedSend {
                 send,
-                ordinary_send,
                 owner: owner.clone(),
             },
             receive: ManagedReceive {
                 receive,
                 ordinary_receive,
                 owner: owner.clone(),
-                control_first: true,
+                turn: 0,
+                emission: None,
             },
             owner,
         })
@@ -187,6 +215,9 @@ pub(crate) struct ManagedControl {
     secret: [u8; 32],
     ledger: Mutex<Ledger>,
     application: Arc<dyn RelayBufferAllocator>,
+    ordinary_send: TransportSend,
+    path: Mutex<TargetPacketPath>,
+    feedback: tokio::sync::Notify,
     _storage: Arc<dyn RelayBufferReservation>,
     installed: AtomicBool,
 }
@@ -245,6 +276,10 @@ impl ManagedControl {
     }
     pub(super) async fn stop(&self) {
         self.revoke();
+        self.path
+            .lock()
+            .expect("target path")
+            .maintain(Instant::now());
         self.guard.lock().await.stop().await;
         // Every production caller has already joined create_devices failure or
         // devices.stop(). The control guard is the final transport task owner.
@@ -331,7 +366,105 @@ pub(super) struct ManagedReceive {
     receive: SmoltcpIpRecv,
     ordinary_receive: TransportReceive,
     owner: Arc<ManagedControl>,
-    control_first: bool,
+    turn: u8,
+    emission: Option<Emission>,
+}
+
+impl ManagedControl {
+    fn translate(
+        &self,
+        bytes: &[u8],
+        direction: Direction,
+    ) -> Result<TranslationOutcome, TranslationError> {
+        let result = self.path.lock().expect("target path").process(
+            bytes,
+            direction,
+            self.control.capability().identity().mtu,
+            Instant::now(),
+        );
+        self.feedback.notify_one();
+        result
+    }
+    async fn target_feedback(&self) -> Feedback {
+        loop {
+            let wake = self.feedback.notified();
+            let deadline = {
+                let mut path = self.path.lock().expect("target path");
+                path.maintain(Instant::now());
+                if let Some(feedback) = path.take_feedback_for(FeedbackSide::Target) {
+                    return feedback;
+                }
+                path.deadline()
+            };
+            match deadline {
+                Some(deadline) => {
+                    tokio::select! { _ = wake => (), _ = tokio::time::sleep_until(deadline.into()) => () }
+                }
+                None => wake.await,
+            }
+        }
+    }
+    fn refused(&self, reason: TranslationError) {
+        self.path.lock().expect("target path").refused(reason);
+    }
+    fn handoff_refused(&self, error: RelayFlowError, feedback: bool) {
+        self.refused(match error {
+            RelayFlowError::Full if feedback => TranslationError::FeedbackFull,
+            RelayFlowError::Full => TranslationError::Full,
+            RelayFlowError::Stale | RelayFlowError::Closed => TranslationError::Stale,
+            RelayFlowError::Invalid => TranslationError::Malformed,
+        });
+    }
+    fn flush_app_feedback(&self) {
+        loop {
+            let feedback = self
+                .path
+                .lock()
+                .expect("target path")
+                .take_feedback_for(FeedbackSide::App);
+            let Some(feedback) = feedback else {
+                return;
+            };
+            if let Err(error) = self.ordinary_send.try_send_feedback(feedback) {
+                self.refused(if error == AttachmentError::Full {
+                    TranslationError::FeedbackFull
+                } else {
+                    TranslationError::Stale
+                });
+            }
+        }
+    }
+}
+
+impl ManagedReceive {
+    async fn ordinary_parts(
+        receive: &mut TransportReceive,
+        emission: &mut Option<Emission>,
+        owner: &ManagedControl,
+    ) -> io::Result<talpid_types::relay_flow::RelayPacket> {
+        loop {
+            if let Some(packet) = emission.as_mut().and_then(Emission::pop) {
+                return Ok(packet);
+            }
+            *emission = None;
+            let packet = receive.recv().await.map_err(|_| unavailable())?;
+            let view = packet.view();
+            match owner.translate(view.bytes(), Direction::Outbound) {
+                Ok(TranslationOutcome::Packets(packets)) => *emission = Some(packets),
+                Ok(TranslationOutcome::FeedbackQueued(FeedbackSide::App)) => {
+                    owner.flush_app_feedback();
+                }
+                _ => (),
+            }
+            tokio::task::yield_now().await;
+        }
+    }
+}
+
+enum Selected {
+    Private(Option<Packet<Ip>>),
+    Application(talpid_types::relay_flow::RelayPacket),
+    Feedback(Feedback),
 }
 impl IpRecv for ManagedReceive {
     async fn recv<'a>(
@@ -344,38 +477,60 @@ impl IpRecv for ManagedReceive {
             }
             // Rotate priority: neither an application flood nor private probes
             // can starve the other. Each handoff yields at most one packet.
-            let private = self.control_first;
-            self.control_first = !private;
-            let packet = if private {
+            let turn = self.turn;
+            self.turn = (turn + 1) % 3;
+            let owner = self.owner.clone();
+            let packet = if turn == 0 {
                 tokio::select! { biased;
-                    _ = self.owner.cancelled() => return Err(unavailable()),
-                    packet = self.receive.recv(pool) => either::Either::Left(packet?.next()),
-                    packet = self.ordinary_receive.recv() => either::Either::Right(packet.map_err(|_| unavailable())?),
+                    _ = owner.cancelled() => return Err(unavailable()),
+                    packet = self.receive.recv(pool) => Selected::Private(packet?.next()),
+                    feedback = owner.target_feedback() => Selected::Feedback(feedback),
+                    packet = Self::ordinary_parts(&mut self.ordinary_receive, &mut self.emission, &owner) => Selected::Application(packet?),
+                }
+            } else if turn == 1 {
+                tokio::select! { biased;
+                    _ = owner.cancelled() => return Err(unavailable()),
+                    packet = Self::ordinary_parts(&mut self.ordinary_receive, &mut self.emission, &owner) => Selected::Application(packet?),
+                    packet = self.receive.recv(pool) => Selected::Private(packet?.next()),
+                    feedback = owner.target_feedback() => Selected::Feedback(feedback),
                 }
             } else {
                 tokio::select! { biased;
-                    _ = self.owner.cancelled() => return Err(unavailable()),
-                    packet = self.ordinary_receive.recv() => either::Either::Right(packet.map_err(|_| unavailable())?),
-                    packet = self.receive.recv(pool) => either::Either::Left(packet?.next()),
+                    _ = owner.cancelled() => return Err(unavailable()),
+                    feedback = owner.target_feedback() => Selected::Feedback(feedback),
+                    packet = Self::ordinary_parts(&mut self.ordinary_receive, &mut self.emission, &owner) => Selected::Application(packet?),
+                    packet = self.receive.recv(pool) => Selected::Private(packet?.next()),
                 }
             };
             let packet = match packet {
-                either::Either::Left(Some(packet)) => {
+                Selected::Private(Some(packet)) => {
                     let bytes = packet.into_bytes();
                     if !self.owner.record(&bytes) {
                         continue;
                     }
                     bytes.try_into_ip().map_err(|_| unavailable())?
                 }
-                either::Either::Left(_) => continue,
-                either::Either::Right(packet) => match talpid_netstack::raw_packet::handoff(
+                Selected::Private(_) => continue,
+                Selected::Application(packet) => match talpid_netstack::raw_packet::handoff(
                     packet,
                     self.owner.application.as_ref(),
                     |packet| packet,
                 ) {
                     Ok(packet) => packet,
-                    Err(_) => continue,
+                    Err(error) => {
+                        self.owner.handoff_refused(error, false);
+                        continue;
+                    }
                 },
+                Selected::Feedback(feedback) => {
+                    match talpid_netstack::raw_packet::handoff_feedback(feedback, |packet| packet) {
+                        Ok(packet) => packet,
+                        Err(error) => {
+                            self.owner.handoff_refused(error, true);
+                            continue;
+                        }
+                    }
+                }
             };
             if !self.owner.live() {
                 return Err(unavailable());
@@ -384,13 +539,12 @@ impl IpRecv for ManagedReceive {
         }
     }
     fn mtu(&self) -> MtuWatcher {
-        MtuWatcher::new(self.owner.control.capability().identity().mtu)
+        MtuWatcher::new(self.owner.control.capability().mtu())
     }
 }
 
 pub(super) struct ManagedSend {
     send: SmoltcpIpSend,
-    ordinary_send: TransportSend,
     owner: Arc<ManagedControl>,
 }
 impl IpSend for ManagedSend {
@@ -409,10 +563,26 @@ impl IpSend for ManagedSend {
                 }
             }
             Reply::Discard => Ok(()),
-            Reply::Application => match self.ordinary_send.try_send(&bytes) {
-                Ok(()) | Err(AttachmentError::Full | AttachmentError::OrdinaryUnready) => Ok(()),
-                Err(_) => Err(unavailable()),
-            },
+            Reply::Application => {
+                if let Ok(TranslationOutcome::Packets(mut packets)) =
+                    self.owner.translate(&bytes, Direction::Inbound)
+                {
+                    while let Some(packet) = packets.pop() {
+                        match self.owner.ordinary_send.try_send_packet(packet) {
+                            Ok(()) => (),
+                            Err(AttachmentError::Full) => {
+                                self.owner.refused(TranslationError::Full)
+                            }
+                            Err(AttachmentError::OrdinaryUnready) => {
+                                self.owner.refused(TranslationError::Stale)
+                            }
+                            Err(_) => return Err(unavailable()),
+                        }
+                    }
+                }
+                self.owner.flush_app_feedback();
+                Ok(())
+            }
         }
     }
 }

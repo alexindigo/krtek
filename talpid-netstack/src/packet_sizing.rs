@@ -17,7 +17,7 @@ use std::{
 };
 use talpid_types::relay_flow::{
     BUFFER_OVERHEAD, RelayAttempt, RelayBuffer, RelayBufferAllocator, RelayBufferReservation,
-    RelayPacket, RelayWriteOutcome,
+    RelayPacket, RelaySink, RelayWriteOutcome,
 };
 
 pub struct Emission {
@@ -175,8 +175,15 @@ pub struct Feedback {
     packet: RelayPacket,
     side: FeedbackSide,
     _slot: Slot,
+    buffers: Arc<dyn RelayBufferAllocator>,
 }
 impl Feedback {
+    pub fn buffers(&self) -> Arc<dyn RelayBufferAllocator> {
+        self.buffers.clone()
+    }
+    pub fn attempt(&self) -> RelayAttempt {
+        self.packet.view().attempt().clone()
+    }
     pub fn side(&self) -> FeedbackSide {
         self.side
     }
@@ -184,6 +191,19 @@ impl Feedback {
     /// This callback is the final whole-packet syscall or target handoff.
     pub fn write(&mut self, write: impl FnOnce(&[u8]) -> io::Result<usize>) -> RelayWriteOutcome {
         self.packet.write(write)
+    }
+    pub fn write_to(
+        &mut self,
+        sink: &RelaySink,
+        write: impl FnOnce(&[u8]) -> io::Result<usize>,
+    ) -> RelayWriteOutcome {
+        self.packet.write_to(sink, write)
+    }
+    pub fn handoff<T>(
+        self,
+        operation: impl FnOnce(&[u8]) -> T,
+    ) -> Result<T, talpid_types::relay_flow::RelayFlowError> {
+        self.packet.handoff(operation)
     }
 }
 
@@ -215,6 +235,13 @@ impl FeedbackQueue {
     }
     pub fn pop(&mut self) -> Option<Feedback> {
         self.pending.pop_front()
+    }
+    pub fn pop_side(&mut self, side: FeedbackSide) -> Option<Feedback> {
+        let index = self
+            .pending
+            .iter()
+            .position(|feedback| feedback.side == side)?;
+        self.pending.remove(index)
     }
     pub fn clear(&mut self) {
         self.pending.clear();
@@ -321,6 +348,7 @@ impl FeedbackQueue {
             packet,
             side,
             _slot: Slot(self.slots.clone()),
+            buffers: self.buffers.clone(),
         });
         self.tokens -= 1;
         if self.refill.is_none() {
