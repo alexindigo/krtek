@@ -21,7 +21,12 @@ pub enum CaptureDropReason {
 
 #[derive(Clone)]
 pub enum CaptureConfig {
-    Partial(Vec<String>),
+    Partial(crate::tun_provider::PartialConfig),
+    /// Capture owned independently of any tunnel's configuration request.
+    Router {
+        config: TunConfig,
+        disposition: Arc<dyn Fn(IpAddr) -> CaptureDisposition + Send + Sync>,
+    },
     Secured {
         broker: AttachmentBroker,
         request: PendingCaptureRequest,
@@ -43,19 +48,22 @@ impl CaptureConfig {
                 }),
             },
             None => RelaySources {
-                ipv4: Some(std::net::Ipv4Addr::new(192, 0, 2, 2)),
-                ipv6: Some(std::net::Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 2)),
+                ipv4: Some(crate::tun_provider::transport::ROUTER_IPV4),
+                ipv6: Some(crate::tun_provider::transport::ROUTER_IPV6),
             },
         }
     }
 
     pub fn mtu(&self) -> u16 {
-        self.secured_config().map_or(1280, |config| config.mtu)
+        self.secured_config()
+            .map_or(crate::tun_provider::transport::ROUTER_MTU, |config| {
+                config.mtu
+            })
     }
 
     pub(super) fn request(&self) -> Option<&PendingCaptureRequest> {
         match self {
-            Self::Partial(_) => None,
+            Self::Partial(_) | Self::Router { .. } => None,
             Self::Secured { request, .. } => Some(request),
         }
     }
@@ -63,6 +71,7 @@ impl CaptureConfig {
     pub fn secured_config(&self) -> Option<&TunConfig> {
         match self {
             Self::Partial(_) => None,
+            Self::Router { config, .. } => Some(config),
             Self::Secured { request, .. } => Some(request.config()),
         }
     }

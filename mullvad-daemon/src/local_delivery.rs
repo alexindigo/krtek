@@ -9,7 +9,7 @@ use mullvad_types::states::TargetState;
 use std::{
     future::Future,
     io,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{IpAddr, SocketAddr},
     sync::{
         Arc, RwLock,
         atomic::{AtomicU64, Ordering},
@@ -20,6 +20,7 @@ use talpid_netstack::buffer_budget::BufferBudget;
 #[cfg(test)]
 use talpid_tunnel::packet_attachment::AttachmentMode;
 use talpid_tunnel::packet_attachment::{AttachmentBroker, PendingCaptureRequest};
+use talpid_tunnel::tun_provider::transport::{ROUTER_IPV4, ROUTER_IPV6, ROUTER_MTU};
 use talpid_types::relay_flow::{RelayBufferAllocator, RelayBufferReservation};
 use tokio::sync::watch;
 
@@ -133,14 +134,7 @@ impl CaptureAuthority {
     }
 
     fn partial() -> Self {
-        Self::new(
-            vec![
-                Ipv4Addr::new(192, 0, 2, 2).into(),
-                Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 2).into(),
-            ],
-            None,
-            vec![],
-        )
+        Self::new(vec![ROUTER_IPV4.into(), ROUTER_IPV6.into()], None, vec![])
     }
 
     fn generation(&self) -> Result<Option<u64>, Refused> {
@@ -367,7 +361,8 @@ pub trait FrontendFactory: Send + Sync {
 
 #[derive(Clone)]
 pub enum DeliveryConfig {
-    Partial(Vec<String>),
+    Partial(talpid_tunnel::tun_provider::PartialConfig),
+    Router(talpid_tunnel::tun_provider::TunConfig),
     Secured {
         broker: AttachmentBroker,
         request: PendingCaptureRequest,
@@ -378,6 +373,7 @@ impl DeliveryConfig {
     fn same_capture(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Partial(a), Self::Partial(b)) => a == b,
+            (Self::Router(a), Self::Router(b)) => a == b,
             (Self::Secured { request: a, .. }, Self::Secured { request: b, .. }) => {
                 a.id() == b.id()
             }
@@ -392,12 +388,20 @@ impl DeliveryConfig {
                 authority.broker = Some(broker.clone());
                 authority
             }
-            Self::Secured { request, .. } => {
-                let config = request.config();
+            Self::Secured { .. } | Self::Router(_) => {
+                let config = self.router_config().expect("router projection");
                 let reserved = config
                     .gateways()
                     .into_iter()
                     .map(ipnetwork::IpNetwork::from)
+                    .chain(
+                        config
+                            .dns_servers
+                            .iter()
+                            .flatten()
+                            .copied()
+                            .map(ipnetwork::IpNetwork::from),
+                    )
                     .chain([talpid_tunnel::tun_provider::SOCKS_PROXIES])
                     .collect();
                 CaptureAuthority::new(config.addresses.clone(), Some(broker.clone()), reserved)
@@ -412,7 +416,7 @@ impl DeliveryConfig {
             sources
         };
         let own_broker = |config: &Self| match config {
-            Self::Partial(_) => true,
+            Self::Partial(_) | Self::Router(_) => true,
             Self::Secured {
                 broker: selected, ..
             } => broker.same_broker(selected),
@@ -425,8 +429,17 @@ impl DeliveryConfig {
 
     fn mtu(&self) -> u16 {
         match self {
-            Self::Partial(_) => 1280,
+            Self::Partial(_) => ROUTER_MTU,
+            Self::Router(config) => config.mtu,
             Self::Secured { request, .. } => request.config().mtu,
+        }
+    }
+
+    pub fn router_config(&self) -> Option<&talpid_tunnel::tun_provider::TunConfig> {
+        match self {
+            Self::Partial(_) => None,
+            Self::Router(config) => Some(config),
+            Self::Secured { request, .. } => Some(request.config()),
         }
     }
 
@@ -436,18 +449,23 @@ impl DeliveryConfig {
         classifier: Arc<DeliveryAuthority>,
     ) -> talpid_tunnel::android_frontend::CaptureConfig {
         use talpid_tunnel::android_frontend::{CaptureConfig, CaptureDisposition};
+        let disposition = Arc::new(move |destination| {
+            if classifier.disposition(destination) == Disposition::Local {
+                CaptureDisposition::Local
+            } else {
+                CaptureDisposition::Tunnel(talpid_types::relay_flow::RelayTargetId::MULLVAD)
+            }
+        });
         match self {
             Self::Partial(routes) => CaptureConfig::Partial(routes),
+            Self::Router(config) => CaptureConfig::Router {
+                config,
+                disposition,
+            },
             Self::Secured { broker, request } => CaptureConfig::Secured {
                 broker,
                 request,
-                disposition: Arc::new(move |destination| {
-                    if classifier.disposition(destination) == Disposition::Local {
-                        CaptureDisposition::Local
-                    } else {
-                        CaptureDisposition::Tunnel(talpid_types::relay_flow::RelayTargetId::MULLVAD)
-                    }
-                }),
+                disposition,
             },
         }
     }
@@ -490,6 +508,22 @@ impl<F: FrontendFactory> Delivery<F> {
 
     pub fn applied_config(&self) -> Option<DeliveryConfig> {
         self.applied.clone()
+    }
+    pub fn pending_or_applied_config(&self) -> Option<DeliveryConfig> {
+        // An old target request may describe a live retained epoch, but cannot
+        // authorize opening a replacement after actual capture/session loss.
+        if !self
+            .owner
+            .as_ref()
+            .is_some_and(|owner| owner.state() == OwnerState::Running)
+            || self.broker.snapshot().session_generation.is_none()
+        {
+            return None;
+        }
+        match &self.pending {
+            Some(Readiness::Handover { config, .. }) => Some(config.clone()),
+            _ => self.applied_config(),
+        }
     }
     pub fn release_ready(&self) -> bool {
         self.releases
@@ -680,7 +714,7 @@ impl<F: FrontendFactory> Delivery<F> {
             .collect();
         let wanted = self.factory.supported()
             && frontend_wanted(policy.enabled, !routes.is_empty(), target, disconnected);
-        self.maintain_config(wanted.then_some(DeliveryConfig::Partial(routes)))
+        self.maintain_config(wanted.then_some(DeliveryConfig::Partial(routes.into())))
             .await;
     }
 
@@ -894,16 +928,19 @@ impl<F: FrontendFactory> Delivery<F> {
                 .is_some_and(|owner| owner.state() == OwnerState::Running)
     }
 
+    pub fn configuration_ready(&self) -> bool {
+        self.ready()
+            && self.pending.is_none()
+            && !self.failed()
+            && self
+                .applied
+                .as_ref()
+                .zip(self.desired.as_ref())
+                .is_some_and(|(applied, desired)| applied.same_capture(desired))
+    }
+
     pub fn owner_state(&self) -> Option<OwnerState> {
         self.owner.as_ref().map(DeliveryOwner::state)
-    }
-
-    pub fn partial_ready(&self) -> bool {
-        self.ready() && matches!(self.applied, Some(DeliveryConfig::Partial(_)))
-    }
-
-    pub fn managed_ready(&self) -> bool {
-        self.ready() && matches!(self.applied, Some(DeliveryConfig::Secured { .. }))
     }
 }
 

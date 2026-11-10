@@ -229,10 +229,7 @@ async fn drive_epoch<A: LocalAuthority>(
     } = buffers;
     let mut updates_open = true;
     let mut observation_updates = session.and_then(|(_, o)| o.updates.clone());
-    let mut broker_updates = session.and_then(|(c, _)| match c {
-        CaptureConfig::Secured { broker, .. } => Some(broker.changes()),
-        _ => None,
-    });
+    let mut broker_updates = session.map(|(_, observation)| observation.lease.changes());
     let lease = session.map(|(_, o)| o.lease.as_ref());
     let local_capture = lease.and_then(|lease| lease.capability());
     loop {
@@ -344,7 +341,7 @@ fn ingest<A: LocalAuthority>(
     }
     match config {
         CaptureConfig::Partial(_) => forwarder.ingest(bytes),
-        CaptureConfig::Secured { disposition, .. } => {
+        CaptureConfig::Secured { disposition, .. } | CaptureConfig::Router { disposition, .. } => {
             match ip.destination().map(|ip| disposition(ip)) {
                 Some(CaptureDisposition::Local) => forwarder.ingest(bytes),
                 Some(CaptureDisposition::Tunnel(target)) => {

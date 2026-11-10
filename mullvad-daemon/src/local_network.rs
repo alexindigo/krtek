@@ -84,13 +84,12 @@ impl ConnectContinuation {
             return ConnectStep::Wait;
         }
         let routes = policy.announced_routes();
-        let desired = if supported && target == TargetState::Secured && !routes.is_empty() {
+        let desired = if supported || cfg!(target_os = "android") {
             AttachmentMode::ManagedRequired
         } else {
             AttachmentMode::Native
         };
-        let changed = mode != desired
-            || (desired == AttachmentMode::ManagedRequired && routes != self.routes);
+        let changed = mode != desired;
         if !self.joined {
             if !self.disconnecting
                 && (self.requested || changed || target == TargetState::Unsecured)
@@ -145,6 +144,8 @@ pub struct LocalNetworkRuntime<F: FrontendFactory = PlatformFactory> {
     release_updates: watch::Receiver<u64>,
     suspended: bool,
     phase: Option<TunnelPhase>,
+    target_config: Option<talpid_tunnel::packet_attachment::PendingCaptureRequest>,
+    excluded_packages: Option<Vec<String>>,
 }
 
 impl LocalNetworkRuntime {
@@ -201,6 +202,8 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
             release_updates,
             suspended: false,
             phase: None,
+            target_config: None,
+            excluded_packages: None,
         };
         runtime.observation = runtime.observation();
         // Startup reconciles before exposing real delivery availability. Do not
@@ -234,6 +237,11 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
         &self.status
     }
 
+    #[cfg(any(target_os = "android", test))]
+    pub fn set_excluded_packages(&mut self, packages: Vec<String>) {
+        self.excluded_packages = Some(packages);
+    }
+
     fn observation(&self) -> Option<NetworkObservation> {
         self.feed.as_ref().and_then(|feed| {
             let state = feed.latest();
@@ -249,7 +257,9 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
         target: TargetState,
         phase: P,
     ) -> Option<LocalNetworkStatus> {
-        self.reconcile(policy, target, phase.into(), true).await
+        let phase = phase.into();
+        self.reconcile(policy, target, phase, true).await;
+        self.publish(policy, target, phase)
     }
 
     pub async fn internal_update(
@@ -258,16 +268,20 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
         target: TargetState,
         phase: TunnelPhase,
     ) -> Option<LocalNetworkStatus> {
-        self.reconcile(policy, target, phase, false).await
+        self.reconcile(policy, target, phase, false).await;
+        self.publish(policy, target, phase)
     }
 
+    // Configuration/admission can run before the daemon's notification pass.
+    // It must not consume a semantic status revision: only the publication
+    // boundaries return changed samples for delivery to management clients.
     async fn reconcile(
         &mut self,
         policy: &LocalNetworkAccess,
         target: TargetState,
         phase: TunnelPhase,
         external: bool,
-    ) -> Option<LocalNetworkStatus> {
+    ) {
         self.observation = self.observation();
         if self.feed.as_ref().is_some_and(|feed| feed.latest().closed) {
             self.receiver = None;
@@ -276,7 +290,14 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
         self.delivery
             .authority
             .update(policy, self.observation.clone());
-        let snapshot = self.broker.snapshot();
+        let routes = policy
+            .announced_routes()
+            .iter()
+            .map(|route| route.network())
+            .collect::<Vec<_>>();
+        if routes != self.broker.local_routes() && self.broker.set_local_routes(routes).is_err() {
+            self.delivery.fail();
+        }
         let config = if self.shutting_down {
             None
         } else if target == TargetState::Unsecured && phase == TunnelPhase::Disconnected {
@@ -285,22 +306,43 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
                 .iter()
                 .map(ToString::to_string)
                 .collect::<Vec<_>>();
-            (!routes.is_empty()).then_some(DeliveryConfig::Partial(routes))
-        } else if target == TargetState::Secured
-            && snapshot.mode == AttachmentMode::ManagedRequired
-            && matches!(phase, TunnelPhase::Connecting | TunnelPhase::Connected)
-        {
-            self.broker
-                .pending_request()
-                .map(|request| DeliveryConfig::Secured {
+            (!routes.is_empty()).then_some(DeliveryConfig::Partial(
+                talpid_tunnel::tun_provider::PartialConfig {
+                    routes,
+                    excluded_packages: self.excluded_packages.clone().unwrap_or_default(),
+                },
+            ))
+        } else if self.broker.snapshot().mode == AttachmentMode::ManagedRequired {
+            if let Some(request) = self.broker.pending_request() {
+                self.target_config = Some(request.clone());
+                Some(DeliveryConfig::Secured {
                     broker: self.broker.clone(),
                     request,
                 })
-                .or_else(|| {
-                    snapshot
-                        .capture_generation
-                        .and_then(|_| self.delivery.applied_config())
+            } else {
+                let routes = policy
+                    .announced_routes()
+                    .iter()
+                    .map(|route| route.network())
+                    .collect();
+                let mut config = match &self.target_config {
+                    Some(target) => talpid_tunnel::tun_provider::transport::router_config(
+                        target.target_config(),
+                        routes,
+                    ),
+                    None => talpid_tunnel::tun_provider::transport::router_blocking_config(routes),
+                };
+                // Startup/Error have no provider request to carry current app
+                // coverage. Keep the actor's normal settings projection here.
+                if let Some(packages) = &self.excluded_packages {
+                    config.excluded_packages.clone_from(packages);
+                }
+                let applied = self.delivery.pending_or_applied_config();
+                Some(match applied {
+                    Some(applied) if applied.router_config() == Some(&config) => applied,
+                    _ => DeliveryConfig::Router(config),
                 })
+            }
         } else {
             None
         };
@@ -315,7 +357,6 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
             }
         }
         self.set_endpoint(target, phase);
-        self.publish(policy, target, phase)
     }
 
     pub fn owner_changed<P: Into<TunnelPhase>>(
@@ -354,15 +395,16 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
         self.delivery.has_owner()
     }
 
-    fn set_endpoint(&mut self, target: TargetState, phase: TunnelPhase) {
+    pub(super) fn capture_configuration_ready(&self) -> bool {
+        self.delivery.configuration_ready() && self.broker.snapshot().capture_ready
+    }
+
+    fn set_endpoint(&mut self, _target: TargetState, _phase: TunnelPhase) {
+        // A handover suspends the sink, not the logical Local grant. Queued
+        // replies retain their physical sockets and wait for the current sink.
         let ready = !self.shutting_down
-            && ((target == TargetState::Unsecured
-                && phase == TunnelPhase::Disconnected
-                && self.delivery.partial_ready())
-                || (target == TargetState::Secured
-                    && phase == TunnelPhase::Connected
-                    && self.delivery.managed_ready()
-                    && self.broker.snapshot().ordinary_ready));
+            && self.delivery.ready()
+            && self.broker.snapshot().session_generation.is_some();
         if ready {
             self.suspended = false;
         }
@@ -372,17 +414,11 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
     fn availability(
         &self,
         policy: &LocalNetworkAccess,
-        target: TargetState,
-        phase: TunnelPhase,
+        _target: TargetState,
+        _phase: TunnelPhase,
     ) -> mullvad_types::settings::local_network_access::status::ForwardingAvailability {
-        let endpoint = !self.shutting_down
-            && ((target == TargetState::Unsecured
-                && phase == TunnelPhase::Disconnected
-                && self.delivery.partial_ready())
-                || (target == TargetState::Secured
-                    && phase == TunnelPhase::Connected
-                    && self.delivery.managed_ready()
-                    && self.broker.snapshot().ordinary_ready));
+        let endpoint =
+            !self.shutting_down && self.delivery.ready() && self.broker.snapshot().capture_ready;
         let expected_teardown = self.suspended && !self.delivery.release_failed();
         local_delivery::availability(
             self.delivery.supported(),
@@ -435,7 +471,9 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
                 Ok(Some(TunnelCommand::Disconnect))
             }
             ConnectStep::Select { mode, connect } => {
-                self.stop().await?;
+                // Selection may need more than one actor turn. Preserve startup
+                // Secured intent even when setting the mode removes `changed`.
+                continuation.requested |= connect;
                 let routes = policy
                     .announced_routes()
                     .iter()
@@ -450,6 +488,23 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
                     return Err(std::io::Error::other(format!(
                         "Transport selection refused: {error:?}"
                     )));
+                }
+                // Capture readiness is an actor continuation too: retain the
+                // pending acknowledgement and return to the ordinary event select.
+                self.reconcile(
+                    policy,
+                    target,
+                    self.phase.unwrap_or(TunnelPhase::Disconnected),
+                    false,
+                )
+                .await;
+                if connect && mode == AttachmentMode::ManagedRequired {
+                    if !self.capture_configuration_ready() {
+                        return Ok(None);
+                    }
+                    self.broker.resume_transport().map_err(|error| {
+                        std::io::Error::other(format!("Target admission refused: {error:?}"))
+                    })?;
                 }
                 continuation.selected(policy, connect);
                 Ok(connect.then_some(TunnelCommand::Connect))
@@ -497,9 +552,7 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
     }
 
     pub fn suspend(&mut self) {
-        self.suspended = true;
         self.delivery.defer_release();
-        self.delivery.authority.endpoint(false);
         self.broker.pause_transport();
         if self.phase == Some(TunnelPhase::Disconnected) {
             self.delivery.transport_joined();
@@ -526,6 +579,7 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
         }
     }
 
+    #[cfg(test)]
     pub async fn stop(&mut self) -> std::io::Result<()> {
         self.delivery.stop().await
     }
@@ -539,7 +593,9 @@ impl<F: FrontendFactory> LocalNetworkRuntime<F> {
             ));
         }
         self.broker.close();
-        self.delivery.stop().await
+        self.delivery.stop().await?;
+        self.target_config = None;
+        Ok(())
     }
 }
 
@@ -604,14 +660,14 @@ mod tests {
         let off = LocalNetworkAccess::default();
         assert_eq!(
             intent.next(&off, TargetState::Secured, true, ManagedRequired),
-            Disconnect
+            Wait
         );
         // Every ordinary event can update intent while the TSM is tearing down.
         // Coalescing back to Managed does not authorize early selection.
         intent.connect();
         assert_eq!(
             intent.next(&policy(), TargetState::Secured, true, ManagedRequired),
-            Wait
+            Disconnect
         );
         intent.observe(TunnelPhase::Disconnecting);
         intent.disconnect();
@@ -623,13 +679,13 @@ mod tests {
         assert_eq!(
             intent.next(&off, TargetState::Unsecured, true, ManagedRequired),
             Select {
-                mode: Native,
+                mode: ManagedRequired,
                 connect: false
             }
         );
         intent.selected(&off, false);
         assert_eq!(
-            intent.next(&off, TargetState::Unsecured, true, Native),
+            intent.next(&off, TargetState::Unsecured, true, ManagedRequired),
             Wait
         );
     }
@@ -659,7 +715,7 @@ mod tests {
         for enabled in [false, true] {
             let mut configured = policy();
             configured.enabled = enabled;
-            let expected = if enabled { ManagedRequired } else { Native };
+            let expected = ManagedRequired;
             let mut intent = ConnectContinuation::default();
             intent.observe(TunnelPhase::Disconnected);
             intent.connect();
@@ -687,10 +743,15 @@ mod tests {
             configured.enabled = !enabled;
             assert_eq!(
                 intent.next(&configured, TargetState::Secured, true, expected),
+                Wait
+            );
+            intent.connect();
+            assert_eq!(
+                intent.next(&configured, TargetState::Secured, true, expected),
                 Disconnect
             );
             intent.observe(TunnelPhase::Disconnected);
-            let replacement = if enabled { Native } else { ManagedRequired };
+            let replacement = ManagedRequired;
             assert_eq!(
                 intent.next(&configured, TargetState::Secured, true, expected),
                 Select {
@@ -705,7 +766,7 @@ mod tests {
             if !enabled {
                 assert_eq!(
                     intent.next(&configured, TargetState::Secured, true, replacement),
-                    Disconnect
+                    Wait
                 );
             }
         }
@@ -718,7 +779,7 @@ mod tests {
         routes.rules[0].cidrs = vec!["172.16.0.0/16".parse().unwrap()];
         assert_eq!(
             intent.next(&routes, TargetState::Secured, true, ManagedRequired),
-            Disconnect
+            Wait
         );
     }
 

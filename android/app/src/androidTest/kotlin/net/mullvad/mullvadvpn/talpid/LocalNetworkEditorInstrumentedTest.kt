@@ -11,6 +11,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.v2.AndroidComposeUiTestEnvironment
 import androidx.compose.ui.test.v2.runEmptyComposeUiTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleCallback
@@ -22,6 +23,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -250,8 +253,11 @@ class LocalNetworkEditorInstrumentedTest {
     }
 
     /** Reuses the proven async MainActivity environment for additional shipped-UI outcomes. */
-    internal fun withLocalAccessScreen(block: (LocalNetworkEditorInstrumentedTest) -> Unit) =
-        runEmptyComposeUiTest {
+    internal fun withLocalAccessScreen(
+        testTimeout: Duration = 1.minutes,
+        block: (LocalNetworkEditorInstrumentedTest) -> Unit,
+    ) {
+        val body: ComposeUiTest.() -> Unit = {
             compose = this
             withLiveActivity {
                 click(target.getString(net.mullvad.mullvadvpn.lib.ui.resource.R.string.settings))
@@ -266,6 +272,17 @@ class LocalNetworkEditorInstrumentedTest {
                 block(this@LocalNetworkEditorInstrumentedTest)
             }
         }
+        if (testTimeout == 1.minutes) {
+            runEmptyComposeUiTest(body)
+        } else {
+            // runEmptyComposeUiTest exposes no timeout overload. Reuse its
+            // underlying empty environment without launching another Activity.
+            AndroidComposeUiTestEnvironment<MainActivity>(testTimeout = testTimeout) {
+                    error("Launch the owned Activity inside the test body")
+                }
+                .runTest(body)
+        }
+    }
 
     internal fun requireNoIdentityPrompt() {
         val prompts =

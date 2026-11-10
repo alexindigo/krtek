@@ -94,7 +94,10 @@ impl FrontendPlatform for Platform {
         assert!(generation > 0);
         self.generation.store(generation as u64, SeqCst);
         let routes = match config {
-            CaptureConfig::Partial(routes) => routes.clone(),
+            CaptureConfig::Partial(config) => config.routes.clone(),
+            CaptureConfig::Router { config, .. } => {
+                config.routes.iter().map(ToString::to_string).collect()
+            }
             CaptureConfig::Secured { request, .. } => request
                 .config()
                 .routes
@@ -223,7 +226,7 @@ async fn start<A: LocalAuthority>(
 ) -> io::Result<FrontendOwner> {
     let mut owner = FrontendOwner::start(
         platform,
-        CaptureConfig::Partial(routes),
+        CaptureConfig::Partial(routes.into()),
         forwarder,
         updates,
         managed::broker(),
@@ -1173,7 +1176,7 @@ async fn release_failure_retains_ownership_until_explicit_joined_retry() {
         let (_updates, rx) = watch::channel(0);
         let mut owner = FrontendOwner::start(
             platform.clone(),
-            CaptureConfig::Partial(routes()),
+            CaptureConfig::Partial(routes().into()),
             test_forwarder(Arc::new(Authority::default())),
             rx.clone(),
             managed::broker(),
@@ -1199,7 +1202,9 @@ async fn release_failure_retains_ownership_until_explicit_joined_retry() {
         assert!(owner.stop().await.is_err());
         assert_eq!(platform.closed.load(SeqCst), 1);
         assert!(
-            platform.open(1, &CaptureConfig::Partial(routes())).is_err(),
+            platform
+                .open(1, &CaptureConfig::Partial(routes().into()))
+                .is_err(),
             "replacement admitted before release"
         );
         let mut connect_acknowledged = false;
@@ -1251,7 +1256,7 @@ async fn cancelled_readiness_and_stop_keep_the_recovery_owner() {
             inner: platform.clone(),
             pause: pause.clone(),
         }),
-        CaptureConfig::Partial(routes()),
+        CaptureConfig::Partial(routes().into()),
         test_forwarder(Arc::new(Authority::default())),
         rx,
         managed::broker(),

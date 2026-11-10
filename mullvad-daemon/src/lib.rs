@@ -1299,6 +1299,10 @@ impl Daemon {
                             .notifier()
                             .notify_local_network_status(status);
                     }
+                    // Owner readiness can be the last event before parameters
+                    // exist. Resume the admission continuation on this exact
+                    // acknowledgement, not on a later incidental broker event.
+                    self.refresh_local_network_status(false).await;
                 }
             }
         }
@@ -1309,6 +1313,19 @@ impl Daemon {
     }
 
     async fn refresh_local_network_status(&mut self, external: bool) {
+        #[cfg(target_os = "android")]
+        self.local_network
+            .set_excluded_packages(if self.settings.split_tunnel.enable_exclusions {
+                self.settings
+                    .split_tunnel
+                    .apps
+                    .iter()
+                    .cloned()
+                    .map(SplitApp::to_tunnel_command_repr)
+                    .collect()
+            } else {
+                vec![]
+            });
         let continued = if external || !self.local_network.failed() {
             self.continue_local_connect().await
         } else {
@@ -1352,7 +1369,7 @@ impl Daemon {
             Ok(Some(command)) => self.send_tunnel_command(command),
             Ok(None) => {}
             Err(error) => {
-                log::error!("Transport selection withheld until frontend release: {error}");
+                log::error!("Router/target admission withheld: {error}");
                 return false;
             }
         }

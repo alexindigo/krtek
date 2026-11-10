@@ -20,6 +20,7 @@ struct PacketPlatform {
     peer: Mutex<Option<std::os::unix::net::UnixDatagram>>,
     starts: AtomicUsize,
     releases: AtomicUsize,
+    completed_releases: Mutex<Vec<i64>>,
     released: tokio::sync::Notify,
     fail_release: AtomicBool,
     retain_handover: AtomicBool,
@@ -120,14 +121,16 @@ impl FrontendPlatform for PacketPlatform {
             },
         ))
     }
-    fn closed(&self, _: i64) -> io::Result<()> {
+    fn closed(&self, generation: i64) -> io::Result<()> {
         self.releases.fetch_add(1, SeqCst);
-        self.released.notify_one();
-        if self.fail_release.load(SeqCst) {
+        let result = if self.fail_release.load(SeqCst) {
             Err(io::Error::other("test platform retains capture"))
         } else {
+            self.completed_releases.lock().unwrap().push(generation);
             Ok(())
-        }
+        };
+        self.released.notify_one();
+        result
     }
 }
 
@@ -282,6 +285,7 @@ async fn daemon_route_handover_retains_the_partial_grant_and_same_physical_tcp_s
         peer: Mutex::new(None),
         starts: AtomicUsize::new(0),
         releases: AtomicUsize::new(0),
+        completed_releases: Mutex::new(Vec::new()),
         released: tokio::sync::Notify::new(),
         fail_release: AtomicBool::new(false),
         retain_handover: AtomicBool::new(false),
@@ -300,7 +304,9 @@ async fn daemon_route_handover_retains_the_partial_grant_and_same_physical_tcp_s
         broker.clone(),
     );
     delivery
-        .maintain_config(Some(DeliveryConfig::Partial(vec!["10.0.2.2/32".into()])))
+        .maintain_config(Some(DeliveryConfig::Partial(
+            vec!["10.0.2.2/32".into()].into(),
+        )))
         .await;
     bounded(delivery.changed()).await;
     let mut peer = UnixDatagram::from_std(platform.peer.lock().unwrap().take().unwrap()).unwrap();
@@ -330,7 +336,9 @@ async fn daemon_route_handover_retains_the_partial_grant_and_same_physical_tcp_s
         if index != 0 {
             drop(request.take());
             let config = match index {
-                1 => DeliveryConfig::Partial(vec!["10.0.2.2/32".into(), "172.16.0.0/16".into()]),
+                1 => DeliveryConfig::Partial(
+                    vec!["10.0.2.2/32".into(), "172.16.0.0/16".into()].into(),
+                ),
                 2 | 3 => {
                     let mut config = assigned_config();
                     config.addresses =
@@ -348,7 +356,7 @@ async fn daemon_route_handover_retains_the_partial_grant_and_same_physical_tcp_s
                         request: broker.pending_request().unwrap(),
                     }
                 }
-                _ => DeliveryConfig::Partial(vec!["10.0.2.2/32".into()]),
+                _ => DeliveryConfig::Partial(vec!["10.0.2.2/32".into()].into()),
             };
             if index == 1 {
                 platform.fail_release.store(true, SeqCst);
@@ -478,6 +486,7 @@ async fn managed_capture_delivers_local_nonces_and_never_relays_denied_local() {
         peer: Mutex::new(None),
         starts: AtomicUsize::new(0),
         releases: AtomicUsize::new(0),
+        completed_releases: Mutex::new(Vec::new()),
         released: tokio::sync::Notify::new(),
         fail_release: AtomicBool::new(false),
         retain_handover: AtomicBool::new(false),
@@ -495,7 +504,19 @@ async fn managed_capture_delivers_local_nonces_and_never_relays_denied_local() {
     );
     let broker = runtime.broker();
     broker.set_mode(AttachmentMode::ManagedRequired).unwrap();
-    let mut request = broker.request_capture(assigned_config()).unwrap();
+    let mut request = broker
+        .request_target_capture(
+            assigned_config(),
+            talpid_tunnel::tun_provider::transport::router_config(
+                &assigned_config(),
+                policy()
+                    .announced_routes()
+                    .iter()
+                    .map(|route| route.network())
+                    .collect(),
+            ),
+        )
+        .unwrap();
     // The real actor's startup can await its callback without holding the daemon.
     tokio::time::timeout(
         Duration::from_millis(100),
@@ -513,7 +534,7 @@ async fn managed_capture_delivers_local_nonces_and_never_relays_denied_local() {
     let mut pair = broker.acquire(&receipt).unwrap();
     let peer = UnixDatagram::from_std(platform.peer.lock().unwrap().take().unwrap()).unwrap();
     let mut public = flow(Transport::Udp, 45000);
-    public.source.set_ip(assigned_config().addresses[0]);
+    public.source.set_ip(fixed_config().addresses[0]);
     public.destination = "1.1.1.1:443".parse().unwrap();
     let public_bytes = udp_packet(public, b"ordinary-raw");
     peer.send(&public_bytes).await.unwrap();
@@ -522,10 +543,6 @@ async fn managed_capture_delivers_local_nonces_and_never_relays_denied_local() {
             .await
             .is_err()
     );
-    pair.control.activate().unwrap();
-    runtime
-        .internal_update(&policy(), TargetState::Secured, TunnelPhase::Connected)
-        .await;
     assert_eq!(runtime.status().forwarding, ForwardingAvailability::Active);
     assert!(
         runtime
@@ -566,6 +583,15 @@ async fn managed_capture_delivers_local_nonces_and_never_relays_denied_local() {
         }
     }
     assert_eq!(hits.load(SeqCst), 2);
+    assert!(
+        !pair.control.current(),
+        "Local authentication accidentally activated ordinary traffic"
+    );
+    pair.control.activate().unwrap();
+    runtime
+        .internal_update(&policy(), TargetState::Secured, TunnelPhase::Connected)
+        .await;
+    assert_eq!(runtime.status().forwarding, ForwardingAvailability::Active);
     peer.send(&public_bytes).await.unwrap();
     bounded(pair.receive.recv())
         .await
@@ -641,6 +667,7 @@ async fn assigned_config_replacement_and_shutdown_retain_release_and_revoke_old_
         peer: Mutex::new(None),
         starts: AtomicUsize::new(0),
         releases: AtomicUsize::new(0),
+        completed_releases: Mutex::new(Vec::new()),
         released: tokio::sync::Notify::new(),
         fail_release: AtomicBool::new(false),
         retain_handover: AtomicBool::new(false),
@@ -781,6 +808,7 @@ fn release_fixture() -> (
         peer: Mutex::new(None),
         starts: AtomicUsize::new(0),
         releases: AtomicUsize::new(0),
+        completed_releases: Mutex::new(Vec::new()),
         released: tokio::sync::Notify::new(),
         fail_release: AtomicBool::new(false),
         retain_handover: AtomicBool::new(false),
@@ -813,7 +841,9 @@ fn fixed_config() -> talpid_tunnel::tun_provider::TunConfig {
 async fn pending_successor_defers_actual_fd_release_before_daemon_ready() {
     let (mut delivery, platform, broker) = release_fixture();
     delivery
-        .maintain_config(Some(DeliveryConfig::Partial(vec!["10.0.2.2/32".into()])))
+        .maintain_config(Some(DeliveryConfig::Partial(
+            vec!["10.0.2.2/32".into()].into(),
+        )))
         .await;
     bounded(delivery.changed()).await;
     let old_peer = platform.peer.lock().unwrap().take().unwrap();
@@ -902,6 +932,454 @@ struct Handover {
     commands: Vec<&'static str>,
 }
 
+#[tokio::test]
+async fn router_admission_owns_local_reader_before_connect_and_before_parameters() {
+    let mut h = Handover::new(policy());
+    h.continuation.connect();
+    assert_eq!(
+        h.advance().await.unwrap(),
+        None,
+        "Connect preceded capture acknowledgement"
+    );
+    assert!(
+        h.runtime.has_owner(),
+        "pre-parameter blocking reader absent"
+    );
+    bounded(h.runtime.notifications().1).await;
+    assert_eq!(h.advance().await.unwrap(), Some("Connect"));
+    assert_eq!(
+        h.runtime.status().forwarding,
+        ForwardingAvailability::Active
+    );
+    let session = h.runtime.broker().snapshot().session_generation;
+    for phase in [
+        TunnelPhase::Connecting,
+        TunnelPhase::Error,
+        TunnelPhase::Disconnecting,
+    ] {
+        h.observe(phase);
+        h.runtime.update(&h.policy, h.target, phase).await;
+        assert_eq!(
+            h.runtime.status().forwarding,
+            ForwardingAvailability::Active
+        );
+        assert_eq!(h.runtime.broker().snapshot().session_generation, session);
+        assert!(!h.runtime.broker().snapshot().ordinary_ready);
+    }
+    h.close().await;
+}
+
+#[tokio::test]
+async fn continuation_leaves_off_status_for_the_daemon_notification_boundary() {
+    for off in [
+        LocalNetworkAccess::default(),
+        LocalNetworkAccess {
+            enabled: true,
+            rules: vec![],
+        },
+        LocalNetworkAccess {
+            enabled: true,
+            rules: policy()
+                .rules
+                .into_iter()
+                .map(|mut rule| {
+                    rule.enabled = false;
+                    rule
+                })
+                .collect(),
+        },
+    ] {
+        let mut h = Handover::new(policy());
+        assert_eq!(h.admit().await, Some("Connect"));
+        h.connect_endpoint().await;
+        h.user_disconnect();
+        h.observe(TunnelPhase::Disconnecting);
+        h.acknowledge_transport_close();
+        h.advance().await.unwrap();
+        bounded(async {
+            while !h.runtime.capture_configuration_ready() {
+                h.runtime.notifications().1.await;
+                h.advance().await.unwrap();
+            }
+        })
+        .await;
+        assert_eq!(
+            h.runtime.status().forwarding,
+            ForwardingAvailability::Active
+        );
+        let revision = h.runtime.status().revision;
+        h.policy = off;
+        // Reproduce refresh_local_network_status: continuation first, then the
+        // publication call whose returned sample actually reaches the notifier.
+        assert!(
+            h.runtime
+                .continue_connect(&mut h.continuation, &h.policy, h.target)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let published = h
+            .runtime
+            .update(&h.policy, h.target, h.phase)
+            .await
+            .expect("continuation consumed Off before the daemon could notify it");
+        assert_eq!(published.forwarding, ForwardingAvailability::Off);
+        assert_eq!(published.revision, revision + 1);
+        assert!(
+            !h.runtime.has_owner(),
+            "Off must follow joined capture release"
+        );
+        assert!(
+            h.runtime
+                .internal_update(&h.policy, h.target, h.phase)
+                .await
+                .is_none()
+        );
+        h.close().await;
+    }
+}
+
+#[tokio::test]
+async fn runtime_router_keeps_one_local_tcp_udp_consumer_through_held_boundaries() {
+    let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let udp = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let physical = (tcp.local_addr().unwrap(), udp.local_addr().unwrap());
+    let tcp_task = tokio::spawn(async move {
+        let (mut stream, tuple) = tcp.accept().await.unwrap();
+        for index in 0..12 {
+            let mut bytes = [0; 8];
+            stream.read_exact(&mut bytes).await.unwrap();
+            assert_eq!(bytes.as_slice(), format!("{index:08}").as_bytes());
+            assert_eq!(stream.peer_addr().unwrap(), tuple);
+            stream.write_all(&bytes).await.unwrap();
+        }
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), tcp.accept())
+                .await
+                .is_err()
+        );
+    });
+    let udp_task = tokio::spawn(async move {
+        let mut tuple = None;
+        for index in 0..12 {
+            let mut bytes = [0; 128];
+            let (count, source) = udp.recv_from(&mut bytes).await.unwrap();
+            assert_eq!(&bytes[..count], format!("{index:08}").as_bytes());
+            assert_eq!(*tuple.get_or_insert(source), source);
+            udp.send_to(&bytes[..count], source).await.unwrap();
+        }
+    });
+    let mut h = Handover::unstarted_with_physical(policy(), physical);
+    h.target = TargetState::Unsecured;
+    h.observe(TunnelPhase::Disconnected);
+    assert_eq!(h.advance().await.unwrap(), None);
+    bounded(h.runtime.notifications().1).await;
+    h.runtime.owner_changed(&h.policy, h.target, h.phase);
+    let broker = h.runtime.broker();
+    let session = broker.snapshot().session_generation;
+    let authority = h.platform.authority.lock().unwrap().clone().unwrap();
+    let local = flow(Transport::Tcp, 45990);
+    let udp_flow = flow(Transport::Udp, 45991);
+    let grant = authority.authorize(local).unwrap();
+    let peer = || {
+        UnixDatagram::from_std(
+            h.platform
+                .peer
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .try_clone()
+                .unwrap(),
+        )
+        .unwrap()
+    };
+    peer()
+        .send(&tcp_packet(local, 100, 0, 2, &[]))
+        .await
+        .unwrap();
+    let syn = capture_reply(&peer()).await;
+    let mut ack = u32::from_be_bytes(syn[24..28].try_into().unwrap()).wrapping_add(1);
+    let mut sequence = 101;
+    for index in 0..12 {
+        match index {
+            1 => {
+                h.target = TargetState::Secured;
+                h.continuation.connect();
+                assert_eq!(h.admit().await, Some("Connect"));
+            }
+            2 | 7 => {
+                h.observe(TunnelPhase::Connecting);
+            }
+            3 => {
+                h.observe(TunnelPhase::Error);
+            }
+            4 | 8 => {
+                h.connect_endpoint().await;
+            }
+            5 => {
+                h.continuation.connect();
+                assert_eq!(h.advance().await.unwrap(), Some("Disconnect"));
+                h.observe(TunnelPhase::Disconnecting);
+            }
+            6 => {
+                h.acknowledge_transport_close();
+                assert_eq!(h.admit().await, Some("Connect"));
+            }
+            9 => {
+                h.runtime.suspend();
+                h.transport.take();
+                h.request.take();
+                h.observe(TunnelPhase::Disconnecting);
+                h.observe(TunnelPhase::Error);
+            }
+            10 => {
+                h.user_disconnect();
+                h.observe(TunnelPhase::Disconnecting);
+            }
+            11 => {
+                h.acknowledge_transport_close();
+                assert_eq!(h.advance().await.unwrap(), None);
+                bounded(async {
+                    while !h.runtime.capture_configuration_ready() {
+                        h.runtime.notifications().1.await;
+                        assert_eq!(h.advance().await.unwrap(), None);
+                    }
+                })
+                .await;
+            }
+            _ => {}
+        }
+        h.runtime.update(&h.policy, h.target, h.phase).await;
+        assert_eq!(
+            h.runtime.status().forwarding,
+            ForwardingAvailability::Active,
+            "stage {index}"
+        );
+        assert_eq!(
+            broker.snapshot().session_generation,
+            session,
+            "stage {index}"
+        );
+        assert!(
+            authority.current(&grant),
+            "stage {index} revoked the Local grant"
+        );
+        let capture = UnixDatagram::from_std(
+            h.platform
+                .peer
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .try_clone()
+                .unwrap(),
+        )
+        .unwrap();
+        let nonce = format!("{index:08}");
+        capture
+            .send(&tcp_packet(local, sequence, ack, 0x18, nonce.as_bytes()))
+            .await
+            .unwrap();
+        let mut received = Vec::new();
+        while received.len() < 8 {
+            let bytes = capture_reply(&capture).await;
+            let payload = packet::parse(&bytes).unwrap().payload;
+            received.extend_from_slice(payload);
+            ack = ack.wrapping_add(payload.len() as u32);
+        }
+        assert_eq!(received, nonce.as_bytes());
+        sequence += 8;
+        capture
+            .send(&tcp_packet(local, sequence, ack, 0x10, &[]))
+            .await
+            .unwrap();
+        capture
+            .send(&udp_packet(udp_flow, nonce.as_bytes()))
+            .await
+            .unwrap();
+        loop {
+            let bytes = capture_reply(&capture).await;
+            let packet = packet::parse(&bytes).unwrap();
+            if packet.flow.transport == Transport::Udp {
+                assert_eq!(packet.payload, nonce.as_bytes());
+                break;
+            }
+        }
+        // A live public packet enters the real reader at every held boundary.
+        // It must never appear as physical traffic or an app-facing reply.
+        if !broker.snapshot().ordinary_ready {
+            let mut public = udp_flow;
+            public.destination = "1.1.1.1:443".parse().unwrap();
+            capture
+                .send(&udp_packet(public, b"public-must-drop"))
+                .await
+                .unwrap();
+            let deadline = tokio::time::Instant::now() + Duration::from_millis(30);
+            let mut output = [0; 128];
+            while let Ok(result) =
+                tokio::time::timeout_at(deadline, capture.recv(&mut output)).await
+            {
+                let count = result.unwrap();
+                let packet = packet::parse(&output[..count]).unwrap();
+                // The Local peer may close after its last exact read. Permit
+                // only that connection's empty TCP ACK/FIN, never a public
+                // response, reset, duplicate payload or unrelated packet.
+                assert_eq!(
+                    packet.flow.transport,
+                    Transport::Tcp,
+                    "stage {index}: unexpected injection"
+                );
+                assert_eq!(packet.flow.source, local.destination);
+                assert_eq!(packet.flow.destination, local.source);
+                assert!(packet.payload.is_empty());
+                assert_eq!(output[33] & 4, 0, "Local stream reset at stage {index}");
+            }
+            if let Some(pair) = &mut h.transport {
+                assert!(bounded(pair.receive.recv()).await.is_err());
+            }
+        }
+    }
+    bounded(tcp_task).await.unwrap();
+    bounded(udp_task).await.unwrap();
+    assert_eq!(
+        h.platform.starts.load(SeqCst),
+        4,
+        "Partial -> blocking -> target -> Partial only; retries must reuse the fd"
+    );
+    h.close().await;
+}
+
+#[tokio::test]
+async fn disconnect_cancels_pre_parameter_admission_without_a_late_connect() {
+    let udp = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let mut h = Handover::unstarted_with_physical(
+        policy(),
+        ("127.0.0.1:9".parse().unwrap(), udp.local_addr().unwrap()),
+    );
+    h.continuation.connect();
+    assert_eq!(
+        h.advance().await.unwrap(),
+        None,
+        "Connect before initial TSM snapshot"
+    );
+    assert!(!h.runtime.has_owner());
+    h.observe(TunnelPhase::Disconnected);
+    assert_eq!(
+        h.advance().await.unwrap(),
+        None,
+        "Connect before native acknowledgement"
+    );
+    h.user_disconnect();
+    assert_eq!(h.advance().await.unwrap(), None);
+    bounded(async {
+        while !h.runtime.capture_configuration_ready() {
+            h.runtime.notifications().1.await;
+            assert_eq!(h.advance().await.unwrap(), None);
+        }
+    })
+    .await;
+    assert_eq!(h.commands, ["Disconnect"]);
+    assert_eq!(
+        h.runtime.status().forwarding,
+        ForwardingAvailability::Active
+    );
+    let peer = UnixDatagram::from_std(
+        h.platform
+            .peer
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .try_clone()
+            .unwrap(),
+    )
+    .unwrap();
+    let nonce = b"cancelled-connect-still-local";
+    peer.send(&udp_packet(flow(Transport::Udp, 45992), nonce))
+        .await
+        .unwrap();
+    let mut bytes = [0; 128];
+    let (count, source) = bounded(udp.recv_from(&mut bytes)).await.unwrap();
+    assert_eq!(&bytes[..count], nonce);
+    udp.send_to(&bytes[..count], source).await.unwrap();
+    assert_eq!(
+        packet::parse(&capture_reply(&peer).await).unwrap().payload,
+        nonce
+    );
+    assert_eq!(h.advance().await.unwrap(), None);
+    assert_eq!(
+        h.commands,
+        ["Disconnect"],
+        "late native ack resumed cancelled Secured intent"
+    );
+    assert!(!h.runtime.broker().snapshot().ordinary_ready);
+    h.close().await;
+}
+
+#[tokio::test]
+async fn actual_capture_loss_retries_with_a_fresh_router_not_a_cancelled_target_request() {
+    let udp = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let mut h = Handover::unstarted_with_physical(
+        policy(),
+        ("127.0.0.1:9".parse().unwrap(), udp.local_addr().unwrap()),
+    );
+    h.observe(TunnelPhase::Disconnected);
+    h.continuation.connect();
+    assert_eq!(h.admit().await, Some("Connect"));
+    h.connect_endpoint().await;
+    let broker = h.runtime.broker();
+    let old_session = broker.snapshot().session_generation;
+    let generation = h.platform.generation.load(SeqCst);
+    h.platform.feed.invalidate(generation);
+    bounded(async {
+        while !h.runtime.failed() {
+            h.runtime.notifications().1.await;
+            h.runtime.owner_changed(&h.policy, h.target, h.phase);
+        }
+    })
+    .await;
+    assert!(!broker.snapshot().ordinary_ready);
+    assert!(!broker.snapshot().capture_ready);
+    h.observe(TunnelPhase::Disconnecting);
+    h.acknowledge_transport_close();
+    h.observe(TunnelPhase::Error);
+    h.continuation.connect();
+    assert_eq!(h.advance().await.unwrap(), Some("Disconnect"));
+    h.acknowledge_transport_close();
+    assert_eq!(
+        h.admit().await,
+        Some("Connect"),
+        "explicit retry stalled on the cancelled target's old request"
+    );
+    assert_ne!(broker.snapshot().session_generation, old_session);
+    h.connect_endpoint().await;
+    let peer = UnixDatagram::from_std(
+        h.platform
+            .peer
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .try_clone()
+            .unwrap(),
+    )
+    .unwrap();
+    let nonce = b"fresh-session-after-real-loss";
+    peer.send(&udp_packet(flow(Transport::Udp, 45993), nonce))
+        .await
+        .unwrap();
+    let mut bytes = [0; 128];
+    let (count, source) = bounded(udp.recv_from(&mut bytes)).await.unwrap();
+    assert_eq!(&bytes[..count], nonce);
+    udp.send_to(&bytes[..count], source).await.unwrap();
+    assert_eq!(
+        packet::parse(&capture_reply(&peer).await).unwrap().payload,
+        nonce
+    );
+    h.close().await;
+}
+
 impl Handover {
     fn new(policy: LocalNetworkAccess) -> Self {
         let mut harness = Self::unstarted(policy);
@@ -910,6 +1388,19 @@ impl Handover {
     }
 
     fn unstarted(policy: LocalNetworkAccess) -> Self {
+        Self::unstarted_with_physical(
+            policy,
+            (
+                "127.0.0.1:9".parse().unwrap(),
+                "127.0.0.1:9".parse().unwrap(),
+            ),
+        )
+    }
+
+    fn unstarted_with_physical(
+        policy: LocalNetworkAccess,
+        physical: (SocketAddr, SocketAddr),
+    ) -> Self {
         let platform = Arc::new(PacketPlatform {
             feed: CaptureNetworkFeed::new(43),
             expected: Mutex::new(None),
@@ -917,15 +1408,13 @@ impl Handover {
             peer: Mutex::new(None),
             starts: AtomicUsize::new(0),
             releases: AtomicUsize::new(0),
+            completed_releases: Mutex::new(Vec::new()),
             released: tokio::sync::Notify::new(),
             fail_release: AtomicBool::new(false),
             retain_handover: AtomicBool::new(false),
             authority: Mutex::new(None),
             generation: 0.into(),
-            physical: (
-                "127.0.0.1:9".parse().unwrap(),
-                "127.0.0.1:9".parse().unwrap(),
-            ),
+            physical,
         });
         let feed = LocalNetworkFeed::new(33);
         assert!(feed.publish(33, physical_snapshot()));
@@ -974,24 +1463,38 @@ impl Handover {
         Ok(command)
     }
 
+    async fn admit(&mut self) -> Option<&'static str> {
+        bounded(async {
+            loop {
+                if let Some(command) = self.advance().await.unwrap() {
+                    break Some(command);
+                }
+                self.runtime.notifications().1.await;
+            }
+        })
+        .await
+    }
+
     async fn connect_endpoint(&mut self) {
         self.observe(TunnelPhase::Connecting);
         let broker = self.runtime.broker();
         if broker.snapshot().mode == AttachmentMode::ManagedRequired {
-            let mut config = assigned_config();
-            config.routes.extend(broker.local_routes());
-            let mut request = broker.request_capture(config).unwrap();
+            let config = assigned_config();
+            let projected = talpid_tunnel::tun_provider::transport::router_config(
+                &config,
+                broker.local_routes(),
+            );
+            let mut request = broker.request_target_capture(config, projected).unwrap();
             self.runtime
                 .update(&self.policy, self.target, self.phase)
                 .await;
-            bounded(self.runtime.notifications().1).await;
-            self.runtime
-                .owner_changed(&self.policy, self.target, self.phase);
-            let receipt = bounded(request.configured()).await.unwrap();
+            // Service native acknowledgements and queued latest-intent work as
+            // the daemon does; never hold the actor awaiting a target request.
+            let receipt = self.wait_for_capture_configuration(&mut request).await;
             let mut pair = broker.acquire(&receipt).unwrap();
             pair.control.activate().unwrap();
             let mut public = flow(Transport::Udp, 45100);
-            public.source.set_ip(assigned_config().addresses[0]);
+            public.source.set_ip(fixed_config().addresses[0]);
             public.destination = "1.1.1.1:443".parse().unwrap();
             let bytes = udp_packet(public, b"ready-handover-consumer");
             self.platform
@@ -1043,6 +1546,55 @@ impl Handover {
         self.observe(TunnelPhase::Disconnected);
     }
 
+    async fn wait_for_capture_configuration(
+        &mut self,
+        request: &mut talpid_tunnel::packet_attachment::ConfigurationRequest,
+    ) -> talpid_tunnel::packet_attachment::CaptureReceipt {
+        bounded(async {
+            loop {
+                let completed = {
+                    let (_, owner, broker) = self.runtime.notifications();
+                    tokio::select! {
+                        biased;
+                        result = request.configured() => Some(result),
+                        _ = owner => None,
+                        _ = broker => None,
+                    }
+                };
+                if let Some(receipt) = completed {
+                    break receipt;
+                }
+                self.runtime
+                    .owner_changed(&self.policy, self.target, self.phase);
+                self.runtime
+                    .internal_update(&self.policy, self.target, self.phase)
+                    .await;
+            }
+        })
+        .await
+        .unwrap()
+    }
+
+    async fn wait_for_capture_release(&self, generation: i64) {
+        // Readiness and target traffic can precede the asynchronous predecessor
+        // release. Join the exact epoch, not a notification or aggregate count.
+        bounded(async {
+            loop {
+                self.platform.released.notified().await;
+                if self
+                    .platform
+                    .completed_releases
+                    .lock()
+                    .unwrap()
+                    .contains(&generation)
+                {
+                    break;
+                }
+            }
+        })
+        .await;
+    }
+
     async fn close(mut self) {
         self.runtime.begin_shutdown();
         self.acknowledge_transport_close();
@@ -1064,11 +1616,15 @@ async fn startup_snapshot_connects_or_serves_partial_without_an_initial_transiti
             if target == TargetState::Secured {
                 h.continuation.connect();
             }
-            assert_eq!(
-                h.advance().await.unwrap(),
-                (target == TargetState::Secured).then_some("Connect"),
-                "startup snapshot {target:?}, rules {enabled}"
-            );
+            if target == TargetState::Secured {
+                assert_eq!(
+                    h.admit().await,
+                    Some("Connect"),
+                    "startup snapshot {target:?}, rules {enabled}"
+                );
+            } else {
+                assert_eq!(h.advance().await.unwrap(), None);
+            }
             if target == TargetState::Secured {
                 assert_eq!(
                     h.advance().await.unwrap(),
@@ -1103,9 +1659,13 @@ async fn coalesced_handover_keeps_reconnect_until_join_unless_user_disconnects()
             }
             let mut h = Handover::new(original.clone());
             h.continuation.connect();
-            assert_eq!(h.advance().await.unwrap(), Some("Connect"));
+            assert_eq!(h.admit().await, Some("Connect"));
             h.connect_endpoint().await;
-            assert_eq!(h.platform.starts.load(SeqCst), usize::from(direction != 1));
+            assert_eq!(
+                h.platform.starts.load(SeqCst),
+                2,
+                "blocking reader then actual target projection, including rules off"
+            );
             h.commands.clear();
             h.policy = original.clone();
             if direction == 2 {
@@ -1113,6 +1673,13 @@ async fn coalesced_handover_keeps_reconnect_until_join_unless_user_disconnects()
             } else {
                 h.policy.enabled = !h.policy.enabled;
             }
+            assert_eq!(
+                h.advance().await.unwrap(),
+                None,
+                "Local settings must not disconnect ordinary VPN"
+            );
+            assert!(h.transport.as_ref().unwrap().control.current());
+            h.continuation.connect();
             assert_eq!(h.advance().await.unwrap(), Some("Disconnect"));
             h.observe(TunnelPhase::Disconnecting);
             // An ordinary settings event returns to A before the transport joins.
@@ -1123,11 +1690,15 @@ async fn coalesced_handover_keeps_reconnect_until_join_unless_user_disconnects()
                 assert_eq!(h.advance().await.unwrap(), None);
             }
             h.acknowledge_transport_close();
-            assert_eq!(
-                h.advance().await.unwrap(),
-                (!user_disconnect).then_some("Connect"),
-                "coalesced direction {direction}, user Disconnect {user_disconnect}"
-            );
+            if user_disconnect {
+                assert_eq!(h.advance().await.unwrap(), None);
+            } else {
+                assert_eq!(
+                    h.admit().await,
+                    Some("Connect"),
+                    "coalesced direction {direction}"
+                );
+            }
             if user_disconnect {
                 assert_eq!(h.commands, ["Disconnect", "Disconnect", "Joined"]);
                 if !h.policy.announced_routes().is_empty() {
@@ -1155,12 +1726,19 @@ async fn managed_teardown_revokes_now_but_releases_only_after_transport_join() {
         for fail_release in [false, true] {
             let mut h = Handover::new(policy());
             h.continuation.connect();
-            assert_eq!(h.advance().await.unwrap(), Some("Connect"));
+            assert_eq!(h.admit().await, Some("Connect"));
+            let initial_generation = h.platform.generation.load(SeqCst);
             h.connect_endpoint().await;
+            bounded(h.runtime.notifications().1).await;
+            h.wait_for_capture_release(initial_generation).await;
+            if trigger != "shutdown" {
+                verify_live_router_change(h, trigger, fail_release).await;
+                continue;
+            }
             h.commands.clear();
             let authority = h.platform.authority.lock().unwrap().clone().unwrap();
             let mut local = flow(Transport::Udp, 45020);
-            local.source.set_ip(assigned_config().addresses[0]);
+            local.source.set_ip(fixed_config().addresses[0]);
             let grant = authority.authorize(local).unwrap();
             let ordinary = h.transport.as_ref().unwrap().control.capability();
             let peer = h
@@ -1186,25 +1764,12 @@ async fn managed_teardown_revokes_now_but_releases_only_after_transport_join() {
                 drop(request);
             });
             h.platform.fail_release.store(fail_release, SeqCst);
-            match trigger {
-                "disconnect" => h.user_disconnect(),
-                "shutdown" => {
-                    h.runtime.begin_shutdown();
-                    assert!(matches!(
-                        h.runtime.request_disconnect(&mut h.continuation),
-                        talpid_core::tunnel_state_machine::TunnelCommand::Disconnect
-                    ));
-                    h.commands.push("Disconnect");
-                }
-                _ => {
-                    if trigger == "rules-off" {
-                        h.policy.enabled = false;
-                    } else {
-                        h.policy.rules[0].cidrs = vec!["172.16.0.0/16".parse().unwrap()];
-                    }
-                    assert_eq!(h.advance().await.unwrap(), Some("Disconnect"));
-                }
-            }
+            h.runtime.begin_shutdown();
+            assert!(matches!(
+                h.runtime.request_disconnect(&mut h.continuation),
+                talpid_core::tunnel_state_machine::TunnelCommand::Disconnect
+            ));
+            h.commands.push("Disconnect");
             assert!(
                 !authority.current(&grant),
                 "{trigger}: Local revocation was late"
@@ -1245,7 +1810,7 @@ async fn managed_teardown_revokes_now_but_releases_only_after_transport_join() {
                 h.runtime.stop().await.is_err(),
                 "explicit stop bypassed joined release"
             );
-            assert_eq!(h.platform.releases.load(SeqCst), 0);
+            assert_eq!(h.platform.releases.load(SeqCst), 1);
 
             acknowledge.send(()).unwrap();
             bounded(joining).await.unwrap();
@@ -1257,11 +1822,7 @@ async fn managed_teardown_revokes_now_but_releases_only_after_transport_join() {
                     .is_err()
             );
             h.acknowledge_transport_close();
-            let first = if trigger == "shutdown" {
-                h.runtime.shutdown().await.map(|()| None)
-            } else {
-                h.advance().await
-            };
+            let first = h.runtime.shutdown().await;
             if fail_release {
                 assert!(first.is_err());
                 assert!(h.runtime.has_owner());
@@ -1270,18 +1831,14 @@ async fn managed_teardown_revokes_now_but_releases_only_after_transport_join() {
                     AttachmentMode::ManagedRequired
                 );
                 let attempts = h.platform.releases.load(SeqCst);
-                assert_eq!(attempts, 1, "new release failure retried in the same event");
+                assert_eq!(attempts, 2, "new release failure retried in the same event");
                 h.runtime
                     .internal_update(&h.policy, h.target, h.phase)
                     .await;
                 assert_eq!(h.platform.releases.load(SeqCst), attempts);
                 h.platform.fail_release.store(false, SeqCst);
-                if trigger == "shutdown" {
-                    h.runtime.shutdown().await.unwrap();
-                } else {
-                    h.advance().await.unwrap();
-                }
-                assert_eq!(h.platform.releases.load(SeqCst), 2);
+                h.runtime.shutdown().await.unwrap();
+                assert_eq!(h.platform.releases.load(SeqCst), 3);
             } else {
                 first.unwrap();
             }
@@ -1289,20 +1846,7 @@ async fn managed_teardown_revokes_now_but_releases_only_after_transport_join() {
                 peer.send(b"closed-capture").is_err(),
                 "descriptor survived acknowledged release"
             );
-            if matches!(trigger, "rules-off" | "routes") {
-                assert_eq!(h.commands, ["Disconnect", "Joined", "Connect"]);
-                h.connect_endpoint().await;
-            } else if trigger == "disconnect" {
-                assert_eq!(h.commands, ["Disconnect", "Joined"]);
-                bounded(h.runtime.notifications().1).await;
-                h.runtime.owner_changed(&h.policy, h.target, h.phase);
-                assert_eq!(
-                    h.runtime.status().forwarding,
-                    ForwardingAvailability::Active
-                );
-            } else {
-                assert!(!h.runtime.has_owner());
-            }
+            assert!(!h.runtime.has_owner());
             h.close().await;
         }
     }
@@ -1310,28 +1854,187 @@ async fn managed_teardown_revokes_now_but_releases_only_after_transport_join() {
     // It must not demand a second TSM transition to release that retained owner.
     let mut h = Handover::new(policy());
     h.continuation.connect();
-    h.advance().await.unwrap();
+    h.admit().await;
+    let initial_generation = h.platform.generation.load(SeqCst);
     h.connect_endpoint().await;
+    bounded(h.runtime.notifications().1).await;
+    h.wait_for_capture_release(initial_generation).await;
     h.commands.clear();
     h.platform.fail_release.store(true, SeqCst);
     h.user_disconnect();
     h.acknowledge_transport_close();
-    assert!(h.advance().await.is_err());
+    h.advance().await.unwrap();
+    bounded(h.runtime.notifications().1).await;
+    bounded(async {
+        while !h.runtime.failed() {
+            h.runtime.notifications().1.await;
+        }
+    })
+    .await;
     assert!(h.runtime.has_owner());
     h.runtime.begin_shutdown();
     h.platform.fail_release.store(false, SeqCst);
     bounded(h.runtime.shutdown()).await.unwrap();
     assert!(!h.runtime.has_owner());
     assert_eq!(h.commands, ["Disconnect", "Joined"]);
-    assert_eq!(h.platform.releases.load(SeqCst), 2);
+    assert_eq!(h.platform.releases.load(SeqCst), 4);
+}
+
+async fn verify_live_router_change(mut h: Handover, trigger: &str, fail_release: bool) {
+    h.commands.clear();
+    let old_generation = h.platform.generation.load(SeqCst);
+    let broker = h.runtime.broker();
+    let session = broker.snapshot().session_generation;
+    let authority = h.platform.authority.lock().unwrap().clone().unwrap();
+    let grant = authority.authorize(flow(Transport::Udp, 45912)).unwrap();
+    let old_peer = h
+        .platform
+        .peer
+        .lock()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .try_clone()
+        .unwrap();
+    let before = h.platform.releases.load(SeqCst);
+    h.platform.fail_release.store(fail_release, SeqCst);
+    if trigger == "disconnect" {
+        h.user_disconnect();
+        h.observe(TunnelPhase::Disconnecting);
+        assert_eq!(bounded(h.advance()).await.unwrap(), None);
+        assert!(
+            authority.current(&grant),
+            "Disconnect revoked Local before Partial handover"
+        );
+        assert!(!h.transport.as_ref().unwrap().control.current());
+        assert_eq!(old_peer.send(b"held-capture").unwrap(), 12);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), async {
+                while h.platform.releases.load(SeqCst) == before {
+                    h.platform.released.notified().await;
+                }
+            })
+            .await
+            .is_err(),
+            "platform released before target joined"
+        );
+        // A further settings event must be serviced while the target is held.
+        h.policy.rules[0].name = "latest while joining".into();
+        assert_eq!(bounded(h.advance()).await.unwrap(), None);
+        h.acknowledge_transport_close();
+    } else {
+        if trigger == "rules-off" {
+            h.policy.enabled = false;
+        } else {
+            h.policy.rules[0].cidrs = vec!["172.16.0.0/16".parse().unwrap()];
+        }
+    }
+    assert_eq!(bounded(h.advance()).await.unwrap(), None);
+    if trigger != "disconnect" {
+        assert!(!authority.current(&grant), "policy revoke was late");
+        assert!(
+            h.transport.as_ref().unwrap().control.current(),
+            "Local policy retired ordinary VPN"
+        );
+        assert!(h.commands.is_empty());
+    }
+    bounded(h.runtime.notifications().1).await;
+    bounded(async {
+        while h.platform.releases.load(SeqCst) == before {
+            h.runtime.notifications().1.await;
+        }
+    })
+    .await;
+    if fail_release {
+        bounded(async {
+            while !h.runtime.failed() {
+                h.runtime.notifications().1.await;
+            }
+        })
+        .await;
+        let failed_count = h.platform.releases.load(SeqCst);
+        h.runtime
+            .internal_update(&h.policy, h.target, h.phase)
+            .await;
+        assert_eq!(
+            h.platform.releases.load(SeqCst),
+            failed_count,
+            "internal event retried failed release"
+        );
+        h.platform.fail_release.store(false, SeqCst);
+        assert_eq!(h.advance().await.unwrap(), None);
+        bounded(h.runtime.notifications().1).await;
+        assert_eq!(h.platform.releases.load(SeqCst), failed_count + 1);
+    }
+    // A configuration ack and an unrelated platform release are not closure of
+    // this exact predecessor. Drive both stages inside the same existing bound.
+    let settled = tokio::time::timeout(Duration::from_secs(5), async {
+        while !h.runtime.capture_configuration_ready()
+            || !h
+                .platform
+                .completed_releases
+                .lock()
+                .unwrap()
+                .contains(&old_generation)
+        {
+            h.runtime.notifications().1.await;
+            h.runtime
+                .internal_update(&h.policy, h.target, h.phase)
+                .await;
+        }
+    })
+    .await;
+    assert!(
+        settled.is_ok(),
+        "{trigger}, failure={fail_release}, starts={}, releases={}, broker={:?}, failed={}, applied platforms={:?}",
+        h.platform.starts.load(SeqCst),
+        h.platform.releases.load(SeqCst),
+        broker.snapshot(),
+        h.runtime.failed(),
+        h.platform.opened.lock().unwrap()
+    );
+    h.runtime.owner_changed(&h.policy, h.target, h.phase);
+    assert_eq!(broker.snapshot().session_generation, session);
+    assert!(
+        old_peer.send(b"old-closed").is_err(),
+        "{trigger}, failure={fail_release}: predecessor survived exact configuration/release acknowledgements"
+    );
+    if trigger == "disconnect" {
+        assert!(authority.current(&grant));
+        assert_eq!(h.commands, ["Disconnect", "Joined"]);
+        assert_eq!(
+            h.runtime.status().forwarding,
+            ForwardingAvailability::Active
+        );
+    } else {
+        let mut public = flow(Transport::Udp, 45913);
+        public.destination = "1.1.1.1:443".parse().unwrap();
+        let bytes = udp_packet(public, b"ordinary-vpn-survives-local-off");
+        h.platform
+            .peer
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .send(&bytes)
+            .unwrap();
+        bounded(h.transport.as_mut().unwrap().receive.recv())
+            .await
+            .unwrap()
+            .handoff(|actual| assert_eq!(actual, bytes))
+            .unwrap();
+    }
+    h.close().await;
 }
 
 #[tokio::test]
 async fn joined_internal_transport_retry_replaces_capture_without_a_tsm_handover() {
     let mut h = Handover::new(policy());
     h.continuation.connect();
-    assert_eq!(h.advance().await.unwrap(), Some("Connect"));
+    assert_eq!(h.admit().await, Some("Connect"));
+    let initial_generation = h.platform.generation.load(SeqCst);
     h.connect_endpoint().await;
+    h.wait_for_capture_release(initial_generation).await;
     let broker = h.runtime.broker();
     let first_generation = broker.snapshot().capture_generation.unwrap();
     let first_session = broker.snapshot().session_generation;
@@ -1350,22 +2053,27 @@ async fn joined_internal_transport_retry_replaces_capture_without_a_tsm_handover
     transport.control.detach();
     bounded(h.runtime.notifications().2).await;
     h.runtime.owner_changed(&h.policy, h.target, h.phase);
-    let mut next_request = broker.request_capture(config).unwrap();
+    let mut next_request = broker
+        .request_target_capture(assigned_config(), config)
+        .unwrap();
     // A successor request is not proof that old device/control cleanup joined.
     h.observe(TunnelPhase::Connecting);
     h.runtime
         .internal_update(&h.policy, h.target, h.phase)
         .await;
-    assert_eq!(h.platform.starts.load(SeqCst), 1);
-    assert_eq!(h.platform.releases.load(SeqCst), 0);
+    assert_eq!(h.platform.starts.load(SeqCst), 2);
+    assert_eq!(h.platform.releases.load(SeqCst), 1);
     // The successor can become ready without destroying Local or acknowledging
     // predecessor cleanup. The old descriptor remains owned until the exact join.
-    bounded(h.runtime.notifications().1).await;
-    let receipt = bounded(next_request.configured()).await.unwrap();
-    assert_ne!(receipt.generation(), first_generation);
+    let receipt = h.wait_for_capture_configuration(&mut next_request).await;
+    assert_eq!(
+        receipt.generation(),
+        first_generation,
+        "equal projection unnecessarily reopened the capture"
+    );
     assert_eq!(broker.snapshot().session_generation, first_session);
     assert_eq!(old_peer.send(b"predecessor-retained").unwrap(), 20);
-    assert_eq!(h.platform.releases.load(SeqCst), 0);
+    assert_eq!(h.platform.releases.load(SeqCst), 1);
     drop(transport);
     old_request.transport_joined();
     // This is the same production broker notification selected by the daemon.
@@ -1373,7 +2081,7 @@ async fn joined_internal_transport_retry_replaces_capture_without_a_tsm_handover
     h.runtime
         .internal_update(&h.policy, h.target, h.phase)
         .await;
-    bounded(h.platform.released.notified()).await;
+    assert_eq!(old_peer.send(b"same-current-sink").unwrap(), 17);
     let pair = broker.acquire(&receipt).unwrap();
     pair.control.activate().unwrap();
     h.request = Some(next_request);

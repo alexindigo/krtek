@@ -2,7 +2,7 @@
 use super::{Error, VpnServiceConfig};
 use jnix::{
     IntoJava, JnixEnv,
-    jni::objects::{JObject, JValue},
+    jni::objects::{AutoLocal, JObject, JValue},
 };
 use std::os::fd::{OwnedFd, RawFd};
 use talpid_types::android::AndroidContext;
@@ -13,7 +13,7 @@ use jni_call::handled;
 pub const METHODS: [(&str, &str); 9] = [
     (
         "openLocalFrontend",
-        "(J[Ljava/lang/String;)Lnet/mullvad/talpid/model/CreateTunResult;",
+        "(J[Ljava/lang/String;[Ljava/lang/String;)Lnet/mullvad/talpid/model/CreateTunResult;",
     ),
     ("finishLocalFrontend", "(J)V"),
     ("isLocalFrontendActive", "()Z"),
@@ -25,7 +25,7 @@ pub const METHODS: [(&str, &str); 9] = [
     ("bindLocalFrontend", "(JLjava/lang/String;)Z"),
     (
         "handoverLocalFrontend",
-        "(JJ[Ljava/lang/String;)Lnet/mullvad/talpid/model/CaptureHandoverResult;",
+        "(JJ[Ljava/lang/String;[Ljava/lang/String;)Lnet/mullvad/talpid/model/CaptureHandoverResult;",
     ),
     (
         "handoverSecuredFrontend",
@@ -33,6 +33,28 @@ pub const METHODS: [(&str, &str); 9] = [
     ),
     descriptor::TAKE,
 ];
+
+fn string_array<'a, 'b>(
+    env: &'b jnix::jni::JNIEnv<'a>,
+    name: &'static str,
+    values: &[String],
+) -> Result<AutoLocal<'a, 'b>, Error> {
+    let size = i32::try_from(values.len()).map_err(|_| Error::TunnelDeviceError)?;
+    let array = env
+        .new_object_array(size, "java/lang/String", JObject::null())
+        .map_err(|e| Error::CallMethod(name, e))?;
+    let array = env.auto_local(JObject::from(array));
+    // Guard the array before any fallible element conversion on this attached thread.
+    for (index, value) in values.iter().enumerate() {
+        let string = env
+            .new_string(value)
+            .map_err(|e| Error::CallMethod(name, e))?;
+        let string = env.auto_local(JObject::from(string));
+        env.set_object_array_element(array.as_obj().into_inner(), index as i32, string.as_obj())
+            .map_err(|e| Error::CallMethod(name, e))?;
+    }
+    Ok(array)
+}
 
 fn decode_error(error: descriptor::DecodeError) -> Error {
     match error {
@@ -53,7 +75,7 @@ fn decode_descriptor(env: &jnix::jni::JNIEnv<'_>, result: JObject<'_>) -> Result
 }
 
 pub enum FrontendHandoverConfig<'a> {
-    Partial(&'a [String]),
+    Partial(&'a super::super::PartialConfig),
     Secured(crate::tun_provider::TunConfig),
 }
 
@@ -107,7 +129,11 @@ impl LocalNetworkPlatform {
         })
     }
 
-    pub fn open_frontend(&self, generation: i64, routes: &[String]) -> Result<OwnedFd, Error> {
+    pub fn open_frontend(
+        &self,
+        generation: i64,
+        config: &super::super::PartialConfig,
+    ) -> Result<OwnedFd, Error> {
         let env = JnixEnv::from(
             self.context
                 .jvm
@@ -116,26 +142,18 @@ impl LocalNetworkPlatform {
         );
         let (name, signature) = METHODS[0];
         handled(&env, name, || {
-            let size = i32::try_from(routes.len()).map_err(|_| Error::TunnelDeviceError)?;
-            let array = env
-                .new_object_array(size, "java/lang/String", JObject::null())
-                .map_err(|e| Error::CallMethod(name, e))?;
-            let array_ref = env.auto_local(JObject::from(array));
-            for (index, route) in routes.iter().enumerate() {
-                let string = env
-                    .new_string(route)
-                    .map_err(|e| Error::CallMethod(name, e))?;
-                env.set_object_array_element(array, index as i32, string)
-                    .map_err(|e| Error::CallMethod(name, e))?;
-                env.delete_local_ref(*string)
-                    .map_err(|e| Error::CallMethod(name, e))?;
-            }
+            let routes = string_array(&env, name, &config.routes)?;
+            let excluded = string_array(&env, name, &config.excluded_packages)?;
             let result = env
                 .call_method(
                     self.context.vpn_service.as_obj(),
                     name,
                     signature,
-                    &[JValue::Long(generation), JValue::Object(array_ref.as_obj())],
+                    &[
+                        JValue::Long(generation),
+                        JValue::Object(routes.as_obj()),
+                        JValue::Object(excluded.as_obj()),
+                    ],
                 )
                 .and_then(|value| value.l())
                 .map_err(|e| Error::CallMethod(name, e))?;
@@ -217,42 +235,29 @@ impl LocalNetworkPlatform {
                 FrontendHandoverConfig::Secured(_) => 7,
             }];
             handled(&env, name, || {
-                let argument = match config {
-                    FrontendHandoverConfig::Partial(routes) => {
-                        let size =
-                            i32::try_from(routes.len()).map_err(|_| Error::TunnelDeviceError)?;
-                        let array = env
-                            .new_object_array(size, "java/lang/String", JObject::null())
-                            .map_err(|e| Error::CallMethod(name, e))?;
-                        let array = env.auto_local(JObject::from(array));
-                        for (index, route) in routes.iter().enumerate() {
-                            let string = env
-                                .new_string(route)
-                                .map_err(|e| Error::CallMethod(name, e))?;
-                            let string = env.auto_local(JObject::from(string));
-                            env.set_object_array_element(
-                                array.as_obj().into_inner(),
-                                index as i32,
-                                string.as_obj(),
-                            )
-                            .map_err(|e| Error::CallMethod(name, e))?;
-                        }
-                        array
-                    }
+                let (argument, excluded) = match config {
+                    FrontendHandoverConfig::Partial(config) => (
+                        string_array(&env, name, &config.routes)?,
+                        Some(string_array(&env, name, &config.excluded_packages)?),
+                    ),
                     FrontendHandoverConfig::Secured(config) => {
-                        VpnServiceConfig::new(config).into_java(&env)
+                        (VpnServiceConfig::new(config).into_java(&env), None)
                     }
                 };
+                let mut arguments = vec![
+                    JValue::Long(predecessor),
+                    JValue::Long(generation),
+                    JValue::Object(argument.as_obj()),
+                ];
+                if let Some(excluded) = &excluded {
+                    arguments.push(JValue::Object(excluded.as_obj()));
+                }
                 let result = env
                     .call_method(
                         self.context.vpn_service.as_obj(),
                         name,
                         signature,
-                        &[
-                            JValue::Long(predecessor),
-                            JValue::Long(generation),
-                            JValue::Object(argument.as_obj()),
-                        ],
+                        &arguments,
                     )
                     .and_then(|v| v.l())
                     .map_err(|e| Error::CallMethod(name, e))?;

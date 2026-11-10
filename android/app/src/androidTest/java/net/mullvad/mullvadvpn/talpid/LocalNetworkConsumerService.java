@@ -32,13 +32,24 @@ import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+import java.util.UUID;
 import java.security.SecureRandom;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import javax.net.ssl.HttpsURLConnection;
 import org.json.JSONArray;
@@ -62,9 +73,12 @@ public final class LocalNetworkConsumerService extends Service {
   private static final Pattern NONCE = Pattern.compile("krtek-m3-[A-Za-z0-9-]{1,64}");
   private final ThreadPoolExecutor worker =
       new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS, new ArrayBlockingQueue<>(8));
+  private final ThreadPoolExecutor sessionCommands =
+      new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS, new ArrayBlockingQueue<>(8));
   private final Handler main = new Handler(Looper.getMainLooper());
   private boolean expired;
   private volatile ProbeResources activeProbe;
+  private volatile Session session;
   private String allowedCaller;
   private final Messenger messenger =
       new Messenger(
@@ -111,10 +125,20 @@ public final class LocalNetworkConsumerService extends Service {
   }
 
   @Override
+  public boolean onUnbind(Intent intent) {
+    Session running = session;
+    if (running != null) running.stop("caller-unbound");
+    return false;
+  }
+
+  @Override
   public void onDestroy() {
     expired = true;
     main.removeCallbacksAndMessages(null);
     worker.shutdownNow();
+    sessionCommands.shutdownNow();
+    Session running = session;
+    if (running != null) running.stop("service-destroyed");
     ProbeResources active = activeProbe;
     if (active != null) active.close();
     super.onDestroy();
@@ -132,27 +156,26 @@ public final class LocalNetworkConsumerService extends Service {
       return;
     }
     AtomicBoolean completed = new AtomicBoolean(false);
+    AtomicReference<ProbeResources> ownedResources = new AtomicReference<>();
     FutureTask<Void> task =
         new FutureTask<>(
             () -> {
-              Bundle result = execute(command);
+               Bundle result = execute(command, ownedResources);
               if (completed.compareAndSet(false, true)) send(reply, command, result);
               return null;
             });
     Runnable deadline =
         () -> {
           if (completed.compareAndSet(false, true)) {
-            expired = true;
-            task.cancel(true);
-            worker.shutdownNow();
-            ProbeResources active = activeProbe;
+             task.cancel(true);
+             ProbeResources active = ownedResources.get();
             if (active != null) active.close();
             send(reply, command, outcome("deadline"));
           }
         };
     try {
-      worker.execute(task);
       String transport = command.getString("transport");
+      (transport != null && transport.startsWith("session-") ? sessionCommands : worker).execute(task);
       main.postDelayed(deadline,
           ("lookup".equals(transport) || "exit-check".equals(transport) || "icmp-check".equals(transport))
               ? 30000L : 12000L);
@@ -162,8 +185,9 @@ public final class LocalNetworkConsumerService extends Service {
     }
   }
 
-  private Bundle execute(Bundle command) {
+  private Bundle execute(Bundle command, AtomicReference<ProbeResources> ownedResources) {
     String transport = command.getString("transport");
+    if (transport != null && transport.startsWith("session-")) return sessionCommand(command);
     if ("identity".equals(transport)) {
       Bundle result = outcome("identity");
       result.putString("application_class", getApplication().getClass().getName());
@@ -173,6 +197,7 @@ public final class LocalNetworkConsumerService extends Service {
     if ("exit-check".equals(transport) || "icmp-check".equals(transport)) {
       if (command.size() != 2 || !command.containsKey("request_id")) return outcome("invalid");
       ProbeResources resources = new ProbeResources();
+      ownedResources.set(resources);
       activeProbe = resources;
       try {
         if (Thread.currentThread().isInterrupted()) return outcome("deadline");
@@ -219,6 +244,387 @@ public final class LocalNetworkConsumerService extends Service {
       result.putString("error_class", error.getClass().getName());
       result.putString("socket_report", report.snapshot());
       return result;
+    }
+  }
+
+  private Bundle sessionCommand(Bundle command) {
+    String operation = command.getString("transport");
+    if ("session-start".equals(operation)) {
+      String destination = command.getString("destination");
+      int duration = command.getInt("duration_ms");
+      if (command.size() != 4 || destination == null || !InetAddresses.isNumericAddress(destination)
+          || duration < 2000 || duration > 480000) return outcome("invalid");
+      if (session != null && session.stopped == 0) return outcome("session-exists");
+      Session created = new Session(InetAddresses.parseNumericAddress(destination), duration);
+      session = created;
+      created.start();
+      return created.snapshot(0, 0);
+    }
+    Session running = session;
+    if (running == null || !running.id.equals(command.getString("session_id"))) return outcome("invalid");
+    if ("session-stop".equals(operation) && command.size() == 3) {
+      running.stop("requested");
+      return running.snapshot(0, 0);
+    }
+    if ("session-snapshot".equals(operation) && command.size() == 5)
+      return running.snapshot(command.getInt("local_cursor"), command.getInt("public_cursor"));
+    if ("session-burst".equals(operation) && command.size() == 3) {
+      running.burst.set(true);
+      return running.snapshot(0, 0);
+    }
+    return outcome("invalid");
+  }
+
+  /** One lifetime, no reopen. All timestamps use Android CLOCK_BOOTTIME. */
+  private static final class Session {
+    final String id = UUID.randomUUID().toString().replace("-", "").substring(0, 29);
+    final InetAddress destination;
+    final long created = SystemClock.elapsedRealtimeNanos();
+    volatile long started;
+    final CountDownLatch socketsReady = new CountDownLatch(2);
+    final long end;
+    final ArrayList<JSONObject> local = new ArrayList<>();
+    final ArrayList<JSONObject> publicLedger = new ArrayList<>();
+    final Set<Socket> publicSockets = new HashSet<>();
+    final AtomicBoolean burst = new AtomicBoolean();
+    final ArrayBlockingQueue<SessionFrame> tcpPending = new ArrayBlockingQueue<>(21);
+    final ConcurrentHashMap<String, SessionFrame> udpPending = new ConcurrentHashMap<>();
+    final ScheduledThreadPoolExecutor watchdog = new ScheduledThreadPoolExecutor(2);
+    final ThreadPoolExecutor publicWorkers = new ThreadPoolExecutor(
+        3, 3, 0, TimeUnit.SECONDS, new SynchronousQueue<>());
+    final Socket tcp = new Socket();
+    DatagramSocket udp;
+    Thread tcpPump, udpPump, publicPump, tcpReader, udpReader;
+    volatile boolean stopping;
+    String failure;
+    String stopReason;
+    long stopRequested;
+    long stopped;
+    int tcpFrames;
+    final JSONObject tcpIdentity = new JSONObject();
+    final JSONObject udpIdentity = new JSONObject();
+
+    Session(InetAddress destination, int duration) {
+      this.destination = destination;
+      end = created + duration * 1000000L;
+      watchdog.setRemoveOnCancelPolicy(true);
+    }
+
+    void start() {
+      tcpPump = new Thread(() -> pump(true), "krtek-session-tcp");
+      udpPump = new Thread(() -> pump(false), "krtek-session-udp");
+      publicPump = new Thread(this::publicPump, "krtek-session-public");
+      tcpPump.start(); udpPump.start(); publicPump.start();
+      watchdog.schedule(() -> stop("session-deadline"),
+          Math.max(1, end - SystemClock.elapsedRealtimeNanos()), TimeUnit.NANOSECONDS);
+    }
+
+    synchronized void fail(String reason) {
+      if (failure == null) failure = reason;
+      stopping = true;
+      closeSockets();
+    }
+
+    synchronized void closeSockets() {
+      try { tcp.close(); } catch (IOException error) { if (failure == null) failure = "tcp-close"; }
+      if (udp != null) udp.close();
+      for (Socket socket : publicSockets) {
+        try { socket.close(); } catch (IOException error) { if (failure == null) failure = "public-close"; }
+      }
+      SessionFrame pending;
+      while ((pending = tcpPending.poll()) != null) cancelFrame(pending);
+      for (SessionFrame frame : udpPending.values()) cancelFrame(frame);
+      udpPending.clear();
+    }
+
+    private void cancelFrame(SessionFrame frame) {
+      put(frame.record, "outcome", "cancelled");
+      put(frame.record, "cancel_ns", SystemClock.elapsedRealtimeNanos());
+      put(frame.record, "error_kind", "owner-closed");
+      frame.guard.cancel(false);
+    }
+
+    void stop(String reason) {
+      boolean graceful = "requested".equals(reason);
+      synchronized (this) {
+        if (stopped != 0) return;
+        if (stopReason == null) stopReason = reason;
+        stopRequested = SystemClock.elapsedRealtimeNanos();
+        if (!"requested".equals(reason) && failure == null) failure = reason;
+        stopping = true;
+        if (!graceful) closeSockets();
+      }
+      publicWorkers.shutdown();
+      long joinDeadline = SystemClock.elapsedRealtimeNanos() + 6000000000L;
+      for (Thread thread : new Thread[] {tcpPump, udpPump, publicPump, tcpReader, udpReader}) {
+        if (thread != null && thread != Thread.currentThread()) {
+          if (!graceful) thread.interrupt();
+          try { thread.join(Math.max(1, (joinDeadline - SystemClock.elapsedRealtimeNanos()) / 1000000L)); }
+          catch (InterruptedException error) { Thread.currentThread().interrupt(); fail("stop-interrupted"); }
+          if (thread.isAlive()) fail("pump-join");
+        }
+      }
+      try { if (!publicWorkers.awaitTermination(Math.max(1, joinDeadline - SystemClock.elapsedRealtimeNanos()),
+          TimeUnit.NANOSECONDS)) fail("public-join"); }
+      catch (InterruptedException error) { Thread.currentThread().interrupt(); fail("public-join-interrupted"); }
+      watchdog.shutdownNow();
+      publicWorkers.shutdownNow();
+      synchronized (this) { closeSockets(); stopped = SystemClock.elapsedRealtimeNanos(); }
+    }
+
+    private static void put(JSONObject object, String key, Object value) {
+      SocketReport.put(object, key, value);
+    }
+
+    synchronized JSONObject tick(boolean ordinary, String transport, int index, long scheduled) {
+      ArrayList<JSONObject> ledger = ordinary ? publicLedger : local;
+      if (ledger.size() == (ordinary ? 1024 : 4096)) { fail("ledger-overflow"); return null; }
+      JSONObject record = new JSONObject();
+      put(record, "transport", transport); put(record, "tick", index);
+      put(record, "scheduled_ns", scheduled); put(record, "session_id", id);
+      put(record, "uid", Process.myUid()); put(record, "pid", Process.myPid());
+      put(record, "outcome", "pending");
+      ledger.add(record);
+      return record;
+    }
+
+    synchronized void update(JSONObject record, String key, Object value) { put(record, key, value); }
+
+    private void waitUntil(long scheduled) throws InterruptedException {
+      long remaining;
+      while (!stopping && (remaining = scheduled - SystemClock.elapsedRealtimeNanos()) > 0)
+        TimeUnit.NANOSECONDS.sleep(remaining);
+    }
+
+    private int remaining(long deadline) throws SocketTimeoutException {
+      long remaining = deadline - SystemClock.elapsedRealtimeNanos();
+      if (remaining <= 0) throw new SocketTimeoutException("Scheduled frame deadline");
+      return (int) Math.max(1, remaining / 1000000L);
+    }
+
+    private void awaitSockets() throws InterruptedException, IOException {
+      if (!socketsReady.await(5, TimeUnit.SECONDS)) throw new IOException("Socket startup deadline");
+      synchronized (this) {
+        if (started == 0) started = SystemClock.elapsedRealtimeNanos();
+      }
+    }
+
+    private void identity(JSONObject value, int hash, InetAddress address, int port, int remotePort) {
+      synchronized (this) {
+        put(value, "object_id", hash); put(value, "local_address", address.getHostAddress());
+        put(value, "local_port", port); put(value, "remote_address", destination.getHostAddress());
+        put(value, "remote_port", remotePort);
+      }
+    }
+
+    void pump(boolean stream) {
+      String transport = stream ? "tcp" : "udp";
+      try {
+        if (stream) {
+          ScheduledFuture<?> guard = watchdog.schedule(() -> fail("tcp-connect-watchdog"), 5, TimeUnit.SECONDS);
+          try { tcp.connect(new InetSocketAddress(destination, 18080), 5000); }
+          finally { guard.cancel(false); }
+          identity(tcpIdentity, System.identityHashCode(tcp), tcp.getLocalAddress(), tcp.getLocalPort(), 18080);
+        } else {
+          synchronized (this) {
+            if (stopping) return;
+            udp = new DatagramSocket();
+            udp.connect(destination, 18081);
+          }
+          identity(udpIdentity, System.identityHashCode(udp), udp.getLocalAddress(), udp.getLocalPort(), 18081);
+        }
+        socketsReady.countDown();
+        awaitSockets();
+        Thread reader = new Thread(() -> readReplies(stream), "krtek-session-" + transport + "-reader");
+        if (stream) tcpReader = reader; else udpReader = reader;
+        reader.start();
+        long previous = 0;
+        for (int index = 0; index < 1920 && !stopping; index++) {
+          long scheduled = started + index * 250000000L;
+          if (scheduled >= end) break;
+          waitUntil(scheduled);
+          if (stopping) break;
+          JSONObject record = tick(false, transport, index, scheduled);
+          if (record == null) break;
+          long now = SystemClock.elapsedRealtimeNanos();
+          update(record, "start_ns", now);
+          update(record, "cadence_gap_ns", previous == 0 ? 0 : now - previous);
+          previous = now;
+          if (now - scheduled >= 250000000L) {
+            update(record, "outcome", "missed-tick"); fail("local-cadence"); break;
+          }
+          long deadline = scheduled + 5000000000L;
+          int frames = stream && burst.getAndSet(false) ? 40 : 1;
+          if (stream && tcpFrames + frames > 1920) { fail("frame-capacity"); break; }
+          StringBuilder text = new StringBuilder();
+          for (int frame = 0; frame < frames; frame++) {
+            int sequence = stream ? tcpFrames++ : index;
+            text.append(String.format(Locale.ROOT, "krtek-m3-%s-%s-%04x", id, stream ? "t" : "u", sequence));
+          }
+          byte[] payload = text.toString().getBytes(StandardCharsets.US_ASCII);
+          update(record, "nonce_frames", text.toString()); update(record, "frame_count", frames);
+          ScheduledFuture<?> guard = watchdog.schedule(() -> fail(transport + "-frame-watchdog"),
+              Math.max(1, deadline - SystemClock.elapsedRealtimeNanos()), TimeUnit.NANOSECONDS);
+          try {
+            update(record, "send_ns", SystemClock.elapsedRealtimeNanos());
+            SessionFrame pending = new SessionFrame(record, payload, deadline, guard);
+            if (stream) {
+              if (!tcpPending.offer(pending)) throw new IOException("TCP in-flight capacity");
+              tcp.getOutputStream().write(payload);
+            } else {
+              if (udpPending.size() >= 21) throw new IOException("UDP in-flight capacity");
+              udpPending.put(text.toString(), pending);
+              udp.send(new DatagramPacket(payload, payload.length));
+            }
+          } catch (Exception error) {
+            update(record, "return_ns", SystemClock.elapsedRealtimeNanos());
+            update(record, "outcome", "error"); update(record, "error_class", error.getClass().getName());
+            fail(transport + "-exchange");
+            guard.cancel(false);
+          }
+        }
+      } catch (Exception error) {
+        if (!stopping) fail(transport + "-pump-" + error.getClass().getName());
+      }
+    }
+
+    void readReplies(boolean stream) {
+      SessionFrame pending = null;
+      try {
+        if (!stream) udp.setSoTimeout(100);
+        while (!stopping || (stream ? tcpPump.isAlive() || !tcpPending.isEmpty()
+            : udpPump.isAlive() || !udpPending.isEmpty())) {
+          if (stream) {
+            pending = tcpPending.poll(100, TimeUnit.MILLISECONDS);
+            if (pending == null) continue;
+            byte[] bytes = new byte[pending.payload.length];
+            int offset = 0;
+            while (offset < bytes.length) {
+              tcp.setSoTimeout(remaining(pending.deadline));
+              int count = tcp.getInputStream().read(bytes, offset, bytes.length - offset);
+              if (count < 0) throw new EOFException("Session closed before exact echo");
+              offset += count;
+            }
+            if (!Arrays.equals(bytes, pending.payload)) throw new IOException("Session TCP nonce mismatch");
+          } else {
+            DatagramPacket packet = new DatagramPacket(new byte[46], 46);
+            try { udp.receive(packet); } catch (SocketTimeoutException timeout) { continue; }
+            String nonce = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.US_ASCII);
+            pending = udpPending.remove(nonce);
+            if (pending == null || packet.getLength() != 45) throw new IOException("Unknown/duplicate UDP nonce");
+          }
+          long replied = SystemClock.elapsedRealtimeNanos();
+          update(pending.record, "reply_ns", replied); update(pending.record, "bytes", pending.payload.length);
+          update(pending.record, "outcome", replied <= pending.deadline ? "reply" : "late-reply");
+          pending.guard.cancel(false);
+          if (replied > pending.deadline) fail("local-deadline");
+          pending = null;
+        }
+      } catch (Exception error) {
+        if (pending != null) {
+          update(pending.record, "return_ns", SystemClock.elapsedRealtimeNanos());
+          update(pending.record, "outcome", "error");
+          update(pending.record, "error_class", error.getClass().getName());
+          pending.guard.cancel(false);
+        }
+        if (!stopping) fail((stream ? "tcp" : "udp") + "-exchange");
+      }
+    }
+
+    void publicPump() {
+      try {
+        awaitSockets();
+        for (int index = 0; index < 960 && !stopping; index++) {
+          long scheduled = started + index * 500000000L;
+          if (scheduled >= end) break;
+          waitUntil(scheduled);
+          if (stopping) break;
+          JSONObject record = tick(true, "public-tcp", index, scheduled);
+          if (record == null) break;
+          try { publicWorkers.execute(() -> publicProbe(record, scheduled)); }
+          catch (RejectedExecutionException error) {
+            update(record, "outcome", "capacity"); fail("public-capacity"); break;
+          }
+        }
+      } catch (Exception error) { if (!stopping) fail("public-scheduler"); }
+    }
+
+    void publicProbe(JSONObject record, long scheduled) {
+      Socket socket = new Socket();
+      long deadline = scheduled + 1000000000L;
+      synchronized (this) {
+        publicSockets.add(socket);
+        put(record, "socket_id", System.identityHashCode(socket));
+      }
+      ScheduledFuture<?> guard = null;
+      try {
+        if (stopping && failure != null) throw new IOException("Session failed");
+        guard = watchdog.schedule(() -> {
+          update(record, "outcome", "watchdog"); fail("public-watchdog");
+        }, Math.max(1, deadline + 100000000L - SystemClock.elapsedRealtimeNanos()), TimeUnit.NANOSECONDS);
+        // Leave room for Android's socket-timeout return and owned close. The
+        // immutable end-to-end deadline remains the scheduled tick + 1000 ms.
+        int timeout = Math.max(1, remaining(deadline) - 25);
+        update(record, "start_ns", SystemClock.elapsedRealtimeNanos());
+        try {
+          socket.connect(new InetSocketAddress(InetAddress.getByAddress(new byte[] {1, 1, 1, 1}), 443), timeout);
+          update(record, "outcome", "connected");
+        } catch (IOException error) {
+          update(record, "outcome", stopping && failure != null ? "cancelled" : "network-error");
+          update(record, "error_class", error.getClass().getName());
+        }
+        long returned = SystemClock.elapsedRealtimeNanos();
+        update(record, "return_ns", returned);
+        if (returned > deadline) { update(record, "outcome", "late-return"); fail("public-deadline"); }
+      } catch (Exception error) {
+        update(record, "outcome", stopping && failure != null ? "cancelled" : "harness-error");
+        update(record, "return_ns", SystemClock.elapsedRealtimeNanos());
+        update(record, "error_class", error.getClass().getName());
+        if (!stopping) fail("public-worker");
+      } finally {
+        if (guard != null) guard.cancel(false);
+        try { socket.close(); } catch (IOException error) { fail("public-close"); }
+        long closed = SystemClock.elapsedRealtimeNanos();
+        update(record, "close_ns", closed);
+        if (closed > deadline) { update(record, "outcome", "late-close"); fail("public-deadline"); }
+        synchronized (this) { publicSockets.remove(socket); }
+      }
+    }
+
+    synchronized Bundle snapshot(int localCursor, int publicCursor) {
+      if (localCursor < 0 || localCursor > local.size() || publicCursor < 0 || publicCursor > publicLedger.size())
+        return outcome("invalid");
+      JSONObject root = new JSONObject();
+      put(root, "session_id", id); put(root, "clock", "CLOCK_BOOTTIME");
+      put(root, "pid", Process.myPid()); put(root, "uid", Process.myUid());
+      put(root, "created_ns", created); put(root, "started_ns", started); put(root, "deadline_ns", end);
+      put(root, "stopped_ns", stopped); put(root, "stopping", stopping);
+      put(root, "stop_requested_ns", stopRequested);
+      put(root, "failure", failure == null ? "" : failure);
+      put(root, "stop_reason", stopReason == null ? "" : stopReason);
+      put(root, "tcp_socket", tcpIdentity); put(root, "udp_socket", udpIdentity);
+      put(root, "local_count", local.size()); put(root, "public_count", publicLedger.size());
+      int localEnd = Math.min(local.size(), localCursor + 32);
+      int publicEnd = Math.min(publicLedger.size(), publicCursor + 32);
+      JSONArray localPage = new JSONArray(), publicPage = new JSONArray();
+      for (int i = localCursor; i < localEnd; i++) localPage.put(local.get(i));
+      for (int i = publicCursor; i < publicEnd; i++) publicPage.put(publicLedger.get(i));
+      put(root, "local", localPage); put(root, "public", publicPage);
+      put(root, "local_cursor", localCursor); put(root, "public_cursor", publicCursor);
+      put(root, "next_local_cursor", localEnd); put(root, "next_public_cursor", publicEnd);
+      Bundle result = outcome("session");
+      result.putString("session_id", id); result.putString("session_report", root.toString());
+      return result;
+    }
+  }
+
+  private static final class SessionFrame {
+    final JSONObject record;
+    final byte[] payload;
+    final long deadline;
+    final ScheduledFuture<?> guard;
+    SessionFrame(JSONObject record, byte[] payload, long deadline, ScheduledFuture<?> guard) {
+      this.record = record; this.payload = payload; this.deadline = deadline; this.guard = guard;
     }
   }
 
@@ -619,6 +1025,7 @@ public final class LocalNetworkConsumerService extends Service {
   private void send(Messenger reply, Bundle command, Bundle result) {
     result.putString("request_id", command.getString("request_id"));
     result.putInt("uid", Process.myUid());
+    result.putInt("pid", Process.myPid());
     result.putString("package", getPackageName());
     for (String permission : requiredPermissions()) {
       result.putBoolean(

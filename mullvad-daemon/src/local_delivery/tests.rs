@@ -149,8 +149,8 @@ async fn intentional_handover_is_paused_but_an_unacknowledged_release_is_failed(
         .update(&policy(), TargetState::Unsecured, TunnelPhase::Disconnected)
         .await;
     runtime.suspend();
-    // Retiring a broker attempt makes its capture actor terminal. This is the
-    // expected continuation of deliberate teardown, not a new owner failure.
+    // Transport retirement is not capture failure. An actual owner failure is
+    // still Failed, including during an intentional tunnel transition.
     control
         .state
         .lock()
@@ -159,10 +159,7 @@ async fn intentional_handover_is_paused_but_an_unacknowledged_release_is_failed(
         .unwrap()
         .send_replace(OwnerState::Failed);
     runtime.owner_changed(&policy(), TargetState::Secured, TunnelPhase::Disconnecting);
-    assert_eq!(
-        runtime.status().forwarding,
-        ForwardingAvailability::PausedWhileConnected
-    );
+    assert_eq!(runtime.status().forwarding, ForwardingAvailability::Failed);
     control.fail_release.store(true, SeqCst);
     assert!(runtime.stop().await.is_err());
     runtime.owner_changed(&policy(), TargetState::Secured, TunnelPhase::Disconnected);
@@ -198,7 +195,8 @@ async fn assigned_sources_and_capture_identity_are_required_at_prepare_and_outpu
         "equal-source replacement revokes an old grant"
     );
     let broker = broker();
-    let config = assigned_config();
+    let mut config = assigned_config();
+    config.dns_servers = Some(vec!["10.0.2.53".parse().unwrap()]);
     let mut request = broker.request_capture(config.clone()).unwrap();
     let pending = broker.pending_request().unwrap();
     authority.install(
@@ -264,7 +262,7 @@ async fn assigned_sources_and_capture_identity_are_required_at_prepare_and_outpu
     let mut broad = policy();
     broad.rules[0].cidrs = vec!["10.0.0.0/8".parse().unwrap()];
     authority.update(&broad, Some(observation()));
-    for destination in ["10.64.0.1", "10.124.0.5"] {
+    for destination in ["10.64.0.1", "10.124.0.5", "10.0.2.53"] {
         assert_eq!(
             authority.disposition(destination.parse().unwrap()),
             Disposition::Drop
@@ -323,10 +321,7 @@ async fn connected_status_requires_the_current_capture_and_activated_attempt() {
     request.configured().await.unwrap();
     let pair = broker.acquire(&receipt).unwrap();
     runtime.owner_changed(&policy(), TargetState::Secured, TunnelPhase::Connected);
-    assert_eq!(
-        runtime.status().forwarding,
-        ForwardingAvailability::PausedWhileConnected
-    );
+    assert_eq!(runtime.status().forwarding, ForwardingAvailability::Active);
     pair.control.activate().unwrap();
     for target in [TargetState::Unsecured, TargetState::Secured] {
         for phase in [
@@ -337,14 +332,7 @@ async fn connected_status_requires_the_current_capture_and_activated_attempt() {
             TunnelPhase::Error,
         ] {
             runtime.owner_changed(&policy(), target, phase);
-            let expected = if target == TargetState::Secured && phase == TunnelPhase::Connected {
-                ForwardingAvailability::Active
-            } else if target == TargetState::Unsecured && phase == TunnelPhase::Disconnected {
-                // A managed owner cannot certify the Partial endpoint.
-                ForwardingAvailability::PausedWhileConnected
-            } else {
-                ForwardingAvailability::PausedWhileConnected
-            };
+            let expected = ForwardingAvailability::Active;
             assert_eq!(
                 runtime.status().forwarding,
                 expected,
@@ -571,6 +559,7 @@ async fn authority_update_revokes_before_notification_and_preparation_retains_se
 struct Control {
     history: Mutex<Vec<String>>,
     routes: Mutex<Vec<Vec<String>>>,
+    exclusions: Mutex<Vec<Vec<String>>>,
     starts: AtomicUsize,
     active: AtomicBool,
     fail_start: AtomicBool,
@@ -590,6 +579,7 @@ impl Default for Control {
         Self {
             history: Mutex::new(vec![]),
             routes: Mutex::new(vec![]),
+            exclusions: Mutex::new(vec![]),
             starts: AtomicUsize::new(0),
             active: AtomicBool::new(false),
             fail_start: AtomicBool::new(false),
@@ -676,8 +666,18 @@ impl FrontendFactory for FakeFactory {
         }
         assert!(!self.0.active.swap(true, SeqCst), "overlapping owners");
         self.0.history.lock().unwrap().push("start".into());
+        if let DeliveryConfig::Partial(config) = &config {
+            self.0
+                .exclusions
+                .lock()
+                .unwrap()
+                .push(config.excluded_packages.clone());
+        }
         let routes = match &config {
-            DeliveryConfig::Partial(routes) => routes.clone(),
+            DeliveryConfig::Partial(config) => config.routes.clone(),
+            DeliveryConfig::Router(config) => {
+                config.routes.iter().map(ToString::to_string).collect()
+            }
             DeliveryConfig::Secured { request, .. } => request
                 .config()
                 .routes
@@ -686,7 +686,7 @@ impl FrontendFactory for FakeFactory {
                 .collect(),
         };
         self.0.routes.lock().unwrap().push(routes);
-        let partial = if matches!(config, DeliveryConfig::Partial(_)) {
+        let partial = if !matches!(config, DeliveryConfig::Secured { .. }) {
             let lease = broker
                 .open_capture(None)
                 .map_err(|error| io::Error::other(format!("{error:?}")))?;
@@ -779,8 +779,18 @@ impl DeliveryOwner for FakeOwner {
                 );
             }
         }
+        if let DeliveryConfig::Partial(config) = &config {
+            self.control
+                .exclusions
+                .lock()
+                .unwrap()
+                .push(config.excluded_packages.clone());
+        }
         let routes = match config {
-            DeliveryConfig::Partial(routes) => routes,
+            DeliveryConfig::Partial(config) => config.routes,
+            DeliveryConfig::Router(config) => {
+                config.routes.iter().map(ToString::to_string).collect()
+            }
             DeliveryConfig::Secured { request, .. } => request
                 .config()
                 .routes
@@ -908,6 +918,48 @@ fn make_runtime(
         FakeFactory(control),
         Arc::new(|_, _| Ok(())),
     )
+}
+
+#[tokio::test]
+async fn partial_capture_carries_current_stored_exclusions_through_open_and_handover() {
+    let control = Arc::new(Control::default());
+    let mut runtime = make_runtime(None, control.clone());
+    let original = vec![
+        "com.android.deskclock".to_owned(),
+        "com.android.calendar".to_owned(),
+    ];
+    runtime.set_excluded_packages(original.clone());
+    runtime
+        .update(&policy(), TargetState::Unsecured, true)
+        .await;
+    assert_eq!(
+        control.exclusions.lock().unwrap().as_slice(),
+        &[original.clone()]
+    );
+    // An unchanged list must not create a new epoch. A real list change must.
+    runtime
+        .update(&policy(), TargetState::Unsecured, true)
+        .await;
+    assert_eq!(control.exclusions.lock().unwrap().len(), 1);
+    let replacement = vec!["com.android.calendar".to_owned()];
+    runtime.set_excluded_packages(replacement.clone());
+    runtime
+        .update(&policy(), TargetState::Unsecured, true)
+        .await;
+    assert_eq!(
+        control.exclusions.lock().unwrap().last(),
+        Some(&replacement)
+    );
+    runtime.set_excluded_packages(vec![]);
+    runtime
+        .update(&policy(), TargetState::Unsecured, true)
+        .await;
+    assert_eq!(
+        *control.exclusions.lock().unwrap(),
+        vec![original, replacement, vec![]]
+    );
+    assert_eq!(control.starts.load(SeqCst), 1);
+    runtime.shutdown().await.unwrap();
 }
 
 #[tokio::test]
@@ -1161,11 +1213,11 @@ async fn in_owner_reconciliation_coalesces_settings_and_retains_grants_across_ca
         DeliveryBuffers::new().local,
         broker(),
     );
-    let first = DeliveryConfig::Partial(vec!["10.0.2.2/32".into()]);
+    let first = DeliveryConfig::Partial(vec!["10.0.2.2/32".into()].into());
     delivery.maintain_config(Some(first)).await;
     let grant = authority.authorize(flow(Transport::Udp, 45902)).unwrap();
     control.hold_ready.store(true, SeqCst);
-    let second = DeliveryConfig::Partial(vec!["10.0.2.2/32".into(), "172.16.0.0/16".into()]);
+    let second = DeliveryConfig::Partial(vec!["10.0.2.2/32".into(), "172.16.0.0/16".into()].into());
     bounded(delivery.maintain_config(Some(second))).await;
     assert!(authority.current(&grant));
     assert!(
@@ -1173,7 +1225,8 @@ async fn in_owner_reconciliation_coalesces_settings_and_retains_grants_across_ca
             .await
             .is_err()
     );
-    let latest = DeliveryConfig::Partial(vec!["10.0.2.2/32".into(), "192.168.0.0/16".into()]);
+    let latest =
+        DeliveryConfig::Partial(vec!["10.0.2.2/32".into(), "192.168.0.0/16".into()].into());
     bounded(delivery.maintain_config(Some(latest.clone()))).await;
     assert_eq!(*control.history.lock().unwrap(), ["start", "handover"]);
     control.hold_ready.store(false, SeqCst);
@@ -1201,7 +1254,9 @@ async fn a_foreign_runtime_request_cannot_replace_or_revoke_the_current_session(
         broker(),
     );
     delivery
-        .maintain_config(Some(DeliveryConfig::Partial(vec!["10.0.2.2/32".into()])))
+        .maintain_config(Some(DeliveryConfig::Partial(
+            vec!["10.0.2.2/32".into()].into(),
+        )))
         .await;
     let grant = authority.authorize(flow(Transport::Udp, 45903)).unwrap();
     let foreign = broker();
@@ -1236,7 +1291,9 @@ async fn successor_reserved_destinations_are_published_before_its_owner_command(
         broker.clone(),
     );
     delivery
-        .maintain_config(Some(DeliveryConfig::Partial(vec!["10.0.0.0/8".into()])))
+        .maintain_config(Some(DeliveryConfig::Partial(
+            vec!["10.0.0.0/8".into()].into(),
+        )))
         .await;
     let grant = authority.authorize(flow(Transport::Udp, 45904)).unwrap();
     assert_eq!(

@@ -9,7 +9,10 @@ use talpid_types::capture_network::{CaptureExpectation, CaptureNetworkFeed, Capt
 impl FrontendPlatform for LocalNetworkPlatform {
     fn open(&self, generation: i64, config: &CaptureConfig) -> io::Result<OwnedFd> {
         match config {
-            CaptureConfig::Partial(routes) => self.open_frontend(generation, routes),
+            CaptureConfig::Partial(config) => self.open_frontend(generation, config),
+            CaptureConfig::Router { config, .. } => {
+                self.open_secured_frontend(generation, config.clone())
+            }
             CaptureConfig::Secured { request, .. } => {
                 self.open_secured_frontend(generation, request.config().clone())
             }
@@ -28,7 +31,8 @@ impl FrontendPlatform for LocalNetworkPlatform {
         config: &CaptureConfig,
     ) -> CaptureHandover {
         let config = match config {
-            CaptureConfig::Partial(routes) => FrontendHandoverConfig::Partial(routes),
+            CaptureConfig::Partial(config) => FrontendHandoverConfig::Partial(config),
+            CaptureConfig::Router { config, .. } => FrontendHandoverConfig::Secured(config.clone()),
             CaptureConfig::Secured { request, .. } => {
                 FrontendHandoverConfig::Secured(request.config().clone())
             }

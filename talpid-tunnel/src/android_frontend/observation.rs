@@ -110,12 +110,15 @@ impl Observation {
         stop: &mut oneshot::Receiver<()>,
     ) -> io::Result<()> {
         let mut updates = self.updates.clone();
-        let mut broker_updates = match config {
-            CaptureConfig::Secured { broker, .. } => Some(broker.changes()),
-            _ => None,
-        };
+        let mut broker_updates = self.lease.changes();
         let wait = async {
             loop {
+                let snapshot = *broker_updates.borrow();
+                if snapshot.closed || snapshot.capture_generation != Some(self.generation as u64) {
+                    return Err(io::Error::other(
+                        "Capture epoch retired before acknowledgement",
+                    ));
+                }
                 if let CaptureConfig::Secured {
                     broker, request, ..
                 } = config
@@ -141,7 +144,7 @@ impl Observation {
                 }
                 tokio::select! {
                     result = async { updates.as_mut().expect("managed updates").changed().await } => result.map_err(io::Error::other)?,
-                    _ = async { match &mut broker_updates { Some(updates) => { let _ = updates.changed().await; }, None => std::future::pending().await } } => {},
+                    _ = broker_updates.changed() => {},
                 }
             }
         };

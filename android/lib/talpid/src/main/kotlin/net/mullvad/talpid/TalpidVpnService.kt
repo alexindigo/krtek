@@ -116,10 +116,16 @@ open class TalpidVpnService : LifecycleVpnService() {
     // Used by JNI. Success reports the borrowed number; exact take transfers the
     // sole descriptor after conversion. This never enters the Native TUN cache.
     @Suppress("Unused")
-    fun openLocalFrontend(generation: Long, routes: Array<String>): CreateTunResult =
+    fun openLocalFrontend(
+        generation: Long,
+        routes: Array<String>,
+        excludedPackages: Array<String> = emptyArray(),
+    ): CreateTunResult =
         synchronized(this) {
             val config = LocalFrontendConfig.parse(routes) ?: return EstablishError
-            openFrontend(generation) { createLocalFrontend(generation, config) {} }
+            openFrontend(generation) {
+                createLocalFrontend(generation, config, excludedPackages) {}
+            }
         }
 
     /**
@@ -142,6 +148,7 @@ open class TalpidVpnService : LifecycleVpnService() {
         predecessor: Long,
         generation: Long,
         routes: Array<String>,
+        excludedPackages: Array<String> = emptyArray(),
     ): CaptureHandoverResult =
         synchronized(this) {
             val config =
@@ -151,7 +158,7 @@ open class TalpidVpnService : LifecycleVpnService() {
                         localFrontendOwnership.predecessorCurrent(predecessor),
                     )
             handoverFrontend(predecessor, generation) { establishing ->
-                createLocalFrontend(generation, config, establishing)
+                createLocalFrontend(generation, config, excludedPackages, establishing)
             }
         }
 
@@ -288,6 +295,7 @@ open class TalpidVpnService : LifecycleVpnService() {
     private fun createLocalFrontend(
         generation: Long,
         config: LocalFrontendConfig,
+        excludedPackages: Array<String>,
         establishing: () -> Unit,
     ): CreateTunResult = either {
         prepareVpnSafe().mapLeft { it.toCreateTunError() }.bind()
@@ -299,6 +307,7 @@ open class TalpidVpnService : LifecycleVpnService() {
         builder.setMtu(BLOCKING_MTU)
         builder.setBlocking(false)
         builder.setMeteredIfSupported(false)
+        excludedPackages.forEach { builder.addDisallowedApplication(it) }
         establishing()
         val descriptor = builder.establishSafe().mapLeft { EstablishError }.bind()
         frontendEstablished(generation, descriptor, observeCapture = false)

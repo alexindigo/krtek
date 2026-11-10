@@ -140,6 +140,8 @@ async fn exact_request_acknowledgement_is_required_before_ordinary_activation() 
 async fn epoch_handover_retains_session_targets_and_exact_cleanup_without_reusing_receipts() {
     let f = Fixture::new();
     let (request, lease, pair) = f.active().await;
+    let old_pending = PendingCaptureRequest(request.request.clone());
+    old_pending.defer_release();
     let session = lease.capability().unwrap();
     let first = session.sink().unwrap();
     let old_revoke = lease.revoker();
@@ -214,6 +216,12 @@ async fn epoch_handover_retains_session_targets_and_exact_cleanup_without_reusin
         "transport join bypassed"
     );
     request.transport_joined();
+    assert_eq!(
+        change.finish(),
+        Err(AttachmentError::Busy),
+        "device join bypassed the explicit TSM obligation"
+    );
+    old_pending.handover_joined();
     change.finish().unwrap();
     drop(change);
     assert!(session.current());

@@ -247,7 +247,7 @@ async fn explicit_release_retry_joins_outstanding_predecessor_cleanup() {
         let broker = managed::broker();
         let mut owner = FrontendOwner::start(
             platform.clone(),
-            CaptureConfig::Partial(routes()),
+            CaptureConfig::Partial(routes().into()),
             test_forwarder(Arc::new(Authority::default())),
             updates,
             broker,
@@ -261,10 +261,9 @@ async fn explicit_release_retry_joins_outstanding_predecessor_cleanup() {
         platform.fail_release.store(generation, SeqCst);
         *platform.close_pause.lock().unwrap() = Some(pause.clone());
         owner
-            .handover(CaptureConfig::Partial(vec![
-                "127.0.0.0/8".into(),
-                "10.0.0.0/8".into(),
-            ]))
+            .handover(CaptureConfig::Partial(
+                vec!["127.0.0.0/8".into(), "10.0.0.0/8".into()].into(),
+            ))
             .unwrap();
         bounded(owner.ready()).await.unwrap();
         let peer = AsyncFd::new(bounded(peers.recv()).await.unwrap()).unwrap();
@@ -344,6 +343,87 @@ fn secured(broker: &AttachmentBroker, config: TunConfig) -> (ConfigurationReques
     )
 }
 
+#[tokio::test]
+async fn observed_router_epoch_lends_equal_projection_to_rotating_targets_without_reopen() {
+    let (platform, mut peers) = EpochPlatform::new();
+    let broker = managed::broker();
+    broker.set_mode(AttachmentMode::ManagedRequired).unwrap();
+    let config = fixed_config("10.64.0.1");
+    let disposition = Arc::new(|ip: std::net::IpAddr| {
+        if ip.is_loopback() {
+            CaptureDisposition::Local
+        } else {
+            CaptureDisposition::Tunnel(talpid_types::relay_flow::RelayTargetId::MULLVAD)
+        }
+    });
+    let (_, updates) = watch::channel(0);
+    let mut owner = FrontendOwner::start(
+        platform.clone(),
+        CaptureConfig::Router {
+            config: config.clone(),
+            disposition: disposition.clone(),
+        },
+        test_forwarder(Arc::new(Authority::default())),
+        updates,
+        broker.clone(),
+    )
+    .unwrap();
+    let peer = AsyncFd::new(bounded(peers.recv()).await.unwrap()).unwrap();
+    bounded(owner.ready()).await.unwrap();
+    let generation = broker.snapshot().capture_generation;
+    let session = broker.snapshot().session_generation;
+    let (address, mut hits, echo) = udp_echo(false).await;
+    let local = flow(address, Transport::Udp, 49190);
+    for assigned in ["10.64.2.3", "10.64.9.8"] {
+        let mut target = blocking_config();
+        target.addresses = vec![assigned.parse().unwrap()];
+        let mut request = broker
+            .request_target_capture(target, config.clone())
+            .unwrap();
+        owner
+            .handover(CaptureConfig::Secured {
+                broker: broker.clone(),
+                request: broker.pending_request().unwrap(),
+                disposition: disposition.clone(),
+            })
+            .unwrap();
+        bounded(owner.ready()).await.unwrap();
+        let receipt = bounded(request.configured()).await.unwrap();
+        assert_eq!(Some(receipt.generation()), generation);
+        let mut pair = broker.acquire(&receipt).unwrap();
+        pair.control.activate().unwrap();
+        let public = flow("1.1.1.1:443".parse().unwrap(), Transport::Udp, 49191);
+        let bytes = udp(public, assigned.as_bytes());
+        send(&peer, &bytes).await;
+        bounded(pair.receive.recv())
+            .await
+            .unwrap()
+            .handoff(|actual| assert_eq!(actual, bytes))
+            .unwrap();
+        send(&peer, &udp(local, assigned.as_bytes())).await;
+        assert_eq!(bounded(hits.recv()).await.unwrap(), assigned.as_bytes());
+        assert_eq!(
+            packet::parse(&bounded(receive(&peer)).await)
+                .unwrap()
+                .payload,
+            assigned.as_bytes()
+        );
+        pair.control.detach();
+        drop(pair);
+        request.transport_joined();
+        drop(request);
+        assert_eq!(broker.snapshot().session_generation, session);
+        assert_eq!(platform.format_calls.load(SeqCst), 1);
+        assert!(
+            peers.try_recv().is_err(),
+            "equal projection called Builder.establish"
+        );
+    }
+    bounded(owner.stop()).await.unwrap();
+    echo.abort();
+    assert_eq!(platform.released.lock().unwrap().len(), 1);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn same_local_tcp_and_udp_engine_crosses_partial_blocking_secured_partial_fd_epochs() {
     let (platform, mut peers) = EpochPlatform::new();
@@ -353,7 +433,7 @@ async fn same_local_tcp_and_udp_engine_crosses_partial_blocking_secured_partial_
     let (_updates, updates) = watch::channel(0);
     let mut owner = FrontendOwner::start(
         platform.clone(),
-        CaptureConfig::Partial(routes()),
+        CaptureConfig::Partial(routes().into()),
         test_forwarder(authority.clone()),
         updates,
         broker.clone(),
@@ -402,7 +482,7 @@ async fn same_local_tcp_and_udp_engine_crosses_partial_blocking_secured_partial_
             requests.push(request);
             config
         } else {
-            CaptureConfig::Partial(routes())
+            CaptureConfig::Partial(routes().into())
         };
         let pause = Arc::new(Pause::default());
         let _release = Release(pause.clone());
@@ -586,6 +666,7 @@ async fn predecessor_transport_join_and_failed_finish_block_third_epoch_but_not_
     let broker = managed::broker();
     broker.set_mode(AttachmentMode::ManagedRequired).unwrap();
     let (mut old_request, config) = secured(&broker, fixed_config("192.0.2.1"));
+    let old_pending = broker.pending_request().unwrap();
     let (_updates, updates) = watch::channel(0);
     let mut owner = FrontendOwner::start(
         platform.clone(),
@@ -606,6 +687,7 @@ async fn predecessor_transport_join_and_failed_finish_block_third_epoch_but_not_
     let mut app = App::new(flow(tcp, Transport::Tcp, 49200));
     app.nonce(&peer, b"before-delayed-target-join").await;
     bounded(accepts.recv()).await.unwrap();
+    old_pending.defer_release();
     let (_request, config) = secured(&broker, fixed_config("10.64.0.1"));
     platform.fail_release.store(old, SeqCst);
     owner.handover(config).unwrap();
@@ -642,7 +724,9 @@ async fn predecessor_transport_join_and_failed_finish_block_third_epoch_but_not_
         "predecessor fd closed while target remains live"
     );
     assert!(platform.released.lock().unwrap().is_empty());
-    owner.handover(CaptureConfig::Partial(routes())).unwrap();
+    owner
+        .handover(CaptureConfig::Partial(routes().into()))
+        .unwrap();
     assert_eq!(
         bounded(owner.ready()).await.unwrap_err().kind(),
         io::ErrorKind::WouldBlock
@@ -650,6 +734,12 @@ async fn predecessor_transport_join_and_failed_finish_block_third_epoch_but_not_
     assert!(peers.try_recv().is_err());
     transport.control.detach();
     old_request.transport_joined();
+    assert_eq!(
+        std::fs::read_link(&old_path).unwrap(),
+        old_descriptor,
+        "device join bypassed the explicit TSM obligation"
+    );
+    old_pending.handover_joined();
     bounded(async {
         let mut state = owner.state();
         while !owner.release_failed() {
@@ -659,7 +749,9 @@ async fn predecessor_transport_join_and_failed_finish_block_third_epoch_but_not_
     .await;
     assert!(owner.release_failed());
     app.nonce(&next_peer, b"after-failed-old-finish").await;
-    owner.handover(CaptureConfig::Partial(routes())).unwrap();
+    owner
+        .handover(CaptureConfig::Partial(routes().into()))
+        .unwrap();
     assert_eq!(
         bounded(owner.ready()).await.unwrap_err().kind(),
         io::ErrorKind::WouldBlock
@@ -669,7 +761,9 @@ async fn predecessor_transport_join_and_failed_finish_block_third_epoch_but_not_
     bounded(owner.ready()).await.unwrap();
     assert!(!owner.release_failed());
     platform.finished(old).await;
-    owner.handover(CaptureConfig::Partial(routes())).unwrap();
+    owner
+        .handover(CaptureConfig::Partial(routes().into()))
+        .unwrap();
     let final_peer = AsyncFd::new(bounded(peers.recv()).await.unwrap()).unwrap();
     bounded(owner.ready()).await.unwrap();
     app.nonce(&final_peer, b"after-exact-release-retry").await;
@@ -687,7 +781,7 @@ async fn invalid_handover_requests_leave_the_same_local_stream_and_epoch_untouch
     let (_updates, updates) = watch::channel(0);
     let mut owner = FrontendOwner::start(
         platform.clone(),
-        CaptureConfig::Partial(routes()),
+        CaptureConfig::Partial(routes().into()),
         test_forwarder(Arc::new(Authority::default())),
         updates,
         broker.clone(),
@@ -750,7 +844,7 @@ async fn post_switch_bind_format_and_observation_faults_never_restore_the_old_ep
         let (_updates, updates) = watch::channel(0);
         let mut owner = FrontendOwner::start(
             platform.clone(),
-            CaptureConfig::Partial(routes()),
+            CaptureConfig::Partial(routes().into()),
             test_forwarder(Arc::new(Authority::default())),
             updates,
             broker.clone(),
@@ -798,7 +892,7 @@ async fn successor_readiness_requires_its_exact_observation_after_reordered_mism
         let (_updates, updates) = watch::channel(0);
         let mut owner = FrontendOwner::start(
             platform.clone(),
-            CaptureConfig::Partial(routes()),
+            CaptureConfig::Partial(routes().into()),
             test_forwarder(Arc::new(Authority::default())),
             updates,
             broker.clone(),
@@ -999,7 +1093,7 @@ async fn delayed_successor_observation_cannot_delay_physical_grant_revocation() 
     let (updates, receiver) = watch::channel(0);
     let mut owner = FrontendOwner::start(
         platform.clone(),
-        CaptureConfig::Partial(routes()),
+        CaptureConfig::Partial(routes().into()),
         test_forwarder(authority.clone()),
         receiver,
         broker.clone(),

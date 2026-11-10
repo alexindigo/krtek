@@ -144,7 +144,7 @@ pub(super) fn start<A: LocalAuthority>(
 
 fn validate(config: &CaptureConfig, broker: &AttachmentBroker) -> io::Result<()> {
     match config {
-        CaptureConfig::Partial(routes) if routes.is_empty() => {
+        CaptureConfig::Partial(config) if config.routes.is_empty() => {
             Err(io::ErrorKind::InvalidInput.into())
         }
         CaptureConfig::Secured {
@@ -222,7 +222,7 @@ async fn finish_epoch(
     epoch: Epoch,
 ) -> io::Result<()> {
     if let Some(request) = epoch.config.request() {
-        request.wait_release().await;
+        request.wait_epoch_release().await;
     }
     let generation = epoch.observation.generation;
     epoch.observation.retire();
@@ -276,6 +276,9 @@ async fn run<A: LocalAuthority>(actor: Actor<A>) -> io::Result<()> {
     } = actor;
     releases.add(initial.observation.generation)?;
     let mut cancelled = false;
+    // Request joins survive request-independent route/DNS epochs. A target has
+    // no ownership of a predecessor fd, but final session teardown must join it.
+    let mut requests = [initial.config.request().cloned(), None];
     let (mut epoch, mut bound, _) = establish(
         platform.clone(),
         initial,
@@ -427,6 +430,47 @@ async fn run<A: LocalAuthority>(actor: Actor<A>) -> io::Result<()> {
                     let _ = ack.send(Err(error));
                     continue;
                 }
+                for request in &mut requests {
+                    if request
+                        .as_ref()
+                        .is_some_and(|request| request.release_ready())
+                    {
+                        *request = None;
+                    }
+                }
+                if let Some(request) = config.request()
+                    && !requests
+                        .iter()
+                        .flatten()
+                        .any(|held| held.id() == request.id())
+                {
+                    let Some(slot) = requests.iter_mut().find(|slot| slot.is_none()) else {
+                        let _ = ack.send(Err(io::ErrorKind::WouldBlock.into()));
+                        continue;
+                    };
+                    *slot = Some(request.clone());
+                }
+                // Assigned address/MTU rotation belongs to the target mapper.
+                // An equal app-side projection reuses the exact observed sink.
+                if config.secured_config().is_some()
+                    && config.secured_config() == epoch.config.secured_config()
+                    && let Some(request) = config.request()
+                {
+                    let result = epoch
+                        .observation
+                        .checked(|| {
+                            lease.acknowledge_router_request(request, epoch.config.secured_config())
+                        })
+                        .unwrap_or(Err(
+                            crate::packet_attachment::AttachmentError::CaptureUnready,
+                        ))
+                        .map_err(failure);
+                    if result.is_ok() {
+                        epoch.config = config;
+                    }
+                    let _ = ack.send(result);
+                    continue;
+                }
                 let mut change =
                     match lease.begin_handover(config.request(), config.sources(), config.mtu()) {
                         Ok(change) => change,
@@ -502,6 +546,9 @@ async fn run<A: LocalAuthority>(actor: Actor<A>) -> io::Result<()> {
         state.send_replace(terminal);
     }
     drop(buffers);
+    for request in requests.into_iter().flatten() {
+        request.wait_release().await;
+    }
     let mut result = Ok(());
     if let Some(task) = cleanup {
         result = task.await.map_err(io::Error::other).and_then(|r| r);

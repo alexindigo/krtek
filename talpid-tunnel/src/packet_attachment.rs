@@ -92,6 +92,9 @@ impl Configuration {
         let state = *self.release.borrow();
         state.transport_joined && state.handover_joined
     }
+    fn epoch_release_ready(&self) -> bool {
+        self.release.borrow().handover_joined
+    }
 }
 
 #[derive(Clone)]
@@ -257,6 +260,27 @@ impl Inner {
             if *snapshot == next {
                 false
             } else {
+                #[cfg(target_os = "android")]
+                {
+                    let mut time = nix::libc::timespec {
+                        tv_sec: 0,
+                        tv_nsec: 0,
+                    };
+                    // CLOCK_BOOTTIME matches Android elapsedRealtimeNanos. Log
+                    // actual broker authority, independently of UI tunnel state.
+                    // SAFETY: time is an initialized, writable timespec and the
+                    // kernel retains no pointer after this synchronous call.
+                    if unsafe { nix::libc::clock_gettime(nix::libc::CLOCK_BOOTTIME, &raw mut time) }
+                        == 0
+                    {
+                        log::info!(
+                            "router-authority boottime_ns={} previous={:?} current={:?}",
+                            time.tv_sec as u64 * 1_000_000_000 + time.tv_nsec as u64,
+                            snapshot,
+                            next
+                        );
+                    }
+                }
                 *snapshot = next;
                 true
             }
@@ -377,8 +401,9 @@ impl AttachmentBroker {
         self.inner.application.clone()
     }
 
-    /// Immutable configuration input for the next transport. The daemon changes
-    /// this only after joined teardown; the broker never interprets local policy.
+    /// Latest route input for future target requests. Existing requests stay
+    /// immutable; the daemon hands live capture changes to its retained owner.
+    /// Updating Local routes never resumes a paused target.
     pub fn set_local_routes(
         &self,
         routes: Vec<ipnetwork::IpNetwork>,
@@ -394,15 +419,8 @@ impl AttachmentBroker {
         if state.closed {
             return Err(AttachmentError::Closed);
         }
-        if state.request.is_some()
-            || state.capture.is_some()
-            || state.attempts.iter().any(Option::is_some)
-        {
-            return Err(AttachmentError::Busy);
-        }
         state.local_routes = routes;
         state.route_storage = Some(storage);
-        state.paused = false;
         Ok(())
     }
 
@@ -425,9 +443,17 @@ impl AttachmentBroker {
             return Err(AttachmentError::Closed);
         }
         if state.mode != mode {
-            state.retire_capture();
-            if let Some(request) = state.request.take() {
-                request.status.send_replace(RequestStatus::Cancelled);
+            // A Partial reader can be promoted before the first target exists.
+            // Every other mode change retains the historical explicit revoke.
+            if !(state.mode == AttachmentMode::Native
+                && mode == AttachmentMode::ManagedRequired
+                && state.request.is_none()
+                && state.attempts.iter().all(Option::is_none))
+            {
+                state.retire_capture();
+                if let Some(request) = state.request.take() {
+                    request.status.send_replace(RequestStatus::Cancelled);
+                }
             }
             state.mode = mode;
             self.inner.publish(&state);
@@ -608,19 +634,31 @@ impl AttachmentBroker {
         request: &PendingCaptureRequest,
         receipt: &CaptureReceipt,
     ) -> Result<(), AttachmentError> {
+        self.acknowledge_projection(request, receipt, None)
+    }
+
+    fn acknowledge_projection(
+        &self,
+        request: &PendingCaptureRequest,
+        receipt: &CaptureReceipt,
+        observed_projection: Option<&TunConfig>,
+    ) -> Result<(), AttachmentError> {
         let mut state = self.inner.state.lock().expect("attachment state");
-        if !receipt.matches(&self.inner, &state) {
+        if !receipt.matches_capture(&self.inner, &state)
+            || (observed_projection.is_none() && !receipt.matches(&self.inner, &state))
+        {
             return Err(AttachmentError::CaptureUnready);
         }
         if !state
             .request
             .as_ref()
             .is_some_and(|r| Arc::ptr_eq(r, &request.0))
-            || !state
+            || (!state
                 .capture
                 .as_ref()
                 .and_then(|c| c.config.as_ref())
                 .is_some_and(|r| r.config == request.0.config)
+                && observed_projection != Some(&request.0.config))
         {
             return Err(AttachmentError::Stale);
         }
@@ -743,6 +781,7 @@ impl AttachmentBroker {
         };
         state.next_attempt = id;
         state.attempts[slot] = Some(attempt);
+        log::debug!("router-target attempt={id} target={target:?} sources={sources:?} mtu={mtu}");
         self.inner.publish(&state);
         Ok(pair)
     }
@@ -794,10 +833,28 @@ impl AttachmentBroker {
         self.inner.publish(&state);
         self.inner.replies.notify_one();
     }
+
+    /// Admit a new target only after the actor has observed joined teardown and
+    /// a usable blocking capture. This does not revive any retired attempt.
+    pub fn resume_transport(&self) -> Result<(), AttachmentError> {
+        let mut state = self.inner.state.lock().expect("attachment state");
+        if state.closed {
+            return Err(AttachmentError::Closed);
+        }
+        state.paused = false;
+        Ok(())
+    }
 }
 
 impl CaptureReceipt {
     fn matches(&self, inner: &Arc<Inner>, state: &State) -> bool {
+        self.matches_capture(inner, state)
+            && state
+                .capture
+                .as_ref()
+                .is_some_and(|capture| capture.config.is_some())
+    }
+    fn matches_capture(&self, inner: &Arc<Inner>, state: &State) -> bool {
         Weak::ptr_eq(&self.inner, &Arc::downgrade(inner))
             && !state.closed
             && state.mode == AttachmentMode::ManagedRequired
@@ -806,7 +863,6 @@ impl CaptureReceipt {
                     && c.owner
                         .as_ref()
                         .is_some_and(|owner| owner.capability().sink().is_some())
-                    && c.config.is_some()
             })
     }
     pub fn current(&self) -> bool {
@@ -856,6 +912,17 @@ impl PendingCaptureRequest {
         let mut changes = self.0.release.subscribe();
         while !self.0.release_ready() {
             let _ = changes.changed().await;
+        }
+    }
+
+    /// Once a successor sink is ready, this epoch owns no transport resource.
+    /// Explicit TSM teardown still withholds its platform release until joined.
+    pub async fn wait_epoch_release(&self) {
+        let mut updates = self.0.release.subscribe();
+        while !updates.borrow_and_update().handover_joined {
+            if updates.changed().await.is_err() {
+                break;
+            }
         }
     }
 }
@@ -928,6 +995,9 @@ impl Drop for ConfigurationRequest {
 }
 
 impl CaptureLease {
+    pub(crate) fn changes(&self) -> watch::Receiver<BrokerSnapshot> {
+        self.inner.changes.subscribe()
+    }
     pub fn generation(&self) -> u64 {
         self.generation
     }
@@ -1010,6 +1080,17 @@ impl CaptureLease {
         &self,
         request: &PendingCaptureRequest,
     ) -> Result<(), AttachmentError> {
+        self.acknowledge_router_request(request, None)
+    }
+
+    /// The retained native owner may lend an already observed request-independent
+    /// router epoch only after comparing its exact platform projection. This is
+    /// not exposed to providers or callers holding merely a target request.
+    pub(crate) fn acknowledge_router_request(
+        &self,
+        request: &PendingCaptureRequest,
+        observed_projection: Option<&TunConfig>,
+    ) -> Result<(), AttachmentError> {
         let receipt = CaptureReceipt {
             inner: Arc::downgrade(&self.inner),
             generation: self
@@ -1024,7 +1105,10 @@ impl CaptureLease {
                 .ok_or(AttachmentError::Stale)?,
             configuration: Weak::new(),
         };
-        receipt.acknowledge(request)
+        AttachmentBroker {
+            inner: self.inner.clone(),
+        }
+        .acknowledge_projection(request, &receipt, observed_projection)
     }
     /// A feed retains this weak revoker, never the capture owner itself.
     pub fn revoker(&self) -> impl Fn() + Send + Sync + 'static {
@@ -1168,7 +1252,9 @@ impl CaptureEpochChange {
 
     pub async fn wait_predecessor_release(&self) {
         if let Some(config) = &self.previous_config {
-            PendingCaptureRequest(config.clone()).wait_release().await;
+            PendingCaptureRequest(config.clone())
+                .wait_epoch_release()
+                .await;
         }
     }
 
@@ -1235,7 +1321,7 @@ impl CaptureEpochChange {
         if self
             .previous_config
             .as_ref()
-            .is_some_and(|config| !config.release_ready())
+            .is_some_and(|config| !config.epoch_release_ready())
         {
             return Err(AttachmentError::Busy);
         }

@@ -121,7 +121,7 @@ impl AndroidTunProvider {
     }
 
     /// Retire only transport/config ownership in managed mode. The daemon owns
-    /// joined capture teardown and changes selection only after old TSM teardown.
+    /// capture configuration handovers and the independent Local session.
     pub fn reconfigure_tun(&mut self, forced: bool) -> Result<(), Error> {
         self.transport().reconfigure(forced, |forced| {
             if forced {

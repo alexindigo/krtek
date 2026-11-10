@@ -55,6 +55,8 @@ class TalpidVpnServiceFrontendTest {
             builder
         every { anyConstructed<VpnService.Builder>().setMtu(any()) } returns builder
         every { anyConstructed<VpnService.Builder>().setBlocking(any()) } returns builder
+        every { anyConstructed<VpnService.Builder>().addDisallowedApplication(any()) } returns
+            builder
         val fd = mockk<ParcelFileDescriptor>()
         every { anyConstructed<VpnService.Builder>().establish() } returns fd
         every { fd.fd } returns 7
@@ -111,6 +113,37 @@ class TalpidVpnServiceFrontendTest {
         verify(exactly = 3) { anyConstructed<VpnService.Builder>().addAddress("192.0.2.2", 32) }
         verify(exactly = 3) { anyConstructed<VpnService.Builder>().addAddress("2001:db8::2", 128) }
         verify(exactly = 3) { anyConstructed<VpnService.Builder>().establish() }
+    }
+
+    @Test
+    fun `should apply exact exclusions on initial and replacement Partial frontends`() {
+        val excluded = arrayOf("com.android.deskclock", "com.android.calendar")
+        assertEquals(
+            CreateTunResult.Success(7),
+            service.openLocalFrontend(11, arrayOf("10.0.2.2/32"), excluded),
+        )
+        assertEquals(
+            CreateTunResult.Success(7),
+            service.handoverLocalFrontend(11, 12, arrayOf("10.0.2.99/32"), excluded).result,
+        )
+        service.finishLocalFrontend(11)
+        service.finishLocalFrontend(12)
+        for (app in excluded) {
+            verify(exactly = 2) {
+                anyConstructed<VpnService.Builder>().addDisallowedApplication(app)
+            }
+        }
+        verify(exactly = 4) { anyConstructed<VpnService.Builder>().addDisallowedApplication(any()) }
+        verify(exactly = 0) { anyConstructed<VpnService.Builder>().addDnsServer(any<String>()) }
+        verify(exactly = 0) {
+            anyConstructed<VpnService.Builder>().addDnsServer(any<InetAddress>())
+        }
+        assertEquals(
+            CreateTunResult.Success(7),
+            service.openLocalFrontend(13, arrayOf("10.0.2.2/32")),
+        )
+        verify(exactly = 4) { anyConstructed<VpnService.Builder>().addDisallowedApplication(any()) }
+        service.finishLocalFrontend(13)
     }
 
     @Test

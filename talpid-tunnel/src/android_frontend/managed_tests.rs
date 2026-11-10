@@ -31,7 +31,7 @@ async fn unsupported_capture_formats_never_admit_packets_and_retain_failed_relea
             let config = if secured {
                 managed
             } else {
-                CaptureConfig::Partial(routes())
+                CaptureConfig::Partial(routes().into())
             };
             let authority = Arc::new(Authority::default());
             let (address, mut hits, echo) = udp_echo(false).await;

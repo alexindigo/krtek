@@ -155,6 +155,7 @@ class LocalFrontendTest {
                     "openLocalFrontend",
                     Long::class.javaPrimitiveType,
                     Array<String>::class.java,
+                    Array<String>::class.java,
                 )
                 .returnType,
         )
@@ -175,6 +176,8 @@ class LocalFrontendTest {
                         Long::class.javaPrimitiveType,
                         Long::class.javaPrimitiveType,
                         configType,
+                        *if (name == "handoverLocalFrontend") arrayOf(Array<String>::class.java)
+                        else emptyArray(),
                     )
                     .returnType,
             )

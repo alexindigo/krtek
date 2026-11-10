@@ -46,6 +46,23 @@ cfg_if! {
     }
 }
 
+/// Partial capture announces only enabled local routes, without DNS or managed
+/// observation. App coverage is the same stored projection as secured capture.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PartialConfig {
+    pub routes: Vec<String>,
+    pub excluded_packages: Vec<String>,
+}
+
+impl From<Vec<String>> for PartialConfig {
+    fn from(routes: Vec<String>) -> Self {
+        Self {
+            routes,
+            excluded_packages: vec![],
+        }
+    }
+}
+
 /// Configuration for creating a tunnel device.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TunConfig {
