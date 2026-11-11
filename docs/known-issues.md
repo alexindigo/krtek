@@ -42,6 +42,15 @@ Each issue in this document should provide, at least, the following:
 
 ## Issues
 
+### Krtek: local network rules on Android
+
+* Connecting or disconnecting Mullvad rebuilds the VPN interface. Entering or
+  leaving an error state can cause the same gap. For about 10-30 ms there is no
+  route. Open local TCP connections continue, but a UDP packet can be lost or fail
+  to send in that moment. The same UDP socket can send again afterward.
+* Changing the list of excluded apps also rebuilds the interface. Android closes
+  connections that are open at that moment; new connections work right away.
+
 ### Potential leaks just after macOS boot
 
 Due to the inability to specify dependencies of system services in macOS `launchd` there is no way

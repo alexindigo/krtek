@@ -344,6 +344,17 @@ public final class LocalNetworkConsumerService extends Service {
       frame.guard.cancel(false);
     }
 
+    private synchronized void expireUdp(String nonce) {
+      SessionFrame frame = udpPending.remove(nonce);
+      if (frame == null) return;
+      // Preserve the original five-second expiry, without closing the owner and
+      // cancelling unrelated exchanges. The log-correlated auditor decides whether
+      // this loss is allowed; the consumer cannot infer a rebuild from tunnel state.
+      put(frame.record, "outcome", "udp-reply-missing");
+      put(frame.record, "deadline_ns", frame.deadline);
+      put(frame.record, "expired_ns", SystemClock.elapsedRealtimeNanos());
+    }
+
     void stop(String reason) {
       boolean graceful = "requested".equals(reason);
       synchronized (this) {
@@ -463,7 +474,8 @@ public final class LocalNetworkConsumerService extends Service {
           }
           byte[] payload = text.toString().getBytes(StandardCharsets.US_ASCII);
           update(record, "nonce_frames", text.toString()); update(record, "frame_count", frames);
-          ScheduledFuture<?> guard = watchdog.schedule(() -> fail(transport + "-frame-watchdog"),
+          ScheduledFuture<?> guard = watchdog.schedule(
+              stream ? () -> fail("tcp-frame-watchdog") : () -> expireUdp(text.toString()),
               Math.max(1, deadline - SystemClock.elapsedRealtimeNanos()), TimeUnit.NANOSECONDS);
           try {
             update(record, "send_ns", SystemClock.elapsedRealtimeNanos());
@@ -472,9 +484,35 @@ public final class LocalNetworkConsumerService extends Service {
               if (!tcpPending.offer(pending)) throw new IOException("TCP in-flight capacity");
               tcp.getOutputStream().write(payload);
             } else {
-              if (udpPending.size() >= 21) throw new IOException("UDP in-flight capacity");
-              udpPending.put(text.toString(), pending);
-              udp.send(new DatagramPacket(payload, payload.length));
+              synchronized (this) {
+                // Coordinate metadata and pending ownership with closeSockets, but
+                // never hold the owner lock across a potentially blocking send.
+                if (stopping && udp.isClosed()) { cancelFrame(pending); break; }
+                if (udpPending.size() >= 21) throw new IOException("UDP in-flight capacity");
+                put(record, "socket_id", System.identityHashCode(udp));
+                put(record, "local_port", udp.getLocalPort());
+                put(record, "local_address", udp.getLocalAddress().getHostAddress());
+                udpPending.put(text.toString(), pending);
+              }
+              try {
+                udp.send(new DatagramPacket(payload, payload.length));
+                update(record, "send_return_ns", SystemClock.elapsedRealtimeNanos());
+              } catch (IOException error) {
+                // Preserve the failed nonce without replay. Acceptance is decided from
+                // actual Android interface/route logs, never from this catch alone.
+                synchronized (this) {
+                  if (stopping && udp.isClosed()) cancelFrame(pending);
+                  else {
+                    put(record, "return_ns", SystemClock.elapsedRealtimeNanos());
+                    put(record, "outcome", "udp-send-error");
+                    put(record, "error_class", error.getClass().getName());
+                    put(record, "send_ioexception", error.toString());
+                    put(record, "cause", String.valueOf(error.getCause()));
+                  }
+                  udpPending.remove(text.toString(), pending);
+                  guard.cancel(false);
+                }
+              }
             }
           } catch (Exception error) {
             update(record, "return_ns", SystemClock.elapsedRealtimeNanos());
@@ -516,6 +554,10 @@ public final class LocalNetworkConsumerService extends Service {
           long replied = SystemClock.elapsedRealtimeNanos();
           update(pending.record, "reply_ns", replied); update(pending.record, "bytes", pending.payload.length);
           update(pending.record, "outcome", replied <= pending.deadline ? "reply" : "late-reply");
+          if (!stream) {
+            update(pending.record, "reply_socket_id", System.identityHashCode(udp));
+            update(pending.record, "reply_local_port", udp.getLocalPort());
+          }
           pending.guard.cancel(false);
           if (replied > pending.deadline) fail("local-deadline");
           pending = null;

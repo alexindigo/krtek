@@ -579,6 +579,9 @@ dependencies {
     // Needed for createComposeExtension() and createAndroidComposeExtension()
     debugImplementation(libs.compose.ui.test.manifest)
     androidTestImplementation(libs.koin.test)
+    // Exact relay-settings save/restore uses the existing normal management protocol.
+    androidTestImplementation(libs.wire.grpc)
+    androidTestImplementation(libs.okhttp.logging.interceptor)
     androidTestImplementation(libs.kotlin.test)
     androidTestImplementation(libs.mockk.android)
     androidTestImplementation(libs.turbine)

@@ -17,13 +17,16 @@ import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
+import com.squareup.wire.GrpcClient
 import java.io.File
 import java.io.RandomAccessFile
+import java.net.Proxy
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration
@@ -43,9 +46,15 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import mullvad_daemon.management_interface.ManagementServiceClient
 import net.mullvad.mullvadvpn.app.MullvadApplication
+import net.mullvad.mullvadvpn.lib.common.constant.GRPC_SOCKET_FILE_NAMED_ARGUMENT
+import net.mullvad.mullvadvpn.lib.grpc.ManagementService
+import net.mullvad.mullvadvpn.lib.grpc.util.UnixDomainSocketFactory
 import net.mullvad.mullvadvpn.lib.model.ConnectedWifi
+import net.mullvad.mullvadvpn.lib.model.CustomListName
 import net.mullvad.mullvadvpn.lib.model.DisconnectReason
+import net.mullvad.mullvadvpn.lib.model.ErrorStateCause
 import net.mullvad.mullvadvpn.lib.model.ForwardingAvailability
 import net.mullvad.mullvadvpn.lib.model.LocalBypassRule
 import net.mullvad.mullvadvpn.lib.model.LocalCidr
@@ -53,16 +62,21 @@ import net.mullvad.mullvadvpn.lib.model.LocalNetworkAccess
 import net.mullvad.mullvadvpn.lib.model.LocalNetworkStatus
 import net.mullvad.mullvadvpn.lib.model.LocalRuleInactiveReason
 import net.mullvad.mullvadvpn.lib.model.LocalRuleState
+import net.mullvad.mullvadvpn.lib.model.MultihopMode
 import net.mullvad.mullvadvpn.lib.model.PackageName
+import net.mullvad.mullvadvpn.lib.model.ParameterGenerationError
 import net.mullvad.mullvadvpn.lib.model.SsidIdentity
 import net.mullvad.mullvadvpn.lib.model.TunnelState
 import net.mullvad.mullvadvpn.lib.repository.ConnectionProxy
 import net.mullvad.mullvadvpn.lib.repository.SettingsRepository
 import net.mullvad.mullvadvpn.lib.repository.SplitTunnelingRepository
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import org.json.JSONObject
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.koin.android.ext.android.getKoin
+import org.koin.core.qualifier.named
 
 /** Restart-safe observations and ordinary-app probes; consumerProbe never writes policy. */
 class LocalNetworkDeliveryInstrumentedTest {
@@ -74,6 +88,13 @@ class LocalNetworkDeliveryInstrumentedTest {
         get() = args.getString("krtek_peer", "10.0.2.2")
 
     private var probeIndex = 0
+    private val continuityIntents = mutableListOf<LocalContinuityWindows.Intent>()
+
+    private fun continuityIntent(kind: String) {
+        val time = SystemClock.elapsedRealtimeNanos()
+        continuityIntents += LocalContinuityWindows.Intent(kind, time)
+        report("continuity_intent", JSONObject().put("kind", kind).put("time_ns", time))
+    }
 
     private fun report(key: String, value: Any) {
         instrumentation.sendStatus(0, Bundle().apply { putString("krtek_$key", value.toString()) })
@@ -83,7 +104,7 @@ class LocalNetworkDeliveryInstrumentedTest {
         instrumentation.uiAutomation.executeShellCommand("toybox timeout 5 $command").use {
             descriptor ->
             ParcelFileDescriptor.AutoCloseInputStream(descriptor).use {
-                it.readBytes().toString(Charsets.UTF_8).trim()
+                LocalContinuityWindows.readBounded(it.reader(Charsets.UTF_8)).trim()
             }
         }
 
@@ -301,6 +322,7 @@ class LocalNetworkDeliveryInstrumentedTest {
         }
 
     private fun connect(connection: ConnectionProxy, reconnect: Boolean = false) = runBlocking {
+        continuityIntent(if (reconnect) "reconnect" else "connect")
         report(
             "session_intent",
             JSONObject()
@@ -334,6 +356,13 @@ class LocalNetworkDeliveryInstrumentedTest {
 
     @Test
     fun appExclusionChangeAllowsFreshLocalConnections() =
+        exclusionContinuityCase(connectWithExclusion = false)
+
+    @Test
+    fun localStreamSurvivesUnrelatedAppExclusionHandover() =
+        exclusionContinuityCase(connectWithExclusion = true)
+
+    private fun exclusionContinuityCase(connectWithExclusion: Boolean) =
         connectedCase(testTimeout = consumerCaseTimeout(sessions = 2)) {
             consumer,
             repository,
@@ -381,16 +410,70 @@ class LocalNetworkDeliveryInstrumentedTest {
                     report("continuity_excluded_uid", excludedUid)
                     report("continuity_consumer_uid", consumerUid)
                 }
-                // These are explicitly new sockets, not a reopened continuity
-                // stream. Their first TCP/UDP exchanges retain the 5-second deadline.
-                LocalSession(consumer, expectedPublic = true).use { recovered ->
-                    continuityConnected(
-                        consumer,
-                        repository,
-                        connection,
-                        recovered,
-                        "fresh-after-app-list-change",
+                // Finish the list-changing lifetime before the static-list cycle.
+                // Only that explicit app-list change may destroy the old TCP stream.
+                if (connectWithExclusion) {
+                    disconnect(connection)
+                    val begin = SystemClock.elapsedRealtimeNanos()
+                    android.util.Log.i(
+                        "KrtekContinuity",
+                        "static-exclusion-cycle begin boottime_ns=$begin",
                     )
+                    report("static_exclusion_cycle_begin_ns", begin)
+                    val configs = mutableListOf<AppliedCapture>()
+                    configs +=
+                        appliedConfiguration(policy, ForwardingAvailability.Active, "Disconnected")
+                    // These are explicitly new sockets, with the original deadlines.
+                    LocalSession(consumer).use { recovered ->
+                        recovered.dwell("initial-partial-with-exclusion")
+                        connect(connection)
+                        configs +=
+                            continuityConnected(
+                                consumer,
+                                repository,
+                                connection,
+                                recovered,
+                                "connect-with-exclusion",
+                            )
+                        disconnect(connection)
+                        configs +=
+                            appliedConfiguration(
+                                policy,
+                                ForwardingAvailability.Active,
+                                "Disconnected",
+                            )
+                        recovered.dwell("partial-with-exclusion")
+                        connect(connection)
+                        configs +=
+                            continuityConnected(
+                                consumer,
+                                repository,
+                                connection,
+                                recovered,
+                                "reconnect-with-exclusion",
+                            )
+                        assertEquals(1, configs.map { it.uids }.distinct().size)
+                        configs.forEach { config ->
+                            assertTrue(!uidIncluded(config.uids, excludedUid))
+                            assertTrue(uidIncluded(config.uids, consumerUid))
+                        }
+                    }
+                    val end = SystemClock.elapsedRealtimeNanos()
+                    android.util.Log.i(
+                        "KrtekContinuity",
+                        "static-exclusion-cycle end boottime_ns=$end",
+                    )
+                    report("static_exclusion_cycle_end_ns", end)
+                } else {
+                    LocalSession(consumer, expectedPublic = true).use { recovered ->
+                        continuityConnected(
+                            consumer,
+                            repository,
+                            connection,
+                            recovered,
+                            "fresh-after-app-list-change",
+                        )
+                    }
                 }
             } finally {
                 runBlocking {
@@ -401,6 +484,90 @@ class LocalNetworkDeliveryInstrumentedTest {
                     }
                 }
                 report("continuity_exclusion_restored", true)
+            }
+        }
+
+    @Test
+    fun localStreamSurvivesAllTunnelStates() =
+        continuityCase { consumer, repository, connection, session ->
+            connect(connection)
+            continuityConnected(consumer, repository, connection, session, "connected")
+            connect(connection, reconnect = true)
+            continuityConnected(consumer, repository, connection, session, "reconnected")
+            parameterError(repository, connection, session)
+            connect(connection)
+            continuityConnected(consumer, repository, connection, session, "recovered")
+        }
+
+    @Test
+    fun localStreamSurvivesParameterErrorBeforeAnyTunnel() =
+        continuityCase { consumer, repository, connection, session ->
+            parameterError(repository, connection, session)
+            connect(connection)
+            continuityConnected(consumer, repository, connection, session, "first-target-recovery")
+        }
+
+    @Test
+    fun localRevocationDoesNotFallThroughDuringReconnect() =
+        withConsumer(null, testTimeout = consumerCaseTimeout(sessions = 2)) {
+            consumer,
+            repository,
+            connection ->
+            val original = checkNotNull(repository.settingsUpdates.value).localNetworkAccess
+            val policy = peerPolicy()
+            try {
+                setPolicy(repository, policy)
+                LocalSession(consumer).use { session ->
+                    session.dwell("initial-local")
+                    connect(connection)
+                    continuityConnected(
+                        consumer,
+                        repository,
+                        connection,
+                        session,
+                        "before-revocation",
+                    )
+                    val different =
+                        checkNotNull(SsidIdentity.fromUserText("krtek-m3-different-wifi"))
+                    val known = runBlocking {
+                        withTimeout(30_000) {
+                                repository.localNetworkStatus.filterNotNull().first {
+                                    it.currentWifi is ConnectedWifi.Known
+                                }
+                            }
+                            .currentWifi as ConnectedWifi.Known
+                    }
+                    assertNotEquals(known.ssid, different)
+                    session.markRevocation()
+                    runBlocking { assertTrue(connection.reconnect().isRight()) }
+                    setPolicy(
+                        repository,
+                        policy.copy(
+                            rules = policy.rules.map { it.copy(ssidIds = listOf(different)) }
+                        ),
+                    )
+                    report("revocation_policy_applied_ns", SystemClock.elapsedRealtimeNanos())
+                    awaitState(
+                        repository,
+                        connection,
+                        ForwardingAvailability.Active,
+                        LocalRuleState.Inactive(LocalRuleInactiveReason.DifferentWifi),
+                        "Connected",
+                    )
+                    session.revocationApplied()
+                    repeat(3) { probeSocket(consumer, "udp", "blocked", sessionFrame = true) }
+                    probeSocket(consumer, "tcp", "blocked", sessionFrame = true)
+                    probeExit(consumer, "mullvad")
+                }
+                setPolicy(repository, policy)
+                LocalSession(consumer).use { recovery ->
+                    recovery.dwell("new-session-after-revocation")
+                    probeExit(consumer, "mullvad")
+                }
+            } finally {
+                disconnect(connection)
+                setPolicy(repository, original)
+                report("policy_restored", true)
             }
         }
 
@@ -504,6 +671,88 @@ class LocalNetworkDeliveryInstrumentedTest {
         return config
     }
 
+    private fun parameterError(
+        repository: SettingsRepository,
+        connection: ConnectionProxy,
+        session: LocalSession,
+    ) = runBlocking {
+        val koin = (target.applicationContext as MullvadApplication).getKoin()
+        continuityIntent("error")
+        val management = koin.get<ManagementService>()
+        // Preserve the complete proto, including Constraint.Any, using the normal API.
+        val socket = koin.get<File>(named(GRPC_SOCKET_FILE_NAMED_ARGUMENT))
+        val client =
+            OkHttpClient.Builder()
+                .socketFactory(UnixDomainSocketFactory(socket))
+                .protocols(listOf(Protocol.H2_PRIOR_KNOWLEDGE))
+                .proxy(Proxy.NO_PROXY)
+                .callTimeout(10, TimeUnit.SECONDS)
+                .build()
+        val rpc =
+            GrpcClient.Builder()
+                .client(client)
+                .baseUrl("http://localhost/")
+                .minMessageToCompress(Long.MAX_VALUE)
+                .build()
+                .create(ManagementServiceClient::class)
+        val saved = checkNotNull(rpc.GetSettings().execute(Unit).relay_settings)
+        val before = checkNotNull(repository.settingsUpdates.value).relaySettings
+        val list =
+            checkNotNull(
+                management
+                    .createCustomList(
+                        CustomListName.fromString("krtek-run05-${UUID.randomUUID()}"),
+                        emptyList(),
+                    )
+                    .getOrNull()
+            )
+        report("owned_error_list_created", list.value)
+        try {
+            assertTrue(
+                management.setRelayLocationMultihop(MultihopMode.NEVER, null, list).isRight()
+            )
+            assertTrue(connection.connect().isRight())
+            val error =
+                withTimeout(60_000) {
+                    connection.tunnelState.first { it is TunnelState.Error }
+                }
+                    as TunnelState.Error
+            assertEquals(
+                ErrorStateCause.TunnelParameterError(ParameterGenerationError.NoMatchingRelay),
+                error.errorState.cause,
+            )
+            assertTrue(error.errorState.isBlocking)
+            report("parameter_error_observed", "NoMatchingRelay")
+            appliedConfiguration(
+                checkNotNull(repository.settingsUpdates.value).localNetworkAccess,
+                ForwardingAvailability.Active,
+                "Error",
+                fixedCapture = true,
+            )
+            session.dwell("error-no-matching-relay", 2000)
+        } finally {
+            try {
+                rpc.SetRelaySettings().execute(saved)
+                assertEquals(saved, rpc.GetSettings().execute(Unit).relay_settings)
+                withTimeout(10_000) {
+                    repository.settingsUpdates.first { it?.relaySettings == before }
+                }
+                report("relay_settings_restored", true)
+                assertTrue(management.deleteCustomList(list).isRight())
+                withTimeout(10_000) {
+                    repository.settingsUpdates.first { settings ->
+                        settings != null && settings.customLists.none { it.id == list }
+                    }
+                }
+                assertEquals(saved, rpc.GetSettings().execute(Unit).relay_settings)
+                report("owned_error_list_deleted", list.value)
+            } finally {
+                client.connectionPool.evictAll()
+                client.dispatcher.executorService.shutdown()
+            }
+        }
+    }
+
     private inner class LocalSession(
         private val consumer: Consumer,
         private val expectedPublic: Boolean? = null,
@@ -519,9 +768,20 @@ class LocalNetworkDeliveryInstrumentedTest {
         private var revokedAt: Long? = null
         private var revokedAppliedAt: Long? = null
         private var appListChangeAt: Long? = null
+        private val clockMarker = UUID.randomUUID().toString()
+        private val logSinceMillis = System.currentTimeMillis()
+        private val clockMarks = mutableListOf<LocalContinuityWindows.ClockMark>()
+
+        private fun clockMark(kind: String) {
+            val before = SystemClock.elapsedRealtimeNanos()
+            android.util.Log.i("KrtekContinuityClock", "$clockMarker $kind boottime_ns=$before")
+            clockMarks +=
+                LocalContinuityWindows.ClockMark(kind, before, SystemClock.elapsedRealtimeNanos())
+        }
 
         fun markAppListChange() {
             command("session-snapshot") // A pre-existing Local failure is never expected.
+            continuityIntent("app-list-change")
             appListChangeAt = SystemClock.elapsedRealtimeNanos()
             report(
                 "session_app_list_change",
@@ -551,6 +811,7 @@ class LocalNetworkDeliveryInstrumentedTest {
         }
 
         init {
+            clockMark("begin")
             val response =
                 consumer.request(
                     Bundle().apply {
@@ -684,6 +945,24 @@ class LocalNetworkDeliveryInstrumentedTest {
             } while (lc < stop.getInt("local_count") || pc < stop.getInt("public_count"))
             report("session_trace", file.name)
             report("session_stop", stop.toString())
+            clockMark("end")
+            val failedUdp = local.filter {
+                it.getString("outcome") in setOf("udp-send-error", "udp-reply-missing")
+            }
+            report(
+                "rebuild_clock_marks",
+                clockMarks.joinToString { "${it.kind}:${it.before}:${it.after}" },
+            )
+            val windows =
+                if (failedUdp.isEmpty()) emptyList()
+                else {
+                    val log = shell(LocalContinuityWindows.logCommand(logSinceMillis))
+                    val logFile = File(directory, "$id-rebuild.log")
+                    logFile.writeText(log)
+                    report("rebuild_log", logFile.name)
+                    LocalContinuityWindows.measured(log, clockMarker, continuityIntents, clockMarks)
+                }
+            val usedRebuilds = mutableSetOf<Int>()
             if (appListChangeAt != null) {
                 assertTrue(stop.getString("failure") in setOf("", "tcp-exchange"))
                 if (stop.getString("failure") == "tcp-exchange") {
@@ -744,7 +1023,7 @@ class LocalNetworkDeliveryInstrumentedTest {
                 samples.forEachIndexed { index, sample ->
                     assertEquals(index, sample.getInt("tick"))
                     appListChangeAt?.let { boundary ->
-                        if (sample.getString("outcome") != "reply") {
+                        if (sample.getString("outcome") in setOf("error", "cancelled")) {
                             assertTrue(sample.getString("outcome") in setOf("error", "cancelled"))
                             assertTrue(
                                 maxOf(sample.optLong("return_ns"), sample.optLong("cancel_ns")) >=
@@ -752,12 +1031,108 @@ class LocalNetworkDeliveryInstrumentedTest {
                             )
                             return@forEachIndexed
                         }
+                        if (
+                            sample.getString("outcome") == "udp-reply-missing" &&
+                                sample.getLong("scheduled_ns") + 5_000_000_000L >= boundary
+                        ) {
+                            assertTrue(sample.getLong("expired_ns") >= boundary)
+                            return@forEachIndexed
+                        }
                     }
                     val afterRevocation =
                         revokedAt?.let { sample.getLong("scheduled_ns") + 5_000_000_000L >= it } ==
                             true
                     if (afterRevocation && sample.getString("outcome") != "reply") {
-                        assertTrue(sample.getString("outcome") in setOf("error", "cancelled"))
+                        assertTrue(
+                            sample.getString("outcome") in
+                                setOf("error", "cancelled", "udp-reply-missing")
+                        )
+                        return@forEachIndexed
+                    }
+                    if (
+                        sample.getString("outcome") in setOf("udp-send-error", "udp-reply-missing")
+                    ) {
+                        assertEquals("udp", transport)
+                        val scheduled = stop.getLong("started_ns") + index * 250_000_000L
+                        val deadline = scheduled + 5_000_000_000L
+                        val send = sample.getLong("send_ns")
+                        assertEquals(scheduled, sample.getLong("scheduled_ns"))
+                        assertTrue(sample.getLong("start_ns") in scheduled..send)
+                        assertTrue(sample.getLong("start_ns") - scheduled < 250_000_000L)
+                        assertTrue(send <= deadline)
+                        if (sample.getString("outcome") == "udp-send-error") {
+                            assertTrue(sample.has("send_ioexception"))
+                            assertTrue(sample.getLong("return_ns") in send..deadline)
+                        } else {
+                            assertEquals(deadline, sample.getLong("deadline_ns"))
+                            assertTrue(sample.getLong("send_return_ns") in send..deadline)
+                            assertTrue(
+                                sample.getLong("expired_ns") in deadline..stop.getLong("stopped_ns")
+                            )
+                            assertFalse(sample.has("reply_ns"))
+                            assertFalse(sample.has("send_ioexception"))
+                        }
+                        assertEquals(
+                            stop.getJSONObject("udp_socket").getInt("object_id"),
+                            sample.getInt("socket_id"),
+                        )
+                        assertEquals(
+                            stop.getJSONObject("udp_socket").getInt("local_port"),
+                            sample.getInt("local_port"),
+                        )
+                        assertEquals(
+                            stop.getJSONObject("udp_socket").getString("local_address"),
+                            sample.getString("local_address"),
+                        )
+                        val next = samples[index + 1]
+                        assertEquals(index + 1, next.getInt("tick"))
+                        assertEquals("reply", next.getString("outcome"))
+                        assertEquals(scheduled + 250_000_000L, next.getLong("scheduled_ns"))
+                        assertTrue(
+                            next.getLong("start_ns") in
+                                next.getLong("scheduled_ns")..next.getLong("send_ns")
+                        )
+                        assertTrue(
+                            next.getLong("start_ns") - next.getLong("scheduled_ns") < 250_000_000L
+                        )
+                        assertTrue(
+                            next.getLong("reply_ns") in
+                                next.getLong("send_ns")..(next.getLong("scheduled_ns") +
+                                        5_000_000_000L)
+                        )
+                        assertTrue(
+                            next.getLong("send_return_ns") in
+                                next.getLong("send_ns")..(next.getLong("scheduled_ns") +
+                                        5_000_000_000L)
+                        )
+                        assertEquals(sample.getInt("socket_id"), next.getInt("socket_id"))
+                        assertEquals(sample.getInt("local_port"), next.getInt("local_port"))
+                        assertEquals(
+                            sample.getString("local_address"),
+                            next.getString("local_address"),
+                        )
+                        assertEquals(sample.getInt("socket_id"), next.getInt("reply_socket_id"))
+                        assertEquals(sample.getInt("local_port"), next.getInt("reply_local_port"))
+                        // The request or its reply may cross the gap. Only the send
+                        // start uses the explicit 100 ms pre-DOWN exchange margin.
+                        val window =
+                            LocalContinuityWindows.accept(
+                                send,
+                                windows,
+                                usedRebuilds,
+                            )
+                        maxGap = maxOf(maxGap, sample.getLong("cadence_gap_ns"))
+                        report(
+                            "tolerated_udp_exchange",
+                            JSONObject()
+                                .put("session_id", id)
+                                .put("tick", index)
+                                .put("outcome", sample.getString("outcome"))
+                                .put("send_ns", send)
+                                .put("down_ns", window.down)
+                                .put("route_ns", window.installed)
+                                .put("rebuild", window.rebuild),
+                        )
                         return@forEachIndexed
                     }
                     assertEquals("reply", sample.getString("outcome"))
@@ -804,6 +1179,7 @@ class LocalNetworkDeliveryInstrumentedTest {
                 "session_counts",
                 "local=${local.size},public=${public.size},max_latency_ns=$maxLatency,max_gap_ns=$maxGap",
             )
+            report("failed_udp_exchange_count", failedUdp.size)
         }
     }
 
@@ -1113,6 +1489,7 @@ class LocalNetworkDeliveryInstrumentedTest {
         }
 
     private fun disconnect(connection: ConnectionProxy) = runBlocking {
+        continuityIntent("disconnect")
         assertTrue(
             connection.disconnect(DisconnectReason.USER_INITIATED_DISCONNECT_BUTTON).isRight()
         )
@@ -1564,8 +1941,19 @@ class LocalNetworkDeliveryInstrumentedTest {
         if (expect == "blocked") assertEquals(0, received, "Public ICMP must remain blocked")
     }
 
-    private fun probeSocket(consumer: Consumer, transport: String, expect: String) {
-        val nonce = "krtek-m3-" + UUID.randomUUID()
+    private fun probeSocket(
+        consumer: Consumer,
+        transport: String,
+        expect: String,
+        sessionFrame: Boolean = false,
+    ) {
+        // Denied probes against the strict session peer must be valid frames:
+        // a peer's format rejection must never masquerade as network blocking.
+        val nonce =
+            if (sessionFrame) {
+                val id = UUID.randomUUID().toString().replace("-", "").take(29)
+                "krtek-m3-$id-${transport.first()}-0000"
+            } else "krtek-m3-" + UUID.randomUUID()
         val index = probeIndex++
         if (transport != "tcp-connect")
             report(
@@ -1790,12 +2178,14 @@ class LocalNetworkDeliveryInstrumentedTest {
                             (allRoutes intersect bookkeeping).sorted().joinToString(","),
                         )
                         report("frontend_addresses", addresses.sorted().joinToString(","))
+                        val uids = checkNotNull(delimitedField(agent, "Uids: <{", '}'))
+                        report("frontend_uids", uids)
                         return@withTimeout AppliedCapture(
                             addresses,
                             routes,
                             "[]",
                             1280,
-                            "",
+                            uids,
                             generation,
                             null,
                             iface,
