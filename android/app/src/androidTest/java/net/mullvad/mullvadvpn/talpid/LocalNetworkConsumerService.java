@@ -365,9 +365,23 @@ public final class LocalNetworkConsumerService extends Service {
         stopping = true;
         if (!graceful) closeSockets();
       }
-      publicWorkers.shutdown();
       long joinDeadline = SystemClock.elapsedRealtimeNanos() + 6000000000L;
-      for (Thread thread : new Thread[] {tcpPump, udpPump, publicPump, tcpReader, udpReader}) {
+      // Stop every producer before closing the admission/drain side it owns.
+      joinPumps(graceful, joinDeadline, tcpPump, udpPump, publicPump);
+      // Readers can be installed during producer startup; sample them only after
+      // joining their producers, not in the same pre-join array snapshot.
+      joinPumps(graceful, joinDeadline, tcpReader, udpReader);
+      publicWorkers.shutdown();
+      try { if (!publicWorkers.awaitTermination(Math.max(1, joinDeadline - SystemClock.elapsedRealtimeNanos()),
+          TimeUnit.NANOSECONDS)) fail("public-join"); }
+      catch (InterruptedException error) { Thread.currentThread().interrupt(); fail("public-join-interrupted"); }
+      watchdog.shutdownNow();
+      publicWorkers.shutdownNow();
+      synchronized (this) { closeSockets(); stopped = SystemClock.elapsedRealtimeNanos(); }
+    }
+
+    private void joinPumps(boolean graceful, long joinDeadline, Thread... threads) {
+      for (Thread thread : threads) {
         if (thread != null && thread != Thread.currentThread()) {
           if (!graceful) thread.interrupt();
           try { thread.join(Math.max(1, (joinDeadline - SystemClock.elapsedRealtimeNanos()) / 1000000L)); }
@@ -375,12 +389,6 @@ public final class LocalNetworkConsumerService extends Service {
           if (thread.isAlive()) fail("pump-join");
         }
       }
-      try { if (!publicWorkers.awaitTermination(Math.max(1, joinDeadline - SystemClock.elapsedRealtimeNanos()),
-          TimeUnit.NANOSECONDS)) fail("public-join"); }
-      catch (InterruptedException error) { Thread.currentThread().interrupt(); fail("public-join-interrupted"); }
-      watchdog.shutdownNow();
-      publicWorkers.shutdownNow();
-      synchronized (this) { closeSockets(); stopped = SystemClock.elapsedRealtimeNanos(); }
     }
 
     private static void put(JSONObject object, String key, Object value) {
