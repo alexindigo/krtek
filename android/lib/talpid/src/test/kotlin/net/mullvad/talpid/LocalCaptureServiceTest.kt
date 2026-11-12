@@ -1,5 +1,6 @@
 package net.mullvad.talpid
 
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.LinkAddress
 import android.net.LinkProperties
@@ -242,6 +243,98 @@ class LocalCaptureServiceTest {
         current.onLost(foreign)
         assertTrue(publications.last().third.lost)
         service.finishLocalFrontend(12)
+    }
+
+    @Test
+    fun `should retain missing exclusions across Partial Managed and upstream establishments`() {
+        val excluded = arrayListOf("example.first", "example.missing", "example.last")
+        val stored = config.copy(excludedPackages = excluded)
+        var missing = true
+        every { anyConstructed<VpnService.Builder>().addDisallowedApplication(any()) } answers
+            {
+                if (firstArg<String>() == "example.missing" && missing)
+                    throw PackageManager.NameNotFoundException("uninstalled")
+                mockk(relaxed = true)
+            }
+        every { ParcelFileDescriptor.adoptFd(7) } returns mockk(relaxed = true)
+        for (reinstalled in listOf(false, true)) {
+            missing = !reinstalled
+            assertEquals(
+                CreateTunResult.Success(7),
+                service.openLocalFrontend(11, arrayOf("10.0.2.2/32"), excluded.toTypedArray()),
+            )
+            assertEquals(7, service.takeLocalFrontendDescriptor(11))
+            assertEquals(
+                CaptureHandoverResult(CreateTunResult.Success(7), false),
+                service.handoverLocalFrontend(
+                    11,
+                    12,
+                    arrayOf("10.0.2.2/32"),
+                    excluded.toTypedArray(),
+                ),
+            )
+            service.finishLocalFrontend(11)
+            assertTrue(service.isLocalFrontendActive())
+            service.finishLocalFrontend(12)
+            verify(exactly = if (reinstalled) 6 else 0) {
+                anyConstructed<VpnService.Builder>().addDnsServer(any<InetAddress>())
+            }
+            assertEquals(CreateTunResult.Success(7), service.openSecuredFrontend(13, stored))
+            assertEquals(7, service.takeLocalFrontendDescriptor(13))
+            assertEquals(
+                CaptureHandoverResult(CreateTunResult.Success(7), false),
+                service.handoverSecuredFrontend(13, 14, stored),
+            )
+            service.finishLocalFrontend(13)
+            assertTrue(service.isLocalFrontendActive())
+            service.finishLocalFrontend(14)
+            assertFalse(service.isLocalFrontendActive())
+            assertEquals(CreateTunResult.Success(7), service.openTun(stored))
+            service.closeTun()
+            assertEquals(listOf("example.first", "example.missing", "example.last"), excluded)
+            for (app in excluded) {
+                verify(exactly = if (reinstalled) 10 else 5) {
+                    anyConstructed<VpnService.Builder>().addDisallowedApplication(app)
+                }
+            }
+            verify(exactly = if (reinstalled) 10 else 5) {
+                anyConstructed<VpnService.Builder>().establish()
+            }
+        }
+        verify(exactly = 6) { descriptor.detachFd() }
+        verify(exactly = 4) { descriptor.close() }
+    }
+
+    @Test
+    fun `should not treat other exclusion failures as missing packages`() {
+        every { anyConstructed<VpnService.Builder>().addDisallowedApplication(any()) } throws
+            SecurityException("not a missing package")
+        val excluded = arrayOf("example.excluded")
+        assertEquals(
+            CreateTunResult.EstablishError,
+            service.openLocalFrontend(11, arrayOf("10.0.2.2/32"), excluded),
+        )
+        assertFalse(service.isLocalFrontendActive())
+        assertEquals(CreateTunResult.EstablishError, service.openSecuredFrontend(11, config))
+        assertFalse(service.isLocalFrontendActive())
+        assertEquals(
+            CreateTunResult.Success(7),
+            service.openLocalFrontend(11, arrayOf("10.0.2.2/32")),
+        )
+        assertEquals(
+            CaptureHandoverResult(CreateTunResult.EstablishError, true),
+            service.handoverLocalFrontend(11, 12, arrayOf("10.0.2.2/32"), excluded),
+        )
+        service.finishLocalFrontend(12)
+        assertEquals(
+            CaptureHandoverResult(CreateTunResult.EstablishError, true),
+            service.handoverSecuredFrontend(11, 13, config),
+        )
+        service.finishLocalFrontend(13)
+        assertTrue(service.isLocalFrontendActive())
+        service.finishLocalFrontend(11)
+        assertFalse(service.isLocalFrontendActive())
+        verify(exactly = 1) { anyConstructed<VpnService.Builder>().establish() }
     }
 
     @Test

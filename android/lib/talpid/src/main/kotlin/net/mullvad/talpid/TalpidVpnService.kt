@@ -1,5 +1,6 @@
 package net.mullvad.talpid
 
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.os.ParcelFileDescriptor
 import androidx.annotation.CallSuper
@@ -307,7 +308,7 @@ open class TalpidVpnService : LifecycleVpnService() {
         builder.setMtu(BLOCKING_MTU)
         builder.setBlocking(false)
         builder.setMeteredIfSupported(false)
-        excludedPackages.forEach { builder.addDisallowedApplication(it) }
+        builder.excludeApplications(excludedPackages.asList())
         establishing()
         val descriptor = builder.establishSafe().mapLeft { EstablishError }.bind()
         frontendEstablished(generation, descriptor, observeCapture = false)
@@ -419,11 +420,23 @@ open class TalpidVpnService : LifecycleVpnService() {
         setBlocking(false)
         setMeteredIfSupported(false)
 
-        config.excludedPackages.forEach { app -> addDisallowedApplication(app) }
+        excludeApplications(config.excludedPackages)
 
         accumulate {
             accumulating { addAddressesAndRoutesSafe(config).bind() }
             accumulating { addDnsServersSafe(config).bind() }
+        }
+    }
+
+    private fun Builder.excludeApplications(packages: List<String>) {
+        packages.forEach { app ->
+            try {
+                addDisallowedApplication(app)
+            } catch (_: PackageManager.NameNotFoundException) {
+                // Keep the stored exclusion so reinstalling the app applies it again.
+                // Resolve at the actual Builder call: uninstall can race a prior query.
+                Logger.w("Excluded application is not installed: $app")
+            }
         }
     }
 
