@@ -87,12 +87,13 @@ class LocalContinuityWindowsTest {
         """
             .trimIndent()
 
-    private fun measured(kind: String = "connect", text: String = log) =
+    private fun measured(kind: String = "connect", text: String = log, peer: String = "10.0.2.2") =
         LocalContinuityWindows.measured(
             text,
             "test",
             listOf(LocalContinuityWindows.Intent(kind, 1_100_000_000)),
             marks,
+            peer,
         )
 
     @Test
@@ -162,5 +163,25 @@ class LocalContinuityWindowsTest {
         val used = mutableSetOf<Int>()
         LocalContinuityWindows.accept(send, listOf(window), used)
         assertFails { LocalContinuityWindows.accept(send + 1, listOf(window), used) }
+    }
+
+    @Test
+    fun routeEvidenceUsesTheActualPeer() {
+        val peer = "192.168.50.7"
+        val alternateLog = log.replace("10.0.2.2/32", "$peer/32")
+        val windows = measured(text = alternateLog, peer = peer)
+        assertEquals(measured(), windows)
+        assertEquals(
+            windows.single(),
+            LocalContinuityWindows.accept(1_195_000_000, windows, mutableSetOf()),
+        )
+        assertEquals(emptyList(), measured(peer = peer))
+        assertEquals(emptyList(), measured(text = alternateLog))
+        for (wrong in listOf("192x168x50x7/32", "$peer/24", "192.168.50.70/32")) {
+            assertEquals(
+                emptyList(),
+                measured(text = alternateLog.replace("$peer/32", wrong), peer = peer),
+            )
+        }
     }
 }

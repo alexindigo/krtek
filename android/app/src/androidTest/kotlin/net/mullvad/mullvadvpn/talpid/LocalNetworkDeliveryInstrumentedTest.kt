@@ -960,7 +960,13 @@ class LocalNetworkDeliveryInstrumentedTest {
                     val logFile = File(directory, "$id-rebuild.log")
                     logFile.writeText(log)
                     report("rebuild_log", logFile.name)
-                    LocalContinuityWindows.measured(log, clockMarker, continuityIntents, clockMarks)
+                    LocalContinuityWindows.measured(
+                        log,
+                        clockMarker,
+                        continuityIntents,
+                        clockMarks,
+                        peer,
+                    )
                 }
             val usedRebuilds = mutableSetOf<Int>()
             if (appListChangeAt != null) {

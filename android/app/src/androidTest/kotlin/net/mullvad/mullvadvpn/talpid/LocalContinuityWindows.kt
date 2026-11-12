@@ -47,6 +47,7 @@ internal object LocalContinuityWindows {
         marker: String,
         intents: List<Intent>,
         marks: List<ClockMark>,
+        peer: String,
     ): List<Window> {
         val event = Regex("^\\s*(\\d+)\\.(\\d{3,9})\\s+.*")
         val entries =
@@ -81,7 +82,7 @@ internal object LocalContinuityWindows {
         val down = Regex("RTM_NEWLINK:.*ifname=(tun\\d+).*ifi_flags=0x10 \\(\\)")
         val route =
             Regex(
-                "networkAddRouteParcel\\((\\d+), .*destination: 10\\.0\\.2\\.2/32, ifName: (tun\\d+)"
+                "networkAddRouteParcel\\((\\d+), .*destination: ${Regex.escape(peer)}/32, ifName: (tun\\d+)"
             )
         check(intents.zipWithNext().all { (a, b) -> a.time <= b.time }) { "Reordered intents" }
         val sessionEntries = entries.filter {
