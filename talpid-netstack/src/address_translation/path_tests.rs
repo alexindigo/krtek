@@ -12,6 +12,9 @@ use talpid_types::relay_flow::{RelayAttemptOwner, RelayCaptureOwner, RelayWriteO
 #[path = "feedback_tests.rs"]
 mod feedback_tests;
 
+#[path = "completion_tests.rs"]
+mod completion_tests;
+
 fn path() -> (
     TargetPacketPath,
     RelayCaptureOwner,

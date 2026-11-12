@@ -13,6 +13,15 @@ const LIMIT: usize = 4 * 1024 * 1024;
 const COUNT: usize = 64;
 const PAYLOAD: usize = 65_535;
 const LIFETIME: Duration = Duration::from_secs(15);
+// Keep a completed identity for one full reordering horizon after completion.
+// Retain at most 1,024 compact keys without limiting assembly-slot turnover.
+// At capacity replace the earliest-expiring completed key, never a rejection.
+const COMPLETED_COUNT: usize = 1024;
+
+struct Completed {
+    key: Key,
+    expiry: Instant,
+}
 // Both feedback families quote less than this. Retain the received view, never
 // rebuild it from the checksum datagram or keep another full-size packet.
 const INVOKING_PREFIX: usize = 1280;
@@ -104,6 +113,7 @@ pub(crate) struct Datagram<'a> {
 
 pub(crate) struct FragmentState {
     entries: Vec<Assembly>,
+    completed: Vec<Completed>,
     buffers: Arc<dyn RelayBufferAllocator>,
     _metadata: Arc<dyn RelayBufferReservation>,
 }
@@ -112,25 +122,38 @@ impl FragmentState {
     pub fn new(application: &dyn RelayBufferAllocator) -> Result<Self, TranslationError> {
         let region = application.try_reserve(LIMIT)?;
         let buffers = region.allocator()?;
-        // Includes the inline overlap bitmap and tombstone metadata for all slots.
-        let metadata =
-            buffers.try_reserve(COUNT * std::mem::size_of::<Assembly>() + BUFFER_OVERHEAD)?;
+        // Charge both fixed-capacity ledgers before allocating, including the
+        // overlap bitmaps, rejection tombstones and completion guards. Neither
+        // ledger may grow beyond its reserved capacity inside this 4 MiB child.
+        let metadata = buffers.try_reserve(
+            COUNT * std::mem::size_of::<Assembly>()
+                + COMPLETED_COUNT * std::mem::size_of::<Completed>()
+                + 2 * BUFFER_OVERHEAD,
+        )?;
         let entries = Vec::with_capacity(COUNT);
+        let completed = Vec::with_capacity(COMPLETED_COUNT);
         Ok(Self {
             entries,
+            completed,
             buffers,
             _metadata: metadata,
         })
     }
 
     pub fn deadline(&self) -> Option<Instant> {
-        self.entries.iter().map(|a| a.expiry).min()
+        self.entries
+            .iter()
+            .map(|a| a.expiry)
+            .chain(self.completed.iter().map(|a| a.expiry))
+            .min()
     }
     pub fn maintain(&mut self, now: Instant) {
         self.entries.retain(|a| a.expiry > now);
+        self.completed.retain(|a| a.expiry > now);
     }
     pub fn clear(&mut self) {
         self.entries.clear();
+        self.completed.clear();
     }
 
     pub fn ingest<'a>(
@@ -189,6 +212,11 @@ impl FragmentState {
             protocol: if header.ipv4 { protocol } else { 0 },
             id,
         };
+        // RFC6946 atomic IPv6 fragments have no reassembly identity, even if
+        // their wire ID happens to match an ordinary fragment's guarded key.
+        if (header.ipv4 || offset != 0 || more) && self.completed.iter().any(|a| a.key == key) {
+            return Err(TranslationError::RejectedFragment);
+        }
         let invalid = payload.is_empty()
             || end > PAYLOAD
             || (more && !payload.len().is_multiple_of(8))
@@ -352,14 +380,81 @@ impl FragmentState {
             .invoking
             .take()
             .ok_or(TranslationError::Malformed)?;
-        // Ownership of the completed bytes has moved to the consumer. Only
-        // genuine rejections retain admission slots until their original expiry.
-        self.entries.swap_remove(index);
+        // Ownership of the completed bytes has moved to the consumer. Release
+        // its admission slot, but prevent delayed fragments seeding a mixed
+        // datagram under a reused ID while its completed key is still guarded.
+        // Completed-key pressure must not throttle fragmented traffic: evict
+        // only the oldest completion by expiry, never a rejection tombstone.
+        // Pop before pushing so the charged backing allocation cannot grow.
+        let assembly = self.entries.swap_remove(index);
+        if self.completed.len() == COMPLETED_COUNT {
+            let oldest = self
+                .completed
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, a)| a.expiry)
+                .map(|(index, _)| index);
+            if let Some(oldest) = oldest {
+                self.completed.swap_remove(oldest);
+            }
+        }
+        self.completed.push(Completed {
+            key: assembly.key,
+            expiry: now + LIFETIME,
+        });
         Ok(Some(Datagram {
             bytes: DatagramBytes::Owned(bytes),
             invoking: DatagramBytes::Owned(invoking),
             fragmentation,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::buffer_budget::{BufferBudget, REGION_OVERHEAD};
+
+    #[test]
+    fn completion_guard_metadata_is_charged_within_the_original_region() {
+        let budget = BufferBudget::new(LIMIT);
+        let mut state = FragmentState::new(&budget).unwrap();
+        assert_eq!(state.entries.capacity(), COUNT);
+        assert_eq!(state.completed.capacity(), COMPLETED_COUNT);
+        let metadata = COUNT * std::mem::size_of::<Assembly>()
+            + COMPLETED_COUNT * std::mem::size_of::<Completed>()
+            + 2 * BUFFER_OVERHEAD;
+        assert_eq!(state._metadata.bytes(), metadata);
+        let available = LIMIT - REGION_OVERHEAD - metadata;
+        assert!(state.buffers.try_reserve(available + 1).is_err());
+        let rest = state.buffers.try_reserve(available).unwrap();
+        assert_eq!(budget.used(), LIMIT);
+        let now = Instant::now();
+        state.completed.push(Completed {
+            key: Key {
+                direction: Direction::Outbound,
+                source: "192.0.2.1".parse().unwrap(),
+                destination: "192.0.2.2".parse().unwrap(),
+                protocol: 17,
+                id: 1,
+            },
+            expiry: now + LIFETIME,
+        });
+        assert_eq!(state.deadline(), Some(now + LIFETIME));
+        state.clear();
+        assert!(state.completed.is_empty());
+        assert_eq!(state.deadline(), None);
+        println!(
+            "completion guard: {} keys x {} bytes = {} bytes, lifetime 15 seconds, metadata total {} bytes, region {} bytes",
+            COMPLETED_COUNT,
+            std::mem::size_of::<Completed>(),
+            COMPLETED_COUNT * std::mem::size_of::<Completed>(),
+            metadata,
+            LIMIT
+        );
+        drop(rest);
+        drop(state);
+        assert_eq!(budget.used(), 0);
     }
 }
 
