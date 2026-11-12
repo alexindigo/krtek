@@ -303,6 +303,122 @@ fn output_mtu_is_directional_and_ptb_quotes_the_sender_view() {
 }
 
 #[test]
+fn completed_fragment_ids_release_slots_without_evicting_rejection_tombstones() {
+    fn identify(pieces: &[Vec<u8>], v4: bool, id: u16) -> Vec<Vec<u8>> {
+        pieces
+            .iter()
+            .map(|piece| {
+                let mut piece = piece.clone();
+                if v4 {
+                    piece[4..6].copy_from_slice(&id.to_be_bytes());
+                    piece[10..12].fill(0);
+                    let sum = oracle(&piece[..20]);
+                    piece[10..12].copy_from_slice(&sum.to_be_bytes());
+                } else {
+                    piece[44..48].copy_from_slice(&u32::from(id).to_be_bytes());
+                }
+                piece
+            })
+            .collect()
+    }
+    for v4 in [true, false] {
+        for direction in [Direction::Outbound, Direction::Inbound] {
+            let (mut path, _capture, _attempt, budget) = path();
+            let now = Instant::now();
+            let before = budget.used();
+            let (source, destination) = if direction == Direction::Outbound {
+                (address(FIXED, v4), remote(v4))
+            } else {
+                (remote(v4), address(ASSIGNED, v4))
+            };
+            let original = packet(source, destination, 6, &segment(6));
+            let pieces = source_fragments(&original, 8, 40);
+            let rejected = identify(&pieces, v4, u16::MAX);
+            assert!(matches!(
+                path.process(&rejected[0], direction, 1280, now),
+                Ok(TranslationOutcome::PendingFragments)
+            ));
+            assert!(matches!(
+                path.process(&rejected[0], direction, 1280, now),
+                Err(TranslationError::RejectedFragment)
+            ));
+            let deadline = now + Duration::from_secs(15);
+            for id in 0..70 {
+                let mut delivered = Vec::new();
+                for piece in identify(&pieces, v4, id) {
+                    match path.process(&piece, direction, 1280, now).unwrap() {
+                        TranslationOutcome::PendingFragments => (),
+                        TranslationOutcome::Packets(output) => delivered.extend(receive(output)),
+                        _ => panic!("unexpected feedback"),
+                    }
+                }
+                assert_eq!(
+                    delivered.len(),
+                    1,
+                    "completed datagram did not reach consumer"
+                );
+                let header = Header::parse(&delivered[0], false).unwrap();
+                assert_eq!(
+                    header.source,
+                    if direction == Direction::Outbound {
+                        address(ASSIGNED, v4)
+                    } else {
+                        source
+                    }
+                );
+                assert_eq!(
+                    header.destination,
+                    if direction == Direction::Inbound {
+                        address(FIXED, v4)
+                    } else {
+                        destination
+                    }
+                );
+                assert_eq!(wire_checksum(&delivered[0], if v4 { 20 } else { 40 }, 6), 0);
+                assert_eq!(budget.used(), before);
+                assert_eq!(path.deadline(), Some(deadline));
+            }
+            // Saturate the admission ledger with genuine rejections. Successful
+            // traffic above must not have shortened this first rejected ID's life.
+            for id in 100..163 {
+                let first = &identify(&pieces, v4, id)[0];
+                assert!(matches!(
+                    path.process(first, direction, 1280, now),
+                    Ok(TranslationOutcome::PendingFragments)
+                ));
+                assert!(matches!(
+                    path.process(first, direction, 1280, now),
+                    Err(TranslationError::RejectedFragment)
+                ));
+            }
+            let new = identify(&pieces, v4, 999);
+            assert!(matches!(
+                path.process(&new[0], direction, 1280, now),
+                Err(TranslationError::Full)
+            ));
+            assert!(matches!(
+                path.process(
+                    &rejected[1],
+                    direction,
+                    1280,
+                    deadline - Duration::from_nanos(1)
+                ),
+                Err(TranslationError::RejectedFragment)
+            ));
+            assert_eq!(path.deadline(), Some(deadline));
+            for (index, piece) in rejected.iter().enumerate() {
+                let outcome = path.process(piece, direction, 1280, deadline).unwrap();
+                if index == rejected.len() - 1 {
+                    assert_eq!(receive(packets(outcome)).len(), 1);
+                } else {
+                    assert!(matches!(outcome, TranslationOutcome::PendingFragments));
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn ipv4_fragments_and_ipv6_source_fragment_boundaries_survive_mtu_sizing() {
     let (mut path, _capture, _attempt, _) = path();
     let now = Instant::now();

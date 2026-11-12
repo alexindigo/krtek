@@ -352,7 +352,9 @@ impl FragmentState {
             .invoking
             .take()
             .ok_or(TranslationError::Malformed)?;
-        assembly.reject(); // Complete ID cannot absorb delayed pieces before expiry.
+        // Ownership of the completed bytes has moved to the consumer. Only
+        // genuine rejections retain admission slots until their original expiry.
+        self.entries.swap_remove(index);
         Ok(Some(Datagram {
             bytes: DatagramBytes::Owned(bytes),
             invoking: DatagramBytes::Owned(invoking),
