@@ -2,6 +2,8 @@ package net.mullvad.mullvadvpn.talpid
 
 import java.io.Reader
 import java.io.StringReader
+import java.util.Locale
+import java.util.StringTokenizer
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
 import kotlin.test.assertTrue
@@ -28,11 +30,47 @@ class LocalContinuityWindowsTest {
             }
         assertFails { LocalContinuityWindows.readBounded(huge) }
         assertTrue(huge.consumed <= 2 * 1024 * 1024 + 4096)
-        val command = LocalContinuityWindows.logCommand(1_794_366_000_000L)
-        assertTrue(command.contains(" -T '") && command.endsWith("netd:I '*:S'"))
-        assertTrue(
-            command.contains("KrtekContinuityClock:I") && command.contains("wpa_supplicant:D")
-        )
+    }
+
+    @Test
+    fun logArgumentsSurviveTheActualNonShellTokenization() {
+        val saved = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.GERMANY)
+            for ((millis, timestamp) in
+                listOf(
+                    1_794_366_000_123L to "1794365999.123",
+                    1_794_366_000_000L to "1794365999.000",
+                )) {
+                val command = "toybox timeout 5 ${LocalContinuityWindows.logCommand(millis)}"
+                val tokens = StringTokenizer(command).asSequence().map { it.toString() }.toList()
+                assertEquals(
+                    listOf(
+                        "toybox",
+                        "timeout",
+                        "5",
+                        "logcat",
+                        "-d",
+                        "-b",
+                        "all",
+                        "-v",
+                        "epoch",
+                        "-v",
+                        "usec",
+                        "-T",
+                        timestamp,
+                        "KrtekContinuityClock:I",
+                        "wpa_supplicant:D",
+                        "NetlinkHandler:D",
+                        "netd:I",
+                        "*:S",
+                    ),
+                    tokens,
+                )
+            }
+        } finally {
+            Locale.setDefault(saved)
+        }
     }
 
     private val marks =

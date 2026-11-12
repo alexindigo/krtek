@@ -1,9 +1,7 @@
 package net.mullvad.mullvadvpn.talpid
 
 import java.io.Reader
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.math.BigDecimal
 
 /** Test-only interpretation of Android's actual interface/route log events. */
 internal object LocalContinuityWindows {
@@ -23,10 +21,11 @@ internal object LocalContinuityWindows {
 
     fun logCommand(sinceMillis: Long): String {
         // Include the begin marker, not the device's entire retained log history.
-        val since =
-            SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.ROOT).format(Date(sinceMillis - 1000))
-        return "logcat -d -b all -v epoch -v usec -T '$since' " +
-            "KrtekContinuityClock:I wpa_supplicant:D NetlinkHandler:D netd:I '*:S'"
+        // executeShellCommand uses Runtime.exec tokenization, not shell quoting.
+        // Keep the fractional part even at a whole second: digits alone mean a line count.
+        val since = BigDecimal.valueOf(sinceMillis - 1000, 3).toPlainString()
+        return "logcat -d -b all -v epoch -v usec -T $since " +
+            "KrtekContinuityClock:I wpa_supplicant:D NetlinkHandler:D netd:I *:S"
     }
 
     data class Intent(val kind: String, val time: Long)
