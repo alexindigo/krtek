@@ -295,6 +295,7 @@ public final class LocalNetworkConsumerService extends Service {
     final Socket tcp = new Socket();
     DatagramSocket udp;
     Thread tcpPump, udpPump, publicPump, tcpReader, udpReader;
+    java.util.function.Consumer<Thread> joined = thread -> {};
     volatile boolean stopping;
     String failure;
     String stopReason;
@@ -387,6 +388,7 @@ public final class LocalNetworkConsumerService extends Service {
           try { thread.join(Math.max(1, (joinDeadline - SystemClock.elapsedRealtimeNanos()) / 1000000L)); }
           catch (InterruptedException error) { Thread.currentThread().interrupt(); fail("stop-interrupted"); }
           if (thread.isAlive()) fail("pump-join");
+          else joined.accept(thread);
         }
       }
     }

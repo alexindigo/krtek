@@ -131,9 +131,10 @@ public class LocalNetworkConsumerSessionTest {
     Object session = session();
     CountDownLatch admitted = new CountDownLatch(1), release = new CountDownLatch(1);
     CountDownLatch readerFinished = new CountDownLatch(1);
+    CountDownLatch releaseReader = new CountDownLatch(1), readerJoined = new CountDownLatch(1);
     AtomicReference<Throwable> error = new AtomicReference<>();
     Thread reader = new Thread(() -> {
-      try { Thread.sleep(200); } catch (InterruptedException failure) { error.set(failure); }
+      try { releaseReader.await(); } catch (InterruptedException failure) { error.set(failure); }
       readerFinished.countDown();
     });
     Thread pump = new Thread(() -> {
@@ -143,6 +144,12 @@ public class LocalNetworkConsumerSessionTest {
         set(session, "tcpReader", reader);
         reader.start();
       } catch (Throwable failure) { error.set(failure); }
+    });
+    // Only the actual producer join releases the reader; only the actual reader
+    // join signals completion. Skipping reader joins cannot pass after a delay.
+    set(session, "joined", (java.util.function.Consumer<Thread>) thread -> {
+      if (thread == pump) releaseReader.countDown();
+      if (thread == reader) readerJoined.countDown();
     });
     set(session, "tcpPump", pump);
     pump.start();
@@ -156,6 +163,7 @@ public class LocalNetworkConsumerSessionTest {
       while (!(boolean) field(session, "stopping") && System.nanoTime() < deadline) Thread.yield();
       assertTrue((boolean) field(session, "stopping"));
       release.countDown();
+      assertTrue(readerJoined.await(2, TimeUnit.SECONDS), "late-installed reader join was skipped");
       stopper.join(7000);
       assertFalse(stopper.isAlive());
       assertEquals(0, readerFinished.getCount(), "stop returned before the late-installed reader joined");
@@ -164,6 +172,7 @@ public class LocalNetworkConsumerSessionTest {
       assertNull(error.get());
     } finally {
       release.countDown();
+      releaseReader.countDown();
       pump.join(2000);
       reader.join(2000);
       stopper.join(7000);
