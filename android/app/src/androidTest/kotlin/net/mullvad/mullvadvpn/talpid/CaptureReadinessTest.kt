@@ -14,7 +14,7 @@ class CaptureReadinessTest {
         "[CaptureRoute { destination: CapturePrefix { address: 10.0.2.2, prefix_length: 32 }, gateway: None, interface_name: \"tun0\", route_type: Some(1) }]"
 
     private fun ready(generation: String = "12", observed: String = encoded): String =
-        "capture-ready generation=$generation handle=99 network=42 interface=tun0 owner_uid=Some(10181) mtu=Some(1380) requested_routes=$encoded observed_routes=$observed api=33"
+        "capture-ready generation=$generation handle=99 network=42 interface=tun0 owner_uid=Some(10181) mtu=Some(1380) requested_routes=$encoded observed_routes=$observed api=33 representation=plain-ip tun_flags=0x1001"
 
     private fun sample(tail: String, previous: String? = "11") =
         CaptureReadiness.receipt(tail, "tun0", "42", routes, 1380, 10181, previous) { it }
@@ -102,9 +102,12 @@ class CaptureReadinessTest {
     private val actualRoutes =
         "[CaptureRoute { destination: CapturePrefix { address: 0.0.0.0, prefix_length: 0 }, gateway: None, interface_name: \"tun0\", route_type: Some(1) }, CaptureRoute { destination: CapturePrefix { address: 10.0.2.2, prefix_length: 32 }, gateway: None, interface_name: \"tun0\", route_type: Some(1) }, CaptureRoute { destination: CapturePrefix { address: 10.64.0.1, prefix_length: 32 }, gateway: None, interface_name: \"tun0\", route_type: Some(1) }, CaptureRoute { destination: CapturePrefix { address: 192.0.2.2, prefix_length: 32 }, gateway: None, interface_name: \"tun0\", route_type: Some(1) }, CaptureRoute { destination: CapturePrefix { address: ::, prefix_length: 0 }, gateway: None, interface_name: \"tun0\", route_type: Some(1) }, CaptureRoute { destination: CapturePrefix { address: 2001:db8::2, prefix_length: 128 }, gateway: None, interface_name: \"tun0\", route_type: Some(1) }, CaptureRoute { destination: CapturePrefix { address: fc00:bbbb:bbbb:bb01::1, prefix_length: 128 }, gateway: None, interface_name: \"tun0\", route_type: Some(1) }]"
 
-    private fun actual(receiptRoutes: String = actualRoutes) =
+    private fun actual(
+        receiptRoutes: String = actualRoutes,
+        format: String = "representation=plain-ip tun_flags=0x1001",
+    ) =
         CaptureReadiness.receipt(
-            "capture-ready generation=3 handle=789384712205 network=183 interface=tun0 requested_routes=$receiptRoutes observed_routes=$receiptRoutes api=37 owner_uid=Some(10181) mtu=Some(1280) route_types_reported=true representation=plain-ip tun_flags=0x1001",
+            "capture-ready generation=3 handle=789384712205 network=183 interface=tun0 requested_routes=$receiptRoutes observed_routes=$receiptRoutes api=37 owner_uid=Some(10181) mtu=Some(1280) route_types_reported=true $format",
             "tun0",
             "183",
             setOf(
@@ -162,5 +165,79 @@ class CaptureReadinessTest {
         assertEquals(listOf(null, null, null, null), accepted.take(4))
         assertEquals("12", assertNotNull(accepted.last()).generation)
         assertEquals("99", accepted.last()?.handle)
+    }
+
+    @Test
+    fun emptyPacketFormatFieldsCannotHideBesideAValidValue() {
+        val valid = "representation=plain-ip flags=0x1001"
+        for (bad in
+            listOf(
+                "flags= $valid",
+                "$valid flags=",
+                "representation= $valid",
+                "$valid representation=",
+                valid.replace("flags=0x1001", "flags="),
+                valid.replace("representation=plain-ip", "representation="),
+            )) {
+            assertFails("Connected accepted $bad") {
+                actual(format = bad.replace("flags=", "tun_flags="))
+            }
+            assertFails("Partial accepted $bad") {
+                CaptureReadiness.partialReceipt(
+                    partial().substringBeforeLast("representation=") + bad,
+                    null,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun bothReceiptSchemasRequireTheSameExactPacketFormat() {
+        val valid = "representation=plain-ip flags=0x1001"
+        for (format in listOf(valid, valid.replace("1001", "9001"))) {
+            assertNotNull(actual(format = format.replace("flags=", "tun_flags=")))
+            assertNotNull(
+                CaptureReadiness.partialReceipt(
+                    partial().substringBeforeLast("representation=") + format,
+                    null,
+                )
+            )
+        }
+        for (bad in
+            listOf(
+                valid.replace("plain-ip", "vnet"),
+                valid.replace("plain-ip", "plain-ip-extra"),
+                valid.replace("0x1001", "0x5001"),
+                valid.replace("0x1001", "0x1002"),
+                valid.replace("0x1001", "0x0001"),
+                valid.replace("0x1001", "0x1003"),
+                valid.replace("representation=plain-ip ", ""),
+                valid.substringBefore(" flags="),
+                valid.replace("0x1001", "0xinvalid"),
+                valid.replace("0x1001", "1001"),
+                valid.replace("0x1001", "0x100000000"),
+                valid.replace("representation=", "other_representation="),
+                "$valid representation=plain-ip",
+                "$valid flags=0x1001",
+            )) {
+            assertFails("Connected accepted $bad") {
+                actual(format = bad.replace("flags=", "tun_flags="))
+            }
+            assertFails("Partial accepted $bad") {
+                CaptureReadiness.partialReceipt(
+                    partial().substringBeforeLast("representation=") + bad,
+                    null,
+                )
+            }
+        }
+        // A stale sample stays pending, rather than turning convergence into corruption.
+        assertNull(sample(ready("11").replace("plain-ip", "vnet")))
+        assertNull(
+            sample(
+                ready()
+                    .replace("owner_uid=Some(10181)", "owner_uid=Some(10180)")
+                    .replace("plain-ip", "vnet")
+            )
+        )
     }
 }

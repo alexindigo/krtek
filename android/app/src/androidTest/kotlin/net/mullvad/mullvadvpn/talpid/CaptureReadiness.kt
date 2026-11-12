@@ -40,9 +40,7 @@ internal object CaptureReadiness {
         val format =
             tail.lineSequence().lastOrNull { it.contains("capture-format generation=$generation ") }
                 ?: return null
-        check(format.contains("representation=plain-ip"))
-        val flags = format.substringAfter("flags=0x").trim().toInt(16)
-        check(flags and 0x5003 == 0x1001) { "TUN/NO_PI without TAP or VNET_HDR" }
+        requirePacketFormat(format, "flags")
         return PartialReceipt(generation, session, format)
     }
 
@@ -100,6 +98,20 @@ internal object CaptureReadiness {
                 prefixes != routes
         )
             return null
+        requirePacketFormat(ready, "tun_flags")
         return Receipt(generation, handle, ready)
+    }
+
+    private fun requirePacketFormat(line: String, flagsKey: String) {
+        fun token(key: String): String =
+            checkNotNull(
+                    Regex("(?:^|\\s)${Regex.escape(key)}=([^\\s]*)").findAll(line).singleOrNull()
+                )
+                .groupValues[1]
+        check(token("representation") == "plain-ip")
+        val encoded = token(flagsKey)
+        check(Regex("0x[0-9a-fA-F]+").matches(encoded))
+        val flags = encoded.removePrefix("0x").toUInt(16)
+        check(flags and 0x5003u == 0x1001u) { "TUN/NO_PI without TAP or VNET_HDR" }
     }
 }
