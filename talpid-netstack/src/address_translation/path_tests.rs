@@ -284,14 +284,19 @@ fn output_mtu_is_directional_and_ptb_quotes_the_sender_view() {
             assert_eq!(header.destination, source);
             assert_eq!(
                 header.source,
-                address(
-                    if side == FeedbackSide::App {
-                        FIXED
-                    } else {
-                        ASSIGNED
-                    },
-                    v4
-                )
+                if v4 && side == FeedbackSide::App {
+                    assert_ne!(header.source, source, "feedback source is local to the app");
+                    destination
+                } else {
+                    address(
+                        if side == FeedbackSide::App {
+                            FIXED
+                        } else {
+                            ASSIGNED
+                        },
+                        v4,
+                    )
+                }
             );
         }
     }

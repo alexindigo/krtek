@@ -153,7 +153,23 @@ impl TargetPacketPath {
                 } else {
                     self.mapper.config.assigned
                 };
-                let source = if header.ipv4 {
+                let source = if header.ipv4 && direction == Direction::Outbound {
+                    // The fixed interface address is local to the receiving
+                    // kernel. IPv4 rejects such incoming sources by default.
+                    // Return the error from the invoking remote endpoint instead.
+                    let IpAddr::V4(remote) = header.destination else {
+                        return Err(TranslationError::Family);
+                    };
+                    if Some(remote) == self.mapper.config.fixed.ipv4
+                        || remote.is_unspecified()
+                        || remote.is_loopback()
+                        || remote.is_multicast()
+                        || remote.is_broadcast()
+                    {
+                        return Err(TranslationError::Suppressed);
+                    }
+                    Some(remote.into())
+                } else if header.ipv4 {
                     sources.ipv4.map(IpAddr::V4)
                 } else {
                     sources.ipv6.map(IpAddr::V6)

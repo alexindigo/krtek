@@ -112,6 +112,27 @@ fn atomic_pmtu_feedback_quotes_the_received_packet_not_its_normalization() {
     }
 }
 
+#[test]
+fn outbound_ipv4_feedback_requires_a_nonlocal_unicast_source_candidate() {
+    for destination in [
+        address(FIXED, true),
+        "0.0.0.0".parse().unwrap(),
+        "127.0.0.1".parse().unwrap(),
+        "239.1.1.1".parse().unwrap(),
+        "255.255.255.255".parse().unwrap(),
+    ] {
+        let (mut path, _capture, _attempt, _) = path(1380);
+        let mut original = udp(address(FIXED, true), destination, 3000);
+        original[6] = 0x40;
+        fix_checksums(&mut original, 20, 17);
+        assert!(matches!(
+            path.process(&original, Direction::Outbound, 1280, Instant::now()),
+            Err(TranslationError::Suppressed)
+        ));
+        assert!(path.take_feedback().is_none());
+    }
+}
+
 fn source_fragments(direction: Direction) -> (Vec<u8>, Vec<u8>) {
     let (source, destination) = endpoints(direction);
     let datagram = udp(source, destination, 32);
