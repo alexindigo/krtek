@@ -55,6 +55,10 @@ pub(super) struct PendingManaged {
     config: TunConfig,
     capture_config: TunConfig,
     request: Option<ConfigurationRequest>,
+    #[cfg(test)]
+    pub(super) after_receipt: Option<tokio::sync::oneshot::Receiver<()>>,
+    #[cfg(test)]
+    pub(super) cleanup_complete: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 impl PendingManaged {
@@ -64,6 +68,10 @@ impl PendingManaged {
             config: source.config,
             capture_config: source.capture_config,
             request: Some(source.request),
+            #[cfg(test)]
+            after_receipt: None,
+            #[cfg(test)]
+            cleanup_complete: None,
         }
     }
 
@@ -103,6 +111,10 @@ impl PendingManaged {
         .await
         .map_err(|_| unavailable())?
         .map_err(|_| unavailable())?;
+        #[cfg(test)]
+        if let Some(resume) = self.after_receipt.take() {
+            resume.await.map_err(|_| unavailable())?;
+        }
         let pair = self.broker.acquire(&receipt).map_err(|_| unavailable())?;
         let source = config.tunnel_ipv4().ok_or_else(unavailable)?;
         let identity = pair.control.capability();

@@ -125,6 +125,8 @@ pub struct GotaTun {
     #[cfg(any(target_os = "android", test))]
     managed: Option<Arc<managed_control::ManagedControl>>,
     cleanup: Option<tokio::task::JoinHandle<()>>,
+    #[cfg(test)]
+    cleanup_complete: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 impl GotaTun {
@@ -217,6 +219,11 @@ impl GotaTun {
                         interface_name,
                         devices: Some(devices),
                         cleanup: None,
+                        #[cfg(test)]
+                        cleanup_complete: match &mut source {
+                            PlaintextSource::Managed(pending) => pending.cleanup_complete.take(),
+                            PlaintextSource::Native(_) => None,
+                        },
                         #[cfg(any(target_os = "android", test))]
                         managed,
                     });
@@ -254,11 +261,17 @@ impl GotaTun {
         };
         #[cfg(any(target_os = "android", test))]
         let managed = self.managed.take();
+        #[cfg(test)]
+        let cleanup_complete = self.cleanup_complete.take();
         self.cleanup = Some(tokio::spawn(async move {
             devices.stop().await;
             #[cfg(any(target_os = "android", test))]
             if let Some(owner) = managed {
                 owner.stop().await;
+            }
+            #[cfg(test)]
+            if let Some(completed) = cleanup_complete {
+                let _ = completed.send(());
             }
         }));
     }

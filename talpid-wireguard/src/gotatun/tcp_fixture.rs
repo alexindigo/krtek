@@ -1243,7 +1243,11 @@ async fn actual_enobufs_bind_retries_with_fresh_request_capture_attempt_and_cont
 async fn cancelled_setup_owner_and_cancelled_shutdown_keep_joined_cleanup() {
     let (broker, _root, control) = broker();
     let config = config();
-    let source = PendingManaged::request(broker.clone(), tun_config(&config)).unwrap();
+    let mut source = PendingManaged::request(broker.clone(), tun_config(&config)).unwrap();
+    let (resume, held) = tokio::sync::oneshot::channel();
+    let (finished, completion) = tokio::sync::oneshot::channel();
+    source.after_receipt = Some(held);
+    source.cleanup_complete = Some(finished);
     // The external caller is cancelled while its worker awaits the real receipt.
     assert!(
         tokio::time::timeout(
@@ -1263,17 +1267,28 @@ async fn cancelled_setup_owner_and_cancelled_shutdown_keep_joined_cleanup() {
     let capture = acknowledge(&broker, &config);
     // An unclaimed completed tunnel is dropped by its supervised setup owner,
     // which revokes and joins both GotaTun and control work before refund.
-    tokio::time::timeout(Duration::from_secs(2), async {
-        loop {
-            let state = broker.snapshot();
-            if state.attachment.is_none() && !state.ordinary_ready && control.used() == 0 {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(2)).await;
-        }
+    assert!(broker.snapshot().attachment.is_none());
+    assert!(!broker.snapshot().ordinary_ready);
+    assert_eq!(control.used(), 0);
+    let joined_cleanup = async {
+        completion
+            .await
+            .expect("setup dropped its completion without cleanup");
+        assert!(broker.snapshot().attachment.is_none());
+        assert!(!broker.snapshot().ordinary_ready);
+        assert_eq!(control.used(), 0);
+    };
+    tokio::pin!(joined_cleanup);
+    // The initial empty snapshot cannot satisfy this exact worker's receipt.
+    std::future::poll_fn(|cx| {
+        assert!(std::future::Future::poll(joined_cleanup.as_mut(), cx).is_pending());
+        std::task::Poll::Ready(())
     })
-    .await
-    .unwrap();
+    .await;
+    resume.send(()).unwrap();
+    tokio::time::timeout(Duration::from_secs(2), &mut joined_cleanup)
+        .await
+        .unwrap();
     assert!(!broker.snapshot().ordinary_ready);
     assert!(
         capture.capability().unwrap().current(),
