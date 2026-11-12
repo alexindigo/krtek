@@ -1045,14 +1045,28 @@ class LocalNetworkDeliveryInstrumentedTest {
                             return@forEachIndexed
                         }
                     }
-                    val afterRevocation =
-                        revokedAt?.let { sample.getLong("scheduled_ns") + 5_000_000_000L >= it } ==
-                            true
-                    if (afterRevocation && sample.getString("outcome") != "reply") {
-                        assertTrue(
-                            sample.getString("outcome") in
-                                setOf("error", "cancelled", "udp-reply-missing")
+                    val sendFailure =
+                        if (sample.getString("outcome") == "udp-send-error")
+                            LocalContinuityLedger.UdpSendFailure(
+                                expectedScheduled =
+                                    stop.getLong("started_ns") + index * 250_000_000L,
+                                scheduled = sample.getLong("scheduled_ns"),
+                                start = sample.getLong("start_ns"),
+                                send = sample.getLong("send_ns"),
+                                returned = sample.getLong("return_ns"),
+                                errorClass = sample.getString("error_class"),
+                                ioException = sample.getString("send_ioexception"),
+                            )
+                        else null
+                    if (
+                        LocalContinuityLedger.retirementOutcome(
+                            transport,
+                            sample.getString("outcome"),
+                            sample.getLong("scheduled_ns"),
+                            revokedAt,
+                            sendFailure,
                         )
+                    ) {
                         return@forEachIndexed
                     }
                     if (
@@ -1067,8 +1081,7 @@ class LocalNetworkDeliveryInstrumentedTest {
                         assertTrue(sample.getLong("start_ns") - scheduled < 250_000_000L)
                         assertTrue(send <= deadline)
                         if (sample.getString("outcome") == "udp-send-error") {
-                            assertTrue(sample.has("send_ioexception"))
-                            assertTrue(sample.getLong("return_ns") in send..deadline)
+                            checkNotNull(sendFailure)
                         } else {
                             assertEquals(deadline, sample.getLong("deadline_ns"))
                             assertTrue(sample.getLong("send_return_ns") in send..deadline)
