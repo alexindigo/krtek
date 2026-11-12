@@ -12,6 +12,16 @@ struct RetryControl {
 }
 
 impl RetryControl {
+    fn fail_establishment(&self) {
+        self.completion
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap()
+            .send(Err(io::Error::other("establishment failed before switch")))
+            .unwrap();
+    }
+
     fn complete(&self, failed: bool) {
         self.failed.store(failed, SeqCst);
         self.completion
@@ -183,6 +193,85 @@ async fn explicit_release_retry_during_pending_readiness_survives_the_exact_fail
             "failure retried without another external event"
         );
         assert_eq!(control.handovers.load(SeqCst), 0);
+        delivery.stop().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn failed_establishment_retains_its_request_until_external_retry_or_distinct_successor() {
+    for retry_while_pending in [false, true] {
+        let control = Arc::new(RetryControl::default());
+        let mut delivery = delivery(control.clone());
+        let broker = delivery.broker.clone();
+        let capture = broker.open_capture(None).unwrap();
+        let sources = talpid_types::relay_flow::RelaySources {
+            ipv4: Some(ROUTER_IPV4),
+            ipv6: Some(ROUTER_IPV6),
+        };
+        let receipt = capture
+            .bind_observed_identity("retained", 71_u64 << 32, sources, ROUTER_MTU)
+            .unwrap();
+        delivery.maintain_config(Some(configured())).await;
+        delivery.authority.update(&policy(), Some(observation()));
+        let grant = delivery
+            .authority
+            .authorize(flow(Transport::Udp, 40100))
+            .unwrap();
+        let config = talpid_tunnel::tun_provider::transport::router_blocking_config(vec![]);
+        let request = broker.request_capture(config.clone()).unwrap();
+        let wanted = DeliveryConfig::Secured {
+            broker: broker.clone(),
+            request: broker.pending_request().unwrap(),
+        };
+        delivery.reconcile_config(Some(wanted.clone())).await;
+        assert_eq!(control.handovers.load(SeqCst), 1);
+        if retry_while_pending {
+            delivery.maintain_config(Some(wanted.clone())).await;
+        }
+        control.fail_establishment();
+        bounded(delivery.changed()).await;
+        let attempts = if retry_while_pending { 2 } else { 1 };
+        assert_eq!(control.handovers.load(SeqCst), attempts);
+        if retry_while_pending {
+            control.fail_establishment();
+            bounded(delivery.changed()).await;
+        }
+        for _ in 0..3 {
+            delivery.reconcile_config(Some(wanted.clone())).await;
+            assert_eq!(
+                control.handovers.load(SeqCst),
+                attempts,
+                "internal event retried failed establishment"
+            );
+            assert!(delivery.authority.current(&grant));
+            assert_eq!(
+                broker.snapshot().capture_generation,
+                Some(receipt.generation())
+            );
+            assert!(broker.snapshot().capture_ready);
+            assert!(delivery.failed());
+        }
+        delivery.maintain_config(Some(wanted.clone())).await;
+        assert_eq!(control.handovers.load(SeqCst), attempts + 1);
+        control.fail_establishment();
+        bounded(delivery.changed()).await;
+        drop(request);
+        let next_request = broker.request_capture(config).unwrap();
+        let next = DeliveryConfig::Secured {
+            broker: broker.clone(),
+            request: broker.pending_request().unwrap(),
+        };
+        assert!(!next.same_capture(&wanted));
+        delivery.reconcile_config(Some(next)).await;
+        assert_eq!(
+            control.handovers.load(SeqCst),
+            attempts + 2,
+            "distinct successor was suppressed"
+        );
+        control.fail_establishment();
+        bounded(delivery.changed()).await;
+        assert!(delivery.authority.current(&grant));
+        drop(next_request);
         delivery.stop().await.unwrap();
     }
 }

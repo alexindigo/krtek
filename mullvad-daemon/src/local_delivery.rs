@@ -482,6 +482,9 @@ pub struct Delivery<F: FrontendFactory> {
     pending: Option<Readiness>,
     desired: Option<DeliveryConfig>,
     handover_failed: bool,
+    // A failed establishment belongs to its exact configuration/request, not
+    // whichever broker notification happens to reconcile it next.
+    failed_establishment: Option<DeliveryConfig>,
     // A coalesced external retry belongs to the pending operation, not to an
     // internal readiness/state notification. Consume it only after that join.
     retry_requested: bool,
@@ -592,6 +595,7 @@ impl<F: FrontendFactory> Delivery<F> {
             pending: None,
             desired: None,
             handover_failed: false,
+            failed_establishment: None,
             retry_requested: false,
             releases: [None, None],
             buffers,
@@ -654,6 +658,7 @@ impl<F: FrontendFactory> Delivery<F> {
             Readiness::Initial => {
                 self.owner_ready = result.is_ok();
                 if result.is_err() {
+                    self.failed_establishment = self.applied.clone();
                     self.last_start_failed = true;
                     self.authority.revoke();
                 }
@@ -670,6 +675,9 @@ impl<F: FrontendFactory> Delivery<F> {
                     self.handover_failed = !result
                         .as_ref()
                         .is_err_and(|error| error.kind() == io::ErrorKind::WouldBlock);
+                    if self.handover_failed {
+                        self.failed_establishment = Some(config);
+                    }
                     let snapshot = self.broker.snapshot();
                     if snapshot.capture_ready && snapshot.capture_generation == predecessor {
                         self.authority.reconcile_capture(
@@ -741,6 +749,10 @@ impl<F: FrontendFactory> Delivery<F> {
             return;
         }
         let external_retry = std::mem::take(&mut self.retry_requested) || external;
+        if !self.retry_permitted(wanted.as_ref(), external_retry) {
+            return;
+        }
+        self.failed_establishment = None;
         self.handover_failed = false;
         let retry_allowed = external_retry && self.can_retry_release();
         let healthy = self
@@ -760,9 +772,17 @@ impl<F: FrontendFactory> Delivery<F> {
                 if self.retain_release(wanted.as_ref().unwrap()).is_err() {
                     return;
                 }
-                let owner = self.owner.as_mut().unwrap();
-                if owner.release_failed() {
-                    if external_retry && owner.retry_handover_release().is_ok() {
+                if self.owner.as_ref().unwrap().release_failed() {
+                    // Recheck at dispatch: the native owner may publish a
+                    // failure after the earlier reconciliation admission.
+                    if self.retry_permitted(wanted.as_ref(), external_retry)
+                        && self
+                            .owner
+                            .as_mut()
+                            .unwrap()
+                            .retry_handover_release()
+                            .is_ok()
+                    {
                         self.pending = Some(Readiness::Release);
                     }
                 } else if !same {
@@ -773,16 +793,20 @@ impl<F: FrontendFactory> Delivery<F> {
                     // retaining the authority lock over the command boundary.
                     self.authority
                         .reconcile_capture(config.authority(&self.broker), true);
-                    if owner.handover(config.clone()).is_ok() {
-                        self.pending = Some(Readiness::Handover {
-                            config: config.clone(),
-                            predecessor,
-                        });
-                    } else {
+                    if let Err(error) = self.owner.as_mut().unwrap().handover(config.clone()) {
+                        if error.kind() != io::ErrorKind::WouldBlock {
+                            self.failed_establishment = Some(config.clone());
+                            self.handover_failed = true;
+                        }
                         self.authority.reconcile_capture(
                             self.applied.as_ref().unwrap().authority(&self.broker),
                             false,
                         );
+                    } else {
+                        self.pending = Some(Readiness::Handover {
+                            config: config.clone(),
+                            predecessor,
+                        });
                     }
                 }
                 if self.pending.is_some()
@@ -792,9 +816,6 @@ impl<F: FrontendFactory> Delivery<F> {
                 }
                 return;
             }
-        }
-        if self.can_retry_release() && !external_retry {
-            return;
         }
         if self.has_owner() && (!same || !healthy || retry_allowed) && !self.release_ready() {
             self.authority.revoke();
@@ -837,6 +858,7 @@ impl<F: FrontendFactory> Delivery<F> {
                     }
                 }
                 Err(_) => {
+                    self.failed_establishment = Some(config);
                     self.releases = [None, None];
                     self.last_start_failed = true;
                     self.authority.revoke();
@@ -877,6 +899,10 @@ impl<F: FrontendFactory> Delivery<F> {
         self.desired = None;
         self.retry_requested = false;
         let result = self.stop_owner(self.can_retry_release()).await;
+        if result.is_ok() {
+            self.failed_establishment = None;
+            self.handover_failed = false;
+        }
         if !result
             .as_ref()
             .is_err_and(|error| error.kind() == io::ErrorKind::WouldBlock)
@@ -889,6 +915,19 @@ impl<F: FrontendFactory> Delivery<F> {
     pub fn fail(&mut self) {
         self.last_start_failed = true;
         self.authority.revoke();
+    }
+
+    /// Internal reconciliation may advance a different establishment, never
+    /// repeat a failed operation. A release still belongs to the retained owner
+    /// even if the desired configuration changes; only external intent retries it.
+    fn retry_permitted(&self, wanted: Option<&DeliveryConfig>, external: bool) -> bool {
+        external
+            || (!self.can_retry_release()
+                && !self
+                    .failed_establishment
+                    .as_ref()
+                    .zip(wanted)
+                    .is_some_and(|(failed, wanted)| failed.same_capture(wanted)))
     }
 
     fn can_retry_release(&self) -> bool {
