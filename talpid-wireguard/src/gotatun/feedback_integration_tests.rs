@@ -216,6 +216,7 @@ async fn inject(input: &mpsc::Sender<Packet<Ip>>, bytes: &[u8]) {
         .await
         .unwrap();
 }
+#[cfg(unix)]
 fn local_progress(session: &talpid_types::relay_flow::RelayCapture) {
     let sink = session.sink().unwrap();
     let (fd, consumer) = std::os::unix::net::UnixDatagram::pair().unwrap();
@@ -262,6 +263,7 @@ fn refusable_broker() -> (AttachmentBroker, BufferBudget, Arc<AtomicBool>) {
     (broker, control, exhausted)
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn feedback_and_fresh_private_probes_progress_with_continuously_ready_ordinary_emission() {
     let (broker, _root, credit) = broker();
@@ -344,6 +346,7 @@ async fn feedback_and_fresh_private_probes_progress_with_continuously_ready_ordi
     remote.stop().await;
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn feedback_reserved_credit_blocked_writes_full_limit_and_retirement_reach_real_consumers() {
     let (broker, credit, exhausted) = refusable_broker();

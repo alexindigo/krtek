@@ -326,6 +326,7 @@ fn partial_sink_has_no_managed_handle_and_sink_reservations_are_bounded() {
     assert_eq!(budget.used(), 0);
 }
 
+#[cfg(unix)]
 #[test]
 fn sink_selection_waits_for_inflight_checked_write_then_refuses_old_descriptor() {
     use std::sync::mpsc;

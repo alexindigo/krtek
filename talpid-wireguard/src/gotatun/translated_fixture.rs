@@ -578,6 +578,7 @@ async fn unavailable_family_and_translation_refusals_never_reach_crypto_consumer
     remote.stop().await;
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn retired_translated_bytes_and_assembly_never_enter_an_identical_or_rotated_successor() {
     for rotate in [false, true] {

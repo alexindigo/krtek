@@ -2910,11 +2910,13 @@ async fn concurrent_tcp_tuples_at_one_destination_keep_physical_ownership() {
     }
 }
 
+#[cfg(unix)]
 enum SinkCommand {
     Revalidate(tokio::sync::oneshot::Sender<()>),
     Stop,
 }
 
+#[cfg(unix)]
 async fn sink_backpressure(revoke: bool, stop_while_blocked: bool) {
     let authority = Arc::new(Authority::default());
     let mut forwarder = test_forwarder(authority.clone());
@@ -3067,16 +3069,19 @@ async fn sink_backpressure(revoke: bool, stop_while_blocked: bool) {
     assert_eq!(stats.stale_reply, if revoke { 4 } else { 0 });
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn blocked_sink_rechecks_grants_before_writable_retry() {
     sink_backpressure(true, false).await;
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn blocked_sink_backlog_waits_then_delivers_promptly_and_stops() {
     sink_backpressure(false, false).await;
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn blocked_sink_stop_is_responsive_before_writability() {
     sink_backpressure(false, true).await;

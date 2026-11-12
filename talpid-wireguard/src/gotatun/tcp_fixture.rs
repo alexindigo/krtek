@@ -628,6 +628,7 @@ async fn crypto(multihop: bool) {
         .unwrap();
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn installed_managed_target_crosses_fd_epochs_without_reusing_the_old_receipt() {
     for retire_session in [false, true] {
