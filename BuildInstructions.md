@@ -86,11 +86,6 @@ This is supported on Linux (x86_64) as well as macOS (x86_64 and aarch64).
    nix develop
    ```
 
-#### direnv
-
-Provided in the repository root is a [direnv](https://direnv.net/) for automatically sourcing the devshell.
-Allow it by executing `direnv allow .` (in `<repository>`) once.
-
 ### Cross-compiling for ARM64
 
 By default, the app will build for the host platform. It is also possible to cross-compile the app
